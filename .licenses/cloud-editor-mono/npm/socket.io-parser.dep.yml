@@ -1,9 +1,9 @@
 ---
 name: socket.io-parser
-version: 3.3.4
+version: 3.3.6
 type: npm
 summary: socket.io protocol parser
-homepage: 
+homepage:
 license: mit
 licenses:
 - sources: LICENSE

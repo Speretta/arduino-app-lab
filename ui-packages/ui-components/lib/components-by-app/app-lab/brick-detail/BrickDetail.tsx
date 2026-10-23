@@ -1,60 +1,37 @@
-import {
-  BrickSettings as BrickSettingsIcon,
-  EdgeImpulse as EdgeImpulseIcon,
-  OpenInNewTab,
-  UsedByAppLink as UsedByAppLinkIcon,
-} from '@cloud-editor-mono/images/assets/icons';
-import {
-  AiModel,
-  Button,
-  ButtonAppearance,
-  ButtonSize,
-  ButtonVariant,
-  ConfigureAppBrickDialog,
-  getBackgroundIcon,
-  TrainNewModelDialog,
-  useI18n,
-  XSmall,
-  XXSmall,
-} from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
-import { useNavigate } from '@tanstack/react-router';
 import { Key, useEffect, useState } from 'react';
+import { MessageDescriptor } from 'react-intl';
 import { Item } from 'react-stately';
 
+import { ConfigureAppBrickDialog } from '../../../dialogs/app-lab/configure-app-brick-dialog/ConfigureAppBrickDialog';
 import { ArduinoLoader } from '../../../essential/loader';
 import { Tabs } from '../../../essential/tab-list/Tabs';
-import BrickIcon from '../brick-icon/BrickIcon';
-import { EmojiPreview } from '../emoji-picker/sub-components/EmojiPreview';
-import MarkdownReader from '../markdown-reader/MarkdownReader';
+import { useI18n } from '../../../i18n/useI18n';
+import { isEdgeImpulseModel } from '../ai-model/helpers';
 import styles from './brick-detail.module.scss';
-import { BrickDetailLogic } from './BrickDetail.type';
+import { BrickDetailLogic, BrickDetailTabId } from './BrickDetail.type';
 import { messages } from './messages';
-import { AiBadge } from './sub-components/ai-badge/AiBadge';
-import { BrickExampleSnippet } from './sub-components/brick-example-snippet/BrickExampleSnippet';
+import { BrickHeader } from './sub-components/brick-header/BrickHeader';
+import { AiModelsTab } from './sub-components/tabs/ai-models-tab/AiModelsTab';
+import { DocumentationTab } from './sub-components/tabs/DocumentationTab';
+import { ExamplesTab } from './sub-components/tabs/examples-tab/ExamplesTab';
+import { OverviewTab } from './sub-components/tabs/OverviewTab';
 
-const DEFAULT_ICON = '⚪'; // Default icon if none is provided
-
-const getUsedByAppPath = (appId: string): string => {
-  const decodedAppId = window.atob(appId);
-  const section = decodedAppId.startsWith('examples:') ? 'examples' : 'my-apps';
-
-  return `/${section}/${appId}`;
+type BrickDetailTab = {
+  id: BrickDetailTabId;
+  label: MessageDescriptor;
+  hasContent?: boolean;
+  render: () => React.ReactNode;
 };
 
-const tabs = [
-  { id: 'overview', label: messages.overviewTab },
-  { id: 'examples', label: messages.examplesTab },
-  { id: 'documentation', label: messages.documentationTab },
-  { id: 'aiModels', label: messages.aiModelsTab },
-];
+const DEFAULT_TAB: BrickDetailTabId = 'overview';
 
 interface BrickDetailProps {
   brickId: string;
   brickDetailLogic: BrickDetailLogic;
   preSelectedModelId?: string;
-  preSelectedModelChange?: (id: string) => void;
-  selectedTab?: string;
-  onSelectedTabChange?: (tab: string) => void;
+  onPreSelectedModelChange?: (id: string) => void;
+  selectedTab?: BrickDetailTabId;
+  onSelectedTabChange?: (tab: BrickDetailTabId) => void;
   hideExampleHeader?: boolean;
 }
 
@@ -62,19 +39,25 @@ const BrickDetail: React.FC<BrickDetailProps> = ({
   brickId,
   brickDetailLogic,
   preSelectedModelId,
-  preSelectedModelChange,
+  onPreSelectedModelChange,
   selectedTab: controlledSelectedTab,
   onSelectedTabChange,
   hideExampleHeader = false,
 }: BrickDetailProps) => {
   const { formatMessage } = useI18n();
-  const navigate = useNavigate();
-  const [internalSelectedTab, setInternalSelectedTab] = useState('overview');
+  const isTabControlled = controlledSelectedTab !== undefined;
+  const [internalSelectedTab, setInternalSelectedTab] =
+    useState<BrickDetailTabId>(DEFAULT_TAB);
   const selectedTab = controlledSelectedTab ?? internalSelectedTab;
-  const handleSelectedTabChange = (tab: string): void => {
-    setInternalSelectedTab(tab);
+  const handleSelectedTabChange = (tab: BrickDetailTabId): void => {
+    // Track the tab internally only while uncontrolled: writing it when the
+    // parent owns the selection leaves a second source of truth.
+    if (!isTabControlled) {
+      setInternalSelectedTab(tab);
+    }
     onSelectedTabChange?.(tab);
   };
+  const logic = brickDetailLogic(brickId, onPreSelectedModelChange);
   const {
     brick,
     isBrickLoading,
@@ -85,26 +68,20 @@ const BrickDetail: React.FC<BrickDetailProps> = ({
     examples,
     models,
     readOnly,
-    hideEdgeImpulse,
+    trainNewModelEnabled,
+    addHuggingFaceModelEnabled,
     isExample,
-    diskUsageWarning,
     configureDialogProps,
     trainNewModelDialogProps,
     onTrainNewModelClick,
-    downloadEIModel,
-    downloadGenericModel,
-    getDownloadInfo,
-    removeModel,
-    openModelPage,
     openExternalLink,
     updateModelInUse,
-    isModelUninstalling,
-    isModelInstalledInApp,
-  } = brickDetailLogic(brickId);
+    addHuggingFaceModelDialogProps,
+  } = logic;
 
   // Auto-select default model when no model is pre-selected and models are available
   useEffect(() => {
-    if (readOnly || preSelectedModelId || !preSelectedModelChange) {
+    if (readOnly || preSelectedModelId || !onPreSelectedModelChange) {
       return;
     }
     // Edge Impulse projects can match bricks that don't take a model at all;
@@ -118,7 +95,7 @@ const BrickDetail: React.FC<BrickDetailProps> = ({
 
     // Look for first model with an installed impulse
     for (const model of models ?? []) {
-      if (model.edgeImpulseProps?.impulses) {
+      if (isEdgeImpulseModel(model)) {
         const installedImpulse = model.edgeImpulseProps.impulses.find(
           (i) => i.isInstalled,
         );
@@ -136,9 +113,69 @@ const BrickDetail: React.FC<BrickDetailProps> = ({
     }
 
     if (defaultModelId) {
-      preSelectedModelChange(defaultModelId);
+      onPreSelectedModelChange(defaultModelId);
     }
-  }, [brick, models, preSelectedModelId, preSelectedModelChange, readOnly]);
+  }, [brick, models, preSelectedModelId, onPreSelectedModelChange, readOnly]);
+
+  const tabs: BrickDetailTab[] = [
+    {
+      id: 'overview',
+      label: messages.overviewTab,
+      render: () => (
+        <OverviewTab
+          readme={readme}
+          usages={brick?.used_by_apps ?? []}
+          onOpenExternalLink={openExternalLink}
+        />
+      ),
+    },
+    {
+      id: 'examples',
+      label: messages.examplesTab,
+      hasContent: (brick?.code_examples ?? []).length !== 0,
+      render: () => (
+        <ExamplesTab
+          examples={examples}
+          onOpenExternalLink={openExternalLink}
+          hideHeader={hideExampleHeader}
+        />
+      ),
+    },
+    {
+      id: 'documentation',
+      label: messages.documentationTab,
+      hasContent: (brick?.api_docs_path ?? '').trim() !== '',
+      render: () => (
+        <DocumentationTab
+          apiDocs={apiDocs}
+          onOpenExternalLink={openExternalLink}
+        />
+      ),
+    },
+    {
+      id: 'aiModels',
+      label: messages.aiModelsTab,
+      hasContent: (brick?.compatible_models ?? []).length !== 0,
+      render: () => (
+        <AiModelsTab
+          models={models ?? []}
+          modelActions={logic}
+          inUseModelId={brickInstance?.model}
+          selectedModelId={preSelectedModelId}
+          onModelSelect={
+            readOnly ? undefined : onPreSelectedModelChange || updateModelInUse
+          }
+          readOnly={readOnly}
+          isExample={isExample}
+          trainNewModelEnabled={trainNewModelEnabled}
+          addHuggingFaceModelEnabled={addHuggingFaceModelEnabled}
+          addHuggingFaceModelDialogProps={addHuggingFaceModelDialogProps}
+          trainNewModelDialogProps={trainNewModelDialogProps}
+          onTrainNewModelClick={onTrainNewModelClick}
+        />
+      ),
+    },
+  ];
 
   if (isBrickLoading) {
     return (
@@ -154,36 +191,27 @@ const BrickDetail: React.FC<BrickDetailProps> = ({
     <div className={styles['container']}>
       {configureDialogProps && brick && (
         <ConfigureAppBrickDialog
-          brickId={brick?.id}
+          brickId={brick.id}
           isCustomBrick={isCustomBrick}
           {...configureDialogProps}
         />
       )}
 
-      <div className={styles['header']}>
-        <BrickIcon category={brick?.category} size="small" />
-        <XSmall bold className={styles['title']}>
-          {brick?.name}
-        </XSmall>
-        {(brick?.compatible_models ?? []).length !== 0 && <AiBadge />}
-        <div className={styles['spacer']} />
-        {configureDialogProps && (brick?.config_variables || []).length > 0 && (
-          <Button
-            onClick={(): void => configureDialogProps.setOpen(true)}
-            Icon={BrickSettingsIcon}
-            size={ButtonSize.XSmall}
-            variant={ButtonVariant.Secondary}
-          >
-            {formatMessage(messages.configureButton)}
-          </Button>
-        )}
-      </div>
+      <BrickHeader
+        brick={brick}
+        onConfigure={
+          configureDialogProps &&
+          ((): void => configureDialogProps.setOpen(true))
+        }
+      />
       <Tabs
         selectedKey={selectedTab}
-        defaultSelectedKey="overview"
-        onSelectionChange={(tab: Key): void =>
-          handleSelectedTabChange(tab as string)
-        }
+        onSelectionChange={(key: Key): void => {
+          const tab = tabs.find(({ id }) => id === key);
+          if (tab) {
+            handleSelectedTabChange(tab.id);
+          }
+        }}
         keyboardActivation="manual"
         classes={{
           tabs: styles['tabs'],
@@ -195,161 +223,10 @@ const BrickDetail: React.FC<BrickDetailProps> = ({
         }}
       >
         {tabs
-          .filter(
-            (tab) =>
-              (tab.id !== 'aiModels' ||
-                (brick?.compatible_models ?? []).length !== 0) &&
-              (tab.id !== 'documentation' ||
-                (brick?.api_docs_path ?? '').trim() !== '') &&
-              (tab.id !== 'examples' ||
-                (brick?.code_examples ?? []).length !== 0),
-          )
-          .map((item) => (
-            <Item key={item.id} title={formatMessage(item.label)}>
-              <div className={styles['tab-item-container']}>
-                {item.id === 'examples' && examples ? (
-                  examples.map(({ content, path, exampleName, exampleId }) =>
-                    exampleName && exampleId ? (
-                      <BrickExampleSnippet
-                        key={path}
-                        title={exampleName}
-                        exampleId={exampleId}
-                        content={content}
-                        onOpenExternalLink={openExternalLink}
-                        hideHeader={hideExampleHeader}
-                      />
-                    ) : (
-                      <MarkdownReader
-                        key={path}
-                        content={content}
-                        onOpenExternalLink={openExternalLink}
-                      />
-                    ),
-                  )
-                ) : item.id !== 'aiModels' ? (
-                  <MarkdownReader
-                    content={
-                      (item.id === 'overview' ? readme : apiDocs) ??
-                      formatMessage(messages.fileNotFound)
-                    }
-                    onOpenExternalLink={openExternalLink}
-                    allowElement={(el, index): boolean =>
-                      index !== 0 || el.tagName !== 'h1'
-                    }
-                  />
-                ) : (
-                  <div className={styles['ai-models-container']}>
-                    {(models || [])?.map((model) => (
-                      <AiModel
-                        key={model.id}
-                        inUseModelId={brickInstance?.model}
-                        selectedModelId={preSelectedModelId}
-                        model={model}
-                        readOnly={readOnly}
-                        isExample={isExample}
-                        diskUsageWarning={diskUsageWarning(model.id)}
-                        downloadEIModel={downloadEIModel}
-                        downloadGenericModel={downloadGenericModel}
-                        modelDownloadInfo={
-                          model.edgeImpulseProps?.projectId
-                            ? getDownloadInfo(model.edgeImpulseProps.projectId)
-                            : getDownloadInfo(model.id)
-                        }
-                        removeModel={removeModel}
-                        openModelPage={openModelPage}
-                        isInstalledInApp={isModelInstalledInApp?.(model)}
-                        onModelSelect={
-                          readOnly
-                            ? undefined
-                            : preSelectedModelChange || updateModelInUse
-                        }
-                        isUninstalling={isModelUninstalling}
-                      />
-                    ))}
-
-                    {!hideEdgeImpulse && !isExample ? (
-                      <div className={styles['new-models']}>
-                        <div className={styles['new-models-icon']}>
-                          <EdgeImpulseIcon />
-                        </div>
-                        <div className={styles['new-models-text']}>
-                          <XSmall bold>
-                            {formatMessage(messages.trainNewModel)}
-                          </XSmall>
-                          <XXSmall>
-                            {formatMessage(messages.trainNewModelDescription)}
-                          </XXSmall>
-                        </div>
-                        <Button
-                          variant={ButtonVariant.Secondary}
-                          appearance={ButtonAppearance.LowContrast}
-                          size={ButtonSize.XSmall}
-                          onClick={onTrainNewModelClick}
-                          Icon={OpenInNewTab}
-                          classes={{
-                            button: styles['new-model-button'],
-                          }}
-                        >
-                          {formatMessage(messages.trainNewModel)}
-                        </Button>
-                        {trainNewModelDialogProps && (
-                          <TrainNewModelDialog {...trainNewModelDialogProps} />
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-                {item.id === 'overview' &&
-                  brick?.used_by_apps &&
-                  brick.used_by_apps.length > 0 && (
-                    <div className={styles['brick-usages']}>
-                      <XSmall className={styles['brick-usages-title']}>
-                        {formatMessage(messages.usedInTitle)}
-                      </XSmall>
-                      <div className={styles['brick-usages-cards']}>
-                        {brick.used_by_apps.map((usage) => (
-                          <button
-                            key={usage.id}
-                            type="button"
-                            className={styles['brick-usage-card']}
-                            onClick={async (): Promise<void> => {
-                              if (usage.id) {
-                                await navigate({
-                                  to: getUsedByAppPath(usage.id),
-                                });
-                              }
-                            }}
-                          >
-                            <div className={styles['brick-usage-header']}>
-                              <div
-                                className={styles['brick-usage-header-bg']}
-                                style={{
-                                  backgroundImage: getBackgroundIcon(
-                                    usage.icon || DEFAULT_ICON,
-                                  ),
-                                }}
-                              ></div>
-                              <span
-                                className={styles['brick-usage-header-icon']}
-                              >
-                                <EmojiPreview
-                                  size={16}
-                                  value={usage.icon || DEFAULT_ICON}
-                                />
-                              </span>
-                            </div>
-                            <div className={styles['brick-usage-content']}>
-                              {usage.name}
-                            </div>
-                            <UsedByAppLinkIcon
-                              className={styles['brick-usage-link-icon']}
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-              </div>
+          .filter((tab) => tab.hasContent ?? true)
+          .map((tab) => (
+            <Item key={tab.id} title={formatMessage(tab.label)}>
+              <div className={styles['tab-item-container']}>{tab.render()}</div>
             </Item>
           ))}
       </Tabs>

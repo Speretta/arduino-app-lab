@@ -1,3 +1,8 @@
+import {
+  IconFileFolderNormal,
+  IconFileFolderOpen,
+  IconNavigationArrowCaretNormalDown,
+} from '@arduino/react-icons';
 import { Bin, Pin, PlusSmall } from '@cloud-editor-mono/images/assets/icons';
 import {
   Board,
@@ -5,6 +10,8 @@ import {
   SidePanelUser,
   useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+import clsx from 'clsx';
+import { useId } from 'react';
 
 import { messages } from '../../messages';
 import { SessionSummary } from '../../services';
@@ -24,8 +31,9 @@ export interface AgentSidePanelProps {
 }
 
 // The agent-mode sidebar: it replaces the app's main sidebar while in agent mode and hosts the
-// session list (new chat, pinned/other sessions, select, pin/rename/delete). It reuses the same
-// SidePanel.* primitives as the app sidebar; sessions come from the coding-agent service + store.
+// session list (new chat, pinned sessions, then one folder per app, select, pin/rename/delete). It
+// reuses the same SidePanel.* primitives as the app sidebar; sessions come from the coding-agent
+// service + store.
 export const AgentSidePanel = ({
   visible = true,
   board,
@@ -34,9 +42,13 @@ export const AgentSidePanel = ({
   user,
 }: AgentSidePanelProps): JSX.Element | null => {
   const { formatMessage } = useI18n();
+  // Namespaces the folder ids that tie each row to the list it expands.
+  const folderIds = useId();
   const {
     pinnedSessions,
-    otherSessions,
+    folders,
+    isFolderOpen,
+    toggleFolder,
     currentSessionId,
     isDraftSession,
     dotState,
@@ -55,7 +67,7 @@ export const AgentSidePanel = ({
     askDelete,
     cancelDelete,
     confirmDelete,
-  } = useAgentSidePanelLogic();
+  } = useAgentSidePanelLogic(formatMessage(messages.sessionsGeneralFolder));
 
   const authenticated = useAiAssistantStore((s) => s.auth.authenticated);
   const agentDown = useAiAssistantStore((s) => s.agentDown);
@@ -65,9 +77,10 @@ export const AgentSidePanel = ({
     return null;
   }
 
-  const confirmingSession = [...pinnedSessions, ...otherSessions].find(
-    (session) => session.id === confirmingId,
-  );
+  const confirmingSession = [
+    ...pinnedSessions,
+    ...folders.flatMap((folder) => folder.sessions),
+  ].find((session) => session.id === confirmingId);
 
   const renderRow = (session: SessionSummary, pinned: boolean): JSX.Element => {
     if (editingId === session.id) {
@@ -111,18 +124,21 @@ export const AgentSidePanel = ({
           ) : undefined
         }
         revealTrailingOnHover
+        trailingIsInteractive
       />
     );
   };
 
   return (
     <SidePanel.Root>
-      <SidePanel.Content>
+      <div className={styles['board']}>
         <SidePanel.BoardItem
           board={board}
           boards={boards}
           onSelectBoard={onSelectBoard}
         />
+      </div>
+      <SidePanel.Content className={styles['sessions']}>
         <SidePanel.Row
           icon={<PlusSmall />}
           title={formatMessage(messages.sessionsNewChat)}
@@ -137,9 +153,46 @@ export const AgentSidePanel = ({
             {pinnedSessions.map((session) => renderRow(session, true))}
           </SidePanel.Accordion>
         )}
-        {otherSessions.length > 0 && (
+        {folders.length > 0 && (
           <SidePanel.Accordion title={formatMessage(messages.sessionsTitle)}>
-            {otherSessions.map((session) => renderRow(session, false))}
+            {folders.map((folder) => {
+              const open = isFolderOpen(folder.appId);
+              // Prefixed: an app id is base64, so it can never be mistaken for the general folder's key.
+              const key = folder.appId ? `app:${folder.appId}` : 'general';
+              const sessionsId = `${folderIds}-${key}`;
+              return (
+                <div key={key} className={styles['folder']}>
+                  <SidePanel.Row
+                    icon={
+                      open ? <IconFileFolderOpen /> : <IconFileFolderNormal />
+                    }
+                    title={folder.name}
+                    onClick={
+                      agentReady
+                        ? (): void => toggleFolder(folder.appId)
+                        : undefined
+                    }
+                    dimmed={!agentReady}
+                    ariaExpanded={open}
+                    ariaControls={open ? sessionsId : undefined}
+                    trailing={
+                      <IconNavigationArrowCaretNormalDown
+                        className={clsx(styles['folder-caret'], {
+                          [styles['folder-caret-collapsed']]: !open,
+                        })}
+                      />
+                    }
+                  />
+                  {open && (
+                    <div id={sessionsId} className={styles['folder-sessions']}>
+                      {folder.sessions.map((session) =>
+                        renderRow(session, false),
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </SidePanel.Accordion>
         )}
       </SidePanel.Content>

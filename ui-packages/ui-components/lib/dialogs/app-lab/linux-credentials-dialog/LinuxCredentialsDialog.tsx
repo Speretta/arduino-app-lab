@@ -12,7 +12,7 @@ import { AppLabDialog } from '../app-lab-dialog/AppLabDialog';
 import styles from './linux-credentials-dialog.module.scss';
 import { linuxCredentialsDialogMessages as messages } from './messages';
 
-export type LinuxCredentialsDialogLogic = {
+export type LinuxCredentialsDialogLogic = () => {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (password: string) => Promise<void>;
@@ -29,7 +29,7 @@ export const LinuxCredentialsDialog: React.FC<LinuxCredentialsDialogProps> = ({
   logic,
 }: LinuxCredentialsDialogProps) => {
   const { formatMessage } = useI18n();
-  const { open, onSubmit, onCancel, isLoading, error } = logic;
+  const { open, onOpenChange, onSubmit, onCancel, isLoading, error } = logic();
 
   const [password, setPassword] = React.useState('');
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -56,7 +56,7 @@ export const LinuxCredentialsDialog: React.FC<LinuxCredentialsDialogProps> = ({
         body: styles['password-prompt-body'],
         footer: styles['password-prompt-footer'],
       }}
-      onOpenChange={logic.onOpenChange}
+      onOpenChange={onOpenChange}
       onSubmit={handleSubmit}
       footer={
         <>

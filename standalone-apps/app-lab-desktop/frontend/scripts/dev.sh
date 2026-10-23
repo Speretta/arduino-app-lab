@@ -20,7 +20,7 @@ set +a
 ./frontend/scripts/download.sh
 
 wails dev -tags webkit2_41 \
-  -ldflags "-X main.version=0.0.0-$(git rev-parse --short HEAD) -X app-lab-desktop/internal/httpclient.allowlist=${HTTPCLIENT_ALLOWLIST}" &
+  -ldflags "-X main.version=0.0.0-$(git rev-parse --short HEAD)" &
 WAILS_PID=$!
 
 readonly FRONTEND_DEV_PORT=8000

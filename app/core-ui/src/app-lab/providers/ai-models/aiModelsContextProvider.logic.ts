@@ -4,26 +4,30 @@ import {
   EI_LATENCY_DEVICE_BY_FQBN,
 } from '@cloud-editor-mono/common';
 import {
-  getAIModels,
+  downloadAIModel,
   getEIProjects,
+  installAIModel,
   installEIModel,
   isEIDeploymentOutdated,
   openLinkExternal,
   setEILatencyDevice,
-  uploadAIModel,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import { Ai as AiIcon } from '@cloud-editor-mono/images/assets/icons';
 import {
   AIModelItem,
   EIProject,
   EventSourceHandlers,
+  isUnsupportedEndpointError,
+  SERVER_CLOSED_ERROR_CODE,
   StreamEventType,
 } from '@cloud-editor-mono/infrastructure';
-import { ModelDownloadInfo } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+import {
+  ModelDownloadInfo,
+  useI18n,
+} from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { EventSourceMessage } from '@microsoft/fetch-event-source';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { get, set } from 'idb-keyval';
 import {
   createElement,
   useCallback,
@@ -34,19 +38,36 @@ import {
   useState,
 } from 'react';
 
-// import { useNotificationsLogic } from '../../../cloud-editor/features/notifications/notifications.logic';
 import { BoardScopedQuery } from '../../boardScopedQuery';
 import { sendAppLabNotification } from '../../features/notifications';
+import { useInstalledAIModels } from '../../hooks/useInstalledAIModels';
+import { get, set } from '../../services/persistentStore';
 import { useBoardLifecycleStore } from '../../store/boardLifecycle';
+import { plainModelId } from '../../utils/modelId';
 import { EdgeImpulseContext } from '../edge-impulse/edgeImpulseContext';
 import { useFooterNotifications } from '../footer-notifications/footerNotificationsContext';
-import { AiModelsContextValue } from './aiModelsContext';
-import { isCompatibleEICategory, mapProjectToModel } from './utils';
+import {
+  AiModelsContextValue,
+  DownloadAIModelSSEOptions,
+} from './aiModelsContext';
+import { aiModelsMessages as messages } from './messages';
+import {
+  INSUFFICIENT_STORAGE_ERROR_CODE,
+  parseSseEvent,
+} from './parse-sse-event/parseSseEvent';
+import { isCompatibleEICategory } from './utils';
 
 export type UseEdgeImpulseParams = {
   enabled?: boolean;
 };
 const CHECK_STORAGE_KEY = 'ei_project_association_check_performed';
+
+// The install route's `source` is a model id the board declares, so the listing
+// already holds an entry for it. The download route's is a Hugging Face source,
+// and the id it installs under is unknown until the `done` event.
+type ModelStreamOptions = DownloadAIModelSSEOptions & {
+  declaredModelId?: string;
+};
 
 export function useAiModelsLogic(
   _params: UseEdgeImpulseParams = {},
@@ -60,12 +81,10 @@ export function useAiModelsLogic(
 
   const { isAuthenticated } = useContext(EdgeImpulseContext);
 
+  const { formatMessage } = useI18n();
   const { setNotification } = useFooterNotifications();
   const navigate = useNavigate();
 
-  const boardIsReachable = useBoardLifecycleStore(
-    (state) => state.boardIsReachable,
-  );
   const selectedConnectedBoard = useBoardLifecycleStore(
     (state) => state.selectedConnectedBoard,
   );
@@ -73,7 +92,7 @@ export function useAiModelsLogic(
   const queryClient = useQueryClient();
 
   const [qBoardProjects, setQBoardProjects] = useState<EIProject[]>([]);
-  const { data: projects, isLoading: projectsLoading } = useQuery({
+  const { data: projects } = useQuery({
     queryKey: ['edge-impulse-projects', isAuthenticated],
     queryFn: getEIProjects,
     enabled: enableEdgeImpulseAutoRefresh && isAuthenticated,
@@ -83,39 +102,7 @@ export function useAiModelsLogic(
     setQBoardProjects(projects?.filter((p) => p.hasQBoardLatencyDevice) || []);
   }, [projects]);
 
-  const eiModels = useMemo(
-    () => qBoardProjects.map(mapProjectToModel),
-    [qBoardProjects],
-  );
-
-  // Installed AI models live on the board itself; `getAIModels()` resolves
-  // against whichever board is currently connected. Like every other
-  // board-scoped query, this cache is dropped on a board switch by
-  // useBoardScopedQueryReset, so the key itself stays board-agnostic.
-  const installedModelsQueryKey = useMemo(
-    () => [BoardScopedQuery.GET_INSTALLED_MODELS],
-    [],
-  );
-  const { data: installedModels } = useQuery({
-    queryKey: installedModelsQueryKey,
-    queryFn: getAIModels,
-    enabled: !!boardIsReachable,
-  });
-  const installedModelsLookup = useMemo(() => {
-    const lookup: { [key: string]: AIModelItem } = {};
-    for (const model of installedModels || []) {
-      lookup[model.id ?? 'none'] = model;
-    }
-    return lookup;
-  }, [installedModels]);
-
-  const getInstalledModel = useCallback(
-    (modelId: string, impulseId?: string) => {
-      const id = impulseId ? `ei-model-${modelId}-${impulseId}` : modelId;
-      return installedModelsLookup?.[id];
-    },
-    [installedModelsLookup],
-  );
+  const { installedModels, getInstalledModel } = useInstalledAIModels();
 
   // Key the outdated-deployment check on a stable signature of the installed
   // Edge Impulse deployments (projectId, impulseId, deploymentVersion) instead
@@ -218,17 +205,35 @@ export function useAiModelsLogic(
     }));
   };
 
+  const clearDownload = useCallback((progressId: string): void => {
+    setCurrentDownloads((prev) => {
+      if (!prev?.[progressId]) {
+        return prev;
+      }
+      // A stream replaced by a newer one for the same source resolves like any
+      // other, so its caller asks for this: a record the live stream is still
+      // writing to has to survive that.
+      if (prev[progressId].isDownloading) {
+        return prev;
+      }
+      const { [progressId]: _cleared, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
   const setDownloadNotification = useCallback(
-    (modelId: string): void => {
+    (model: AIModelItem): void => {
       setNotification({
-        label: `Model ${modelId} downloaded`,
-        tooltip: 'Click to view in My Apps',
+        label: formatMessage(messages.modelDownloaded, {
+          name: model.name || plainModelId(model),
+        }),
+        tooltip: formatMessage(messages.modelDownloadedTooltip),
         icon: createElement(AiIcon),
         onClick: (): void => {
-          const installed = queryClient.getQueryData<AIModelItem[]>(
-            installedModelsQueryKey,
-          );
-          const brickId = installed?.find((m) => m.id === modelId)
+          const installed = queryClient.getQueryData<AIModelItem[]>([
+            BoardScopedQuery.GET_INSTALLED_MODELS,
+          ]);
+          const brickId = installed?.find((m) => m.id === model.id)
             ?.brick_ids?.[0];
           navigate({
             to: '/bricks',
@@ -237,7 +242,7 @@ export function useAiModelsLogic(
         },
       });
     },
-    [installedModelsQueryKey, navigate, queryClient, setNotification],
+    [formatMessage, navigate, queryClient, setNotification],
   );
 
   const downloadImpulse = useCallback(
@@ -250,7 +255,6 @@ export function useAiModelsLogic(
       try {
         updateDownload(
           {
-            impulseId,
             error: false,
             success: false,
             isDownloading: true,
@@ -259,8 +263,11 @@ export function useAiModelsLogic(
         );
         item = await installEIModel(projectId, impulseId);
         const itemId = item.id || `ei-model-${projectId}-${impulseId}`;
+        // The outdated-deployment lookup is keyed by the plain id, the form the
+        // impulse rows carry.
+        const plainId = item.id ? plainModelId(item) : itemId;
         queryClient.setQueryData(
-          installedModelsQueryKey,
+          [BoardScopedQuery.GET_INSTALLED_MODELS],
           (prev: AIModelItem[] | undefined) => {
             let found = false;
             const next = (prev || []).map((m) => {
@@ -276,12 +283,12 @@ export function useAiModelsLogic(
         updateDownload({ isDownloading: false, success: true }, projectId);
         // Align with the generic download flow: post a footer notification for
         // account-linked Edge Impulse installs too.
-        setDownloadNotification(itemId);
+        setDownloadNotification(item);
         queryClient.setQueryData(
           outdatedModelsQueryKey,
           (prev: { [key: string]: boolean } | undefined) => ({
             ...prev,
-            [itemId]: false,
+            [plainId]: false,
           }),
         );
       } catch (error: unknown) {
@@ -302,7 +309,6 @@ export function useAiModelsLogic(
     },
     [
       currentDownloads,
-      installedModelsQueryKey,
       outdatedModelsQueryKey,
       queryClient,
       setDownloadNotification,
@@ -354,40 +360,50 @@ export function useAiModelsLogic(
     },
   });
 
-  // Keeps track of every in-flight download stream, keyed by the `modelId`
-  // passed to `downloadAIModelSSE(modelId)`. This lets us run several
-  // downloads concurrently and reliably associate each incoming SSE event
-  // with the model it belongs to (via the closures created below).
+  // Keyed by the `modelId` passed to `runModelStream`, so concurrent downloads
+  // each match their own SSE events.
   const downloadStreamsRef = useRef<
-    Map<string, { abortController: AbortController; progress: number }>
+    Map<string, { abortController: AbortController }>
   >(new Map());
 
-  const downloadAIModelSSE = useCallback(
-    async (modelId: string, progressKey?: string): Promise<boolean> => {
-      // `modelId` targets the SSE endpoint and the installed-models cache,
-      // while `progressKey` (defaulting to `modelId`) keys the download
-      // progress. This lets callers that track progress under a different id
-      // (e.g. an Edge Impulse project id) still light up their progress UI.
-      const progressId = progressKey ?? modelId;
-      // Restart cleanly if a download for the same model is already running.
-      downloadStreamsRef.current.get(modelId)?.abortController.abort();
+  const runModelStream = useCallback(
+    async (
+      source: string,
+      startStream: (
+        handlers: EventSourceHandlers,
+        abortController: AbortController,
+      ) => Promise<void>,
+      options: ModelStreamOptions = {},
+    ): Promise<AIModelItem | undefined> => {
+      const {
+        progressKey,
+        linkedBrickId,
+        onStarted,
+        onError,
+        declaredModelId,
+      } = options;
+
+      const progressId = progressKey ?? source;
+
+      downloadStreamsRef.current.get(source)?.abortController.abort();
 
       const abortController = new AbortController();
-      const stream = { abortController, progress: 0 };
-      downloadStreamsRef.current.set(modelId, stream);
+      downloadStreamsRef.current.set(source, { abortController });
 
+      let installedModel: AIModelItem | undefined;
       let downloadSucceeded = false;
+      let started = false;
+      let failure: Error | undefined;
+      let fileName: string | undefined;
 
-      // True while `downloadStreamsRef` still points at this stream. A stream
-      // that has been superseded (the same model was restarted) must not touch
-      // the progress state, which now belongs to the newer stream.
-      const isCurrent = (): boolean =>
-        downloadStreamsRef.current.get(modelId)?.abortController ===
-        abortController;
+      const hasNewerStream = (): boolean => {
+        const current = downloadStreamsRef.current.get(source);
+        return !!current && current.abortController !== abortController;
+      };
 
       const cleanup = (): void => {
-        if (isCurrent()) {
-          downloadStreamsRef.current.delete(modelId);
+        if (!hasNewerStream()) {
+          downloadStreamsRef.current.delete(source);
         }
       };
 
@@ -401,17 +417,70 @@ export function useAiModelsLogic(
         progressId,
       );
 
-      // A single download can be signalled as complete by more than one event
-      // (`Done`, a `Progress` reaching 100, and/or a "download complete"
-      // message). Run the terminal side-effects — success state, footer
-      // notification and installed-models cache update — exactly once so the
-      // notification panel doesn't stack duplicate entries.
-      const completeDownload = (): void => {
-        if (downloadSucceeded) {
+      const notifyStarted = (): void => {
+        if (started) {
           return;
         }
+        started = true;
+        // Name the brick only once the download is real: a source that turns out
+        // not to exist has to leave the model list untouched.
+        if (linkedBrickId) {
+          updateDownload({ linkedBrickId }, progressId);
+        }
+        onStarted?.();
+      };
+
+      const reportFailure = (error: Error): void => {
+        if (isUnsupportedEndpointError(error)) {
+          sendAppLabNotification({
+            message: formatMessage(messages.updateAppLab),
+            variant: 'info',
+            actions: [
+              {
+                text: formatMessage(messages.goToSettings),
+                onClick: () => navigate({ to: '/settings' }),
+              },
+            ],
+          });
+        } else if (started || !onError) {
+          sendAppLabNotification({
+            message: error.message,
+            variant: 'error',
+          });
+        }
+        if (!started) {
+          onError?.(error);
+        }
+      };
+
+      // A daemon older than the one-endpoint API answers `done` with a log line
+      // and never the model, so a stream can end with the install finished and
+      // nothing to complete it from. An install names a declared id the listing
+      // already holds an entry for; a Hugging Face source names no entry.
+      const installedFromListing = (
+        modelId: string | undefined,
+      ): AIModelItem | undefined => {
+        const declared = modelId
+          ? queryClient
+              .getQueryData<AIModelItem[]>([
+                BoardScopedQuery.GET_INSTALLED_MODELS,
+              ])
+              ?.find((m) => m.id === modelId)
+          : undefined;
+        return declared && { ...declared, status: 'installed' };
+      };
+
+      const completeDownload = (model?: AIModelItem): boolean => {
+        if (downloadSucceeded) {
+          return true;
+        }
+        const completed = model ?? installedFromListing(declaredModelId);
+        if (!completed) {
+          return false;
+        }
         downloadSucceeded = true;
-        stream.progress = 100;
+        const modelId = completed.id;
+        installedModel = completed;
         updateDownload(
           {
             isDownloading: false,
@@ -421,62 +490,62 @@ export function useAiModelsLogic(
           },
           progressId,
         );
-        setDownloadNotification(modelId);
-        sendAppLabNotification({
-          message: `Model ${modelId} downloaded`,
-          variant: 'success',
-        });
+        const name = completed.name || plainModelId(completed);
+        // A Hugging Face URL and a key can name the same file, and the SSE
+        // answers `done` for a file it already has without downloading it again.
+        if (getInstalledModel(modelId)?.status === 'installed') {
+          sendAppLabNotification({
+            message: formatMessage(messages.modelAlreadyInstalled, { name }),
+            variant: 'info',
+          });
+        } else {
+          setDownloadNotification(completed);
+          sendAppLabNotification({
+            message: formatMessage(messages.modelDownloaded, { name }),
+            variant: 'success',
+          });
+        }
+
         queryClient.setQueryData(
-          installedModelsQueryKey,
-          (prev: AIModelItem[] | undefined) =>
-            (prev || []).map((model) =>
-              model.id === modelId ? { ...model, status: 'installed' } : model,
-            ),
+          [BoardScopedQuery.GET_INSTALLED_MODELS],
+          (prev: AIModelItem[] | undefined) => {
+            const models = prev || [];
+            return models.some((m) => m.id === modelId)
+              ? models.map((m) =>
+                  m.id === modelId ? { ...m, ...completed } : m,
+                )
+              : models.concat(completed);
+          },
         );
+        return true;
       };
 
-      // Every handler below closes over `modelId`, so the event is always
-      // tied to the model passed to `downloadAIModelSSE(modelId)` regardless
-      // of the event payload.
       const handlers: EventSourceHandlers = {
         onopen: undefined,
         onclose: cleanup,
-        // `onerror` runs on *every* failed attempt, including ones the event
-        // source is about to retry, so it deliberately leaves the download
-        // state alone: tearing it down here would drop the card back to its
-        // "Download" CTA while the stream is still alive, and would also
-        // untrack the abort controller mid-flight. Giving up for good either
-        // rejects `uploadAIModel` (fatal error or max retries exceeded) or ends
-        // the stream, both handled below.
         onerror: undefined,
-        // TODO: refactor this to use a only the 'done' event to mark the download as complete
-        // and send the download notification to the footer
         onmessage: (event: EventSourceMessage) => {
-          const messageType = event.event;
-          // Keep-alive events (`heartbeat`) carry no payload, and an unknown
-          // event may not carry JSON at all. Throwing out of `onmessage` aborts
-          // the stream and makes the event source re-issue the request — i.e. a
-          // heartbeat mid-download would restart the whole install — so ignore
-          // anything we can't parse instead.
-          if (!event.data) {
+          const streamEvent = parseSseEvent(event);
+          if (!streamEvent) {
             return;
           }
-          let data;
-          try {
-            data = JSON.parse(event.data);
-          } catch (parseError) {
-            console.warn(parseError);
-            return;
-          }
-          switch (messageType) {
-            case StreamEventType.Error:
+
+          switch (streamEvent.event) {
+            case StreamEventType.Error: {
               // A normal end-of-stream is signalled as a SERVER_CLOSED error.
-              if (data.code === 'SERVER_CLOSED') {
+              if (streamEvent.code === SERVER_CLOSED_ERROR_CODE) {
                 break;
               }
-              // in case of any other error, we want to invalidate the whole set of
-              // installed models query so that the user can retry the download
-              queryClient.invalidateQueries(installedModelsQueryKey);
+              if (hasNewerStream()) {
+                break;
+              }
+              failure = new Error(
+                streamEvent.code === INSUFFICIENT_STORAGE_ERROR_CODE
+                  ? formatMessage(messages.insufficientStorage)
+                  : streamEvent.message ||
+                    formatMessage(messages.downloadFailed),
+              );
+
               updateDownload(
                 {
                   isDownloading: false,
@@ -486,37 +555,20 @@ export function useAiModelsLogic(
                 },
                 progressId,
               );
-              sendAppLabNotification({
-                message:
-                  data.message || 'An error occurred while downloading model',
-                variant: 'error',
-              });
               break;
+            }
             case StreamEventType.Done:
-              completeDownload();
+              completeDownload(streamEvent.model);
               break;
             case StreamEventType.Progress:
-              stream.progress = data.progress;
-              if (data.progress === 100) {
-                completeDownload();
-              } else {
-                updateDownload(
-                  {
-                    percentage: data.progress,
-                  },
-                  progressId,
-                );
-              }
+              notifyStarted();
+              fileName = fileName ?? streamEvent.name;
+              updateDownload(
+                { percentage: streamEvent.progress, fileName },
+                progressId,
+              );
               break;
             case StreamEventType.Message:
-              // 'Extracted to' is a hack to intercept the "download completed" event
-              // on arduino-app-cli.rc.4
-              if (
-                data.message == 'download complete' ||
-                data.message?.startsWith('Extracted to')
-              ) {
-                completeDownload();
-              }
               break;
             default:
               break;
@@ -525,17 +577,29 @@ export function useAiModelsLogic(
       };
 
       try {
-        await uploadAIModel(modelId, handlers, abortController);
-        if (!downloadSucceeded && isCurrent()) {
-          // The stream ended without a terminal success event; don't leave the
-          // card stuck on a live progress bar.
-          updateDownload(
-            { isDownloading: false, success: false, percentage: 0 },
-            progressId,
-          );
+        await startStream(handlers, abortController);
+        if (!downloadSucceeded && !failure && !hasNewerStream()) {
+          if (!completeDownload()) {
+            failure = new Error(
+              formatMessage(messages.downloadEndedUnexpectedly),
+            );
+            updateDownload(
+              { isDownloading: false, success: false, percentage: 0 },
+              progressId,
+            );
+          }
         }
       } catch (error: unknown) {
-        if (isCurrent()) {
+        if (!hasNewerStream()) {
+          failure = isUnsupportedEndpointError(error)
+            ? error
+            : new Error(
+                error instanceof Error
+                  ? formatMessage(messages.downloadFailedWithReason, {
+                      reason: error.message,
+                    })
+                  : formatMessage(messages.downloadFailed),
+              );
           updateDownload(
             {
               isDownloading: false,
@@ -545,35 +609,97 @@ export function useAiModelsLogic(
             },
             progressId,
           );
-          sendAppLabNotification({
-            message:
-              error instanceof Error
-                ? `Error downloading model: ${error.message}`
-                : 'An error occurred while downloading model',
-            variant: 'error',
-          });
         }
         downloadSucceeded = false;
       } finally {
         cleanup();
       }
 
-      return downloadSucceeded;
+      if (failure && !downloadSucceeded) {
+        // in case of any other error, we want to invalidate the whole set of
+        // installed models query so that the user can retry the download
+        queryClient.invalidateQueries({
+          queryKey: [BoardScopedQuery.GET_INSTALLED_MODELS],
+        });
+        reportFailure(failure);
+      }
+
+      if (!failure && !hasNewerStream()) {
+        notifyStarted();
+      }
+
+      return installedModel;
     },
-    [queryClient, installedModelsQueryKey, setDownloadNotification],
+    [
+      formatMessage,
+      getInstalledModel,
+      navigate,
+      queryClient,
+      setDownloadNotification,
+    ],
   );
 
-  return {
-    projects: eiModels,
-    projectsLoading,
-    currentDownloads,
-    installedModels: installedModels || [],
-    isModelOutdated,
-    getInstalledModel,
-    getEIProjectsByBrickType,
-    downloadImpulse,
-    enabledEIAutoRefresh: setEnableEdgeImpulseAutoRefresh,
-    openAndAssociateToDevice,
-    downloadAIModelSSE,
-  };
+  // Installs a model the board's list declares — PUT /v1/models/{id}.
+  const installAIModelSSE = useCallback(
+    (
+      declaredId: string,
+      options?: DownloadAIModelSSEOptions,
+    ): Promise<AIModelItem | undefined> =>
+      runModelStream(
+        declaredId,
+        (handlers, abortController) =>
+          installAIModel(declaredId, handlers, abortController),
+        { ...options, declaredModelId: declaredId },
+      ),
+    [runModelStream],
+  );
+
+  // Downloads a model the board's list does not declare, from a Hugging Face
+  // source — POST /v1/models.
+  const downloadAIModelSSE = useCallback(
+    (
+      source: string,
+      options?: DownloadAIModelSSEOptions & { mmprojUrl?: string },
+    ): Promise<AIModelItem | undefined> =>
+      runModelStream(
+        source,
+        (handlers, abortController) =>
+          downloadAIModel(
+            source,
+            handlers,
+            abortController,
+            options?.mmprojUrl,
+          ),
+        options,
+      ),
+    [runModelStream],
+  );
+
+  return useMemo(
+    () => ({
+      currentDownloads,
+      clearDownload,
+      installedModels: installedModels || [],
+      isModelOutdated,
+      getInstalledModel,
+      getEIProjectsByBrickType,
+      downloadImpulse,
+      enabledEIAutoRefresh: setEnableEdgeImpulseAutoRefresh,
+      openAndAssociateToDevice,
+      installAIModelSSE,
+      downloadAIModelSSE,
+    }),
+    [
+      currentDownloads,
+      clearDownload,
+      installedModels,
+      isModelOutdated,
+      getInstalledModel,
+      getEIProjectsByBrickType,
+      downloadImpulse,
+      openAndAssociateToDevice,
+      installAIModelSSE,
+      downloadAIModelSSE,
+    ],
+  );
 }

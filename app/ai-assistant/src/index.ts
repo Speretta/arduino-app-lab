@@ -1,5 +1,6 @@
-// Eager entry: service contracts and their DI slots. The UI panel is a separate
-// lazy entry (`@cloud-editor-mono/ai-assistant/panel`) to keep it out of this bundle.
+// Eager entry: service contracts, their DI slots, and the bits of agent state the host reads without
+// mounting the UI. The UI panel is a separate lazy entry (`@cloud-editor-mono/ai-assistant/panel`) to
+// keep it out of this bundle.
 export type {
   AgentDescriptor,
   AgentId,
@@ -7,6 +8,7 @@ export type {
   AgentModel,
   AgentRestart,
   AgentUpdate,
+  AgentWorkspace,
   AiRuntimeService,
   AuthMethod,
   AuthResult,
@@ -68,3 +70,4 @@ export {
   stop,
   uninstall,
 } from './services';
+export { requestBoardSwitch, subscribeWorkspaceAppForgotten } from './store';

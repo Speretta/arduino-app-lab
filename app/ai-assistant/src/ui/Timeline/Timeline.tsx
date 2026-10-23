@@ -23,6 +23,8 @@ export interface TimelineItem {
   status?: TimelineItemStatus;
   // The single file this row acted on: `label` is shown after the title, `path` is what opens.
   file?: { path: string; label: string };
+  // The action landed on an app other than the session's: rendered as a badge, resolved by the host.
+  outsideLabel?: string;
   // expandable body (thinking reasoning, tool output); makes the row a disclosure
   details?: ReactNode;
 }

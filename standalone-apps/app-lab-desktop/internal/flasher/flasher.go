@@ -34,26 +34,65 @@ type Flasher struct {
 	conn    *grpc.ClientConn
 }
 
-var FlashDaemonService = sync.OnceValues(func() (*Flasher, error) {
-	return runFlasherCliDaemon()
-})
-
 var flasherInstance *Flasher = nil
+
+var (
+	// startMu makes one start at a time, so a process runs one daemon. startedMu is separate and never held during a
+	// start, so ShutdownDaemon does not wait for one: getPort blocks until the daemon prints its port.
+	startMu   sync.Mutex
+	startedMu sync.Mutex
+	started   *Flasher
+)
+
+// startDaemon is runFlasherCliDaemon, replaced in tests.
+var startDaemon = runFlasherCliDaemon
+
+// FlashDaemonService returns the daemon this process started, and starts one if none is running. Only a started
+// daemon is kept: after a failed start, for example on a full disk, the next call tries again.
+func FlashDaemonService() (*Flasher, error) {
+	startMu.Lock()
+	defer startMu.Unlock()
+	startedMu.Lock()
+	daemon := started
+	startedMu.Unlock()
+	if daemon != nil {
+		return daemon, nil
+	}
+	daemon, err := startDaemon()
+	if err != nil {
+		return nil, err
+	}
+	startedMu.Lock()
+	started = daemon
+	startedMu.Unlock()
+	return daemon, nil
+}
+
+// ShutdownDaemon stops the daemon if this process started one, and never starts one. The next FlashDaemonService
+// call starts a new daemon.
+func ShutdownDaemon() {
+	startedMu.Lock()
+	daemon := started
+	started = nil
+	startedMu.Unlock()
+	if daemon != nil {
+		daemon.DaemonShutDown()
+	}
+}
 
 func CancelFlash() {
 	// Kill the daemon process to stop any ongoing flash operation
 	if flasherInstance != nil {
-		flasherInstance.DaemonShutDown()
 		flasherInstance = nil
-		// Reset the singleton so it can be recreated
-		FlashDaemonService = sync.OnceValues(func() (*Flasher, error) {
-			return runFlasherCliDaemon()
-		})
+		ShutdownDaemon()
 	}
 }
 
 func runFlasherCliDaemon() (*Flasher, error) {
-	binPath := board.GetFlasherCli()
+	binPath, err := board.GetFlasherCli()
+	if err != nil {
+		return nil, err
+	}
 
 	// start daemon
 	cmd, err := paths.NewProcess(nil, binPath, "daemon", "--format", "json", "--port", "0") // use a random port
@@ -128,12 +167,17 @@ func IsUserPartitionPreservationSupported(currentImageVersion string, targetImag
 	return currentImageVersion != R0ImageVersionID && targetImageVersion != R0ImageVersionID
 }
 
-func ListAvailableOSImages(ctx context.Context) ([]OSImageRelease, error) {
+func ListAvailableOSImages(ctx context.Context, boardFqbn string) ([]OSImageRelease, error) {
 	flasher, err := FlashDaemonService()
 	if err != nil {
 		return nil, fmt.Errorf("daemon initialization failed: %w", err)
 	}
-	listResponse, err := flasher.client.List(ctx, &rpc.ListRequest{})
+
+	target := board.FlasherTargetFor(boardFqbn)
+	listResponse, err := flasher.client.List(ctx, &rpc.ListRequest{
+		Board: target.Board,
+		Os:    target.OS,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get List response: %w", err)
 	}
@@ -145,6 +189,8 @@ func ListAvailableOSImages(ctx context.Context) ([]OSImageRelease, error) {
 			VersionLabel: r.BuildId,
 			ID:           buildStrings[1],
 			Latest:       r.Latest,
+			Board:        r.Board,
+			Os:           r.Os,
 		}
 	}), nil
 }
@@ -188,6 +234,8 @@ type OSImageRelease struct {
 	VersionLabel string
 	ID           string
 	Latest       bool
+	Board        string
+	Os           string
 }
 
 type FlashStep string
@@ -206,7 +254,7 @@ type FlashEvent struct {
 	Total    int64 `json:"total,omitempty"`
 }
 
-func Flash(serial string, imageVersion OSImageRelease, preserveUserPartition bool, eventCB func(event FlashEvent),
+func Flash(boardInfo board.BoardInfo, imageVersion OSImageRelease, preserveUserPartition bool, eventCB func(event FlashEvent),
 ) error {
 	if runtime.GOOS == "windows" {
 		err := installWindowsDrivers()
@@ -225,12 +273,22 @@ func Flash(serial string, imageVersion OSImageRelease, preserveUserPartition boo
 		return fmt.Errorf("could not get cache directory: %w", err)
 	}
 
+	if boardInfo.FQBN == board.FQBNVentunoQ {
+		// For the Ventuno Q board, preserveUserPartition is not supported,
+		// regardless of the user's choice.
+		preserveUserPartition = false
+	}
+
+	target := board.FlasherTargetFor(boardInfo.FQBN)
 	req := &rpc.FlashRequest{
-		Serial:       serial,
+		Serial:       boardInfo.Serial,
 		Version:      imageVersion.VersionLabel,
 		TempPath:     cacheDir,
 		PreserveUser: preserveUserPartition,
+		Board:        target.Board,
+		Os:           target.OS,
 	}
+
 	stream, err := flasher.client.Flash(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("flash operation failed: %w", err)
@@ -307,7 +365,10 @@ func Flash(serial string, imageVersion OSImageRelease, preserveUserPartition boo
 }
 
 func installWindowsDrivers() error {
-	binPath := board.GetFlasherCli()
+	binPath, err := board.GetFlasherCli()
+	if err != nil {
+		return err
+	}
 	pwd, _ := os.Getwd()
 	if _, err := runas.RunElevated(binPath, pwd, []string{"install-drivers"}, true, true); err != nil {
 		return err

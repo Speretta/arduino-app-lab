@@ -39,6 +39,7 @@ export const panelStorageKey = (id: string, appId?: string): string =>
 export interface WorkspacePanelAPI {
   isCollapsed: boolean;
   toggleCollapsed: () => void;
+  setCollapsed: (collapsed: boolean) => void;
   isMaximized: boolean;
   toggleMaximize: () => void;
 }
@@ -49,9 +50,16 @@ export type UseWorkspacePanel = (params: {
   sibling?: {
     minSizePx?: number;
   };
+  /**
+   * Whether resizes are remembered. Defaults to true; set false while something
+   * other than the user is driving the panel, e.g. the references panel
+   * collapsing the sidebar when it opens.
+   */
+  persist?: boolean;
 }) => {
   panel: PanelImperativeHandle | null;
-  storedSize: number | undefined;
+  sizeAtMount: number | undefined;
+  getLatestSize: () => number | undefined;
   setRef: Dispatch<SetStateAction<PanelImperativeHandle | null>>;
   onResize: () => void;
   onDrag: () => void;
@@ -62,6 +70,7 @@ export const useWorkspacePanel: UseWorkspacePanel = ({
   storageKey,
   defaultSize,
   sibling,
+  persist = true,
 }) => {
   const [panel, setRef] = usePanelCallbackRef();
 
@@ -73,21 +82,35 @@ export const useWorkspacePanel: UseWorkspacePanel = ({
   const [isMaximized, setIsMaximized] = useState(false);
   const prevSizeBeforeMaximize = useRef<number | null>(null);
 
-  const { storedSize, setStoredSize } = usePanelPersistence(storageKey);
+  const { sizeAtMount, getLatestSize, setStoredSize } =
+    usePanelPersistence(storageKey);
+
+  const setCollapsed = useCallback(
+    (collapsed: boolean) => {
+      if (!panel) {
+        return;
+      }
+
+      // Mirror the panel's own state even when it is already there: on the
+      // first render `panel` was null, so `isCollapsed` may not have caught up.
+      if (panel.isCollapsed() !== collapsed) {
+        if (collapsed) {
+          panel.collapse();
+        } else {
+          panel.expand();
+        }
+      }
+      setIsCollapsed(collapsed);
+    },
+    [panel],
+  );
 
   const toggleCollapsed = useCallback(() => {
     if (!panel) {
       return;
     }
-
-    if (panel.isCollapsed()) {
-      panel.expand();
-      setIsCollapsed(false);
-    } else {
-      panel.collapse();
-      setIsCollapsed(true);
-    }
-  }, [panel]);
+    setCollapsed(!panel.isCollapsed());
+  }, [panel, setCollapsed]);
 
   const toggleMaximize = useCallback(() => {
     if (!panel) {
@@ -115,8 +138,10 @@ export const useWorkspacePanel: UseWorkspacePanel = ({
     }
     setIsCollapsed(panel.isCollapsed());
     setIsMaximized(isPanelMaximized(panel, sibling?.minSizePx));
-    setStoredSize(panel.getSize().inPixels);
-  }, [panel, setStoredSize, sibling?.minSizePx]);
+    if (persist) {
+      setStoredSize(panel.getSize().inPixels);
+    }
+  }, [panel, persist, setStoredSize, sibling?.minSizePx]);
 
   const onDrag = useCallback(() => {
     prevSizeBeforeMaximize.current = null;
@@ -127,9 +152,11 @@ export const useWorkspacePanel: UseWorkspacePanel = ({
     setRef,
     onResize,
     onDrag,
-    storedSize,
+    sizeAtMount,
+    getLatestSize,
     api: {
       toggleCollapsed,
+      setCollapsed,
       isCollapsed,
       toggleMaximize,
       isMaximized,

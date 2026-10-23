@@ -29,7 +29,6 @@ export interface ChatInputLogic {
   togglePicker: (picker: 'mode' | 'model') => void;
   closePicker: () => void;
   inputRef: React.RefObject<HTMLTextAreaElement>;
-  toolbarPickersRef: React.RefObject<HTMLDivElement>;
   onComposerKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   submit: VoidFunction;
   canSend: boolean;
@@ -49,7 +48,6 @@ export const useChatInputLogic = ({
   const [draft, setDraft] = useState('');
   const [openPicker, setOpenPicker] = useState<OpenPicker>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const toolbarPickersRef = useRef<HTMLDivElement>(null);
 
   // Grow the input with its content up to the CSS max-height, then scroll.
   useEffect(() => {
@@ -79,34 +77,6 @@ export const useChatInputLogic = ({
     observer.observe(el);
     return (): void => observer.disconnect();
   }, [draft]);
-
-  // Close an open picker on outside-click / Escape.
-  useEffect(() => {
-    if (!openPicker) {
-      return;
-    }
-
-    const onPointerDown = (event: MouseEvent): void => {
-      const target = event.target as Node;
-      if (!toolbarPickersRef.current?.contains(target)) {
-        setOpenPicker(null);
-      }
-    };
-
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        setOpenPicker(null);
-      }
-    };
-
-    window.addEventListener('mousedown', onPointerDown);
-    window.addEventListener('keydown', onKeyDown);
-
-    return (): void => {
-      window.removeEventListener('mousedown', onPointerDown);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [openPicker]);
 
   // Sending is gated on the turn being idle so a new prompt can't start
   // mid-turn (and the draft survives). Shared by Enter and the send button.
@@ -145,7 +115,6 @@ export const useChatInputLogic = ({
     togglePicker,
     closePicker,
     inputRef,
-    toolbarPickersRef,
     onComposerKeyDown,
     submit,
     canSend,

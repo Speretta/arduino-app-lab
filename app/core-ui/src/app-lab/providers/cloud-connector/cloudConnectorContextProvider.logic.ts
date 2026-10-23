@@ -15,12 +15,13 @@ import {
   useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from '@tanstack/react-router';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useBoardLifecycleStore } from '../../store/boardLifecycle';
 import { useAuth } from '../auth/authContextProvider.logic';
+import { NetworkContext } from '../network/networkContext';
 import { cloudConnectorMessages } from './messages';
 
 export type UseCloudConnector = () => {
@@ -49,6 +50,8 @@ export const useCloudConnector: UseCloudConnector =
     const { user } = useAuth();
     const queryClient = useQueryClient();
     const navigate = useNavigate();
+    const { pathname } = useLocation();
+    const { isConnected } = useContext(NetworkContext);
     const { selectedConnectedBoard, boardIsReachable } = useBoardLifecycleStore(
       useShallow((state) => ({
         selectedConnectedBoard: state.selectedConnectedBoard,
@@ -58,44 +61,44 @@ export const useCloudConnector: UseCloudConnector =
       })),
     );
 
-    const { data: status, refetch: refetchStatus } = useQuery(
-      ['cloud-connector-status'],
-      async () => getCloudConnectorStatus(),
-      {
-        enabled: boardIsReachable,
-        refetchInterval: isProvisioning ? 1000 : false,
-        onSuccess: (data) => {
-          if (!isProvisioning) return;
+    const { data: status, refetch: refetchStatus } = useQuery({
+      queryKey: ['cloud-connector-status'],
+      queryFn: async () => getCloudConnectorStatus(),
+      enabled: boardIsReachable && isConnected,
+      refetchInterval: isProvisioning ? 1000 : false,
+    });
 
-          if (
-            data.provisioning === 'provisioned' ||
-            data.provisioning === 'error'
-          ) {
-            setIsProvisioning(false);
-          }
-
-          if (data.provisioning === 'provisioned') {
-            snackbar({
-              message: formatMessage(
-                cloudConnectorMessages.connectedDescription,
-              ),
-              variant: 'success',
-            });
-          }
-        },
-      },
-    );
-
+    // Handle successful cloud connector status query
     useEffect(() => {
-      if (!user) {
-        refetchStatus();
+      if (!status || !isProvisioning) return;
+
+      if (
+        status.provisioning === 'provisioned' ||
+        status.provisioning === 'error'
+      ) {
+        setIsProvisioning(false);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user]);
+
+      if (status.provisioning === 'provisioned') {
+        snackbar({
+          message: formatMessage(cloudConnectorMessages.connectedDescription),
+          variant: 'success',
+        });
+      }
+    }, [status, isProvisioning]);
+
+    // The status depends on the signed-in user and must be fresh in Settings.
+    useEffect(() => {
+      if (!boardIsReachable || !isConnected) return;
+      if (!user || pathname.startsWith('/settings')) {
+        // Joins the fetch `enabled` starts when the board becomes reachable.
+        refetchStatus({ cancelRefetch: false });
+      }
+    }, [boardIsReachable, isConnected, user, pathname, refetchStatus]);
 
     const {
       mutateAsync: startProvisioning,
-      isLoading: isStartingProvisioning,
+      isPending: isStartingProvisioning,
     } = useMutation({
       mutationFn: async (organization: CloudConnectorOrganization) =>
         startCloudConnectorProvisioning(
@@ -104,6 +107,15 @@ export const useCloudConnector: UseCloudConnector =
           status!,
         ),
       onSuccess: () => {
+        // The cached status still holds the previous outcome ('error' or
+        // 'provisioned'), and the effect above ends provisioning on either.
+        // Mark the cache as in progress so the poll survives until the daemon
+        // reports the real outcome.
+        queryClient.setQueryData<CloudConnectorStatus>(
+          ['cloud-connector-status'],
+          (previous) =>
+            previous && { ...previous, provisioning: 'provisioning' },
+        );
         setIsProvisioning(true);
       },
       onError: (e) => {
@@ -151,19 +163,24 @@ export const useCloudConnector: UseCloudConnector =
         }
       },
       onSettled: () => {
-        queryClient.invalidateQueries(['cloud-connector-status']);
+        queryClient.invalidateQueries({
+          queryKey: ['cloud-connector-status'],
+        });
       },
     });
 
-    const errorDialogLogic: CloudConnectorErrorDialogLogic = () => ({
-      open: errorDialogOpen,
-      uhwid,
-      onOpenChange: setErrorDialogOpen,
-      confirmAction: (): void => setErrorDialogOpen(false),
-      contactSupportAction: (): void => openLinkExternal(ARDUINO_SUPPORT_URL),
-    });
+    const errorDialogLogic: CloudConnectorErrorDialogLogic = useCallback(
+      () => ({
+        open: errorDialogOpen,
+        uhwid,
+        onOpenChange: setErrorDialogOpen,
+        confirmAction: (): void => setErrorDialogOpen(false),
+        contactSupportAction: (): void => openLinkExternal(ARDUINO_SUPPORT_URL),
+      }),
+      [errorDialogOpen, uhwid],
+    );
 
-    const { mutateAsync: removeProvisioning, isLoading: isDisconnecting } =
+    const { mutateAsync: removeProvisioning, isPending: isDisconnecting } =
       useMutation({
         mutationFn: async () => deleteCloudConnectorDevice(status!),
         onSuccess: () => {
@@ -181,7 +198,9 @@ export const useCloudConnector: UseCloudConnector =
           });
         },
         onSettled: () => {
-          queryClient.invalidateQueries(['cloud-connector-status']);
+          queryClient.invalidateQueries({
+            queryKey: ['cloud-connector-status'],
+          });
         },
       });
 
@@ -205,14 +224,27 @@ export const useCloudConnector: UseCloudConnector =
       setRequiredDialogOpen(true);
     }, []);
 
-    return {
-      status,
-      isConnecting: isStartingProvisioning || isProvisioning,
-      isDisconnecting,
-      startProvisioning,
-      removeProvisioning,
-      errorDialogLogic,
-      requiredDialogLogic,
-      showRequiredDialog,
-    };
+    return useMemo(
+      () => ({
+        status,
+        isConnecting: isStartingProvisioning || isProvisioning,
+        isDisconnecting,
+        startProvisioning,
+        removeProvisioning,
+        errorDialogLogic,
+        requiredDialogLogic,
+        showRequiredDialog,
+      }),
+      [
+        errorDialogLogic,
+        isDisconnecting,
+        isProvisioning,
+        isStartingProvisioning,
+        removeProvisioning,
+        requiredDialogLogic,
+        showRequiredDialog,
+        startProvisioning,
+        status,
+      ],
+    );
   };

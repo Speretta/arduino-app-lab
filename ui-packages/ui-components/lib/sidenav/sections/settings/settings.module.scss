@@ -1,36 +1,38 @@
 @use "../../../../public/shared.module.scss";
 
 // TODO: Use correct variables when available
-$scrollbarThumbBorderColor: #ffffff;
+$scrollbarThumbBorderColor: var(--surface-bg-above);
 $scrollbarTrackBackgroundColor: transparent;
-$sectionContainerColor: #4e5b61;
-$sectionHeaderBorderColor: #c9d2d2;
+$sectionContainerColor: var(--text-subtle);
+$sectionHeaderBorderColor: var(--border-default);
 
-$themeBackgroundColor: #ffffff;
-$themeColor: #000000;
-$themeAutoBorderColor: #c9d2d2;
-$themeAutoLabelColor: #7f8c8d;
-$themeRadioInput: #008184;
+$themeBackgroundColor: var(--surface-bg-above);
+$themeColor: var(--text-default);
+$themeAutoBorderColor: var(--border-default);
+$themeAutoLabelColor: var(--text-subtle);
+$themeRadioInput: var(--accent-default);
 
-$fontSizeBackgroundColor: #ffffff;
-$fontSizeColor: #434f54;
-$fontSizeBorderColor: #c9d2d2;
+$fontSizeBackgroundColor: var(--surface-bg-above);
+$fontSizeColor: var(--text-subtle);
+$fontSizeBorderColor: var(--border-default);
 
-$savingColor: #000000;
-$verifyAndUploadColor: #000000;
-$consoleVerbosityButtonColor: #008184;
-$consoleVerbosityColor: #7f8c8d;
+$savingColor: var(--text-default);
+$verifyAndUploadColor: var(--text-default);
+$consoleVerbosityButtonColor: var(--accent-default);
+$consoleVerbosityColor: var(--text-subtle);
 
 .version {
   display: grid;
   justify-content: end;
   padding: 6px;
+  padding-top: 20px;
+  color: var(--text-default, unset);
 }
 
 .opt-out {
   padding: 12px;
   border-radius: 6px;
-  background: #B3E0E2;
+  background: var(--editor-notification);
 }
 
 .settings-container {
@@ -42,10 +44,6 @@ $consoleVerbosityColor: #7f8c8d;
 
   &::-webkit-scrollbar-thumb {
     border: 4px solid $scrollbarThumbBorderColor;
-  }
-
-  &::-webkit-scrollbar-track {
-    background-color: $scrollbarTrackBackgroundColor;
   }
 }
 
@@ -118,11 +116,11 @@ $consoleVerbosityColor: #7f8c8d;
     & > :nth-child(3) {
       opacity: 0.5;
     }
-  
+
     & > :nth-child(4) {
       grid-column: 1 / 3;
       grid-row: 2 / 3;
-      background-color: #7FCBCD;
+      background-color: var(--border-accent-strong);
       border-radius: 4px;
       padding: 0 4px;
     }
@@ -163,7 +161,7 @@ $consoleVerbosityColor: #7f8c8d;
   border-top: 1px solid $themeAutoBorderColor;
   padding-top: 12px;
   gap: 16px;
-  
+
   &.hidden {
     display: none;
   }
@@ -173,7 +171,7 @@ $consoleVerbosityColor: #7f8c8d;
   display: flex;
   align-items: center;
   justify-content: space-evenly;
-  
+
   & :nth-child(2) {
     color: $themeAutoLabelColor;
   }

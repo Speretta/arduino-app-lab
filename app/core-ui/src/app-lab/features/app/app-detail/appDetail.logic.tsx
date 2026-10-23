@@ -4,7 +4,6 @@ import {
   deleteAppBrick,
   getAppBricks,
   getAppDetail,
-  getAppFiles,
   getBricks,
   getUnsavedFilesSubject,
   importResourceToAppFromPath,
@@ -12,6 +11,7 @@ import {
   openLinkExternal,
   renameAppCustomBrick as renameAppCustomBrickRequest,
   selectResourcePathToImport,
+  statAppPath,
   updateAppBrick as updateAppBrickRequest,
   updateAppDetail,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
@@ -20,17 +20,18 @@ import {
   AppDetailedInfo,
   BOARD_STORAGE_FULL_ERROR,
   BrickCreateUpdateRequest,
-  isValidResourceName,
   UpdateAppDetailRequest,
 } from '@cloud-editor-mono/infrastructure';
 import {
+  AGENT_SETTINGS_SECTION_ID,
+  AgentEditorContext,
   AiModelRequiredDialogLogic,
   AppLabAppDetailLogic,
   AppLabEditorPanelLogic,
   AppLabEditSectionLogic,
   AppsSection,
   BRICK_FILE_EXTENSION,
-  checkForDuplicates,
+  isEdgeImpulseModel,
   isFileNode,
   isFolderNode,
   SelectableFileData,
@@ -38,11 +39,12 @@ import {
   useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import {
+  ConflictType,
   DuplicateFileDialogLogic,
   OnDuplicateConflictParams,
 } from '@cloud-editor-mono/ui-components/lib/dialogs/app-lab/duplicate-file-dialog/types';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   useCallback,
   useContext,
@@ -56,7 +58,6 @@ import { WretchError } from 'wretch/resolver';
 import { useKeywords } from '../../../../common/hooks/keywords';
 import { queryClient } from '../../../../common/providers/data-fetching/QueryProvider';
 import { BoardScopedQuery } from '../../../boardScopedQuery';
-import { useBoards } from '../../../hooks/useBoards';
 import {
   makeAppBrickDetailLogic,
   useConfigureAppBrickDialog,
@@ -66,11 +67,22 @@ import { useIsBoard } from '../../../hooks/useIsBoard';
 import { useNotFound } from '../../../hooks/useNotFound';
 import { clearPendingAppFile, peekPendingAppFile } from '../../../openAppFile';
 import { LanguageServerContext } from '../../../providers/language-server/languageServerContext';
+import { NetworkContext } from '../../../providers/network/networkContext';
 import { DETAIL_PATH_BY_SECTION } from '../../../routes/__root';
+import { useBoardLifecycleStore } from '../../../store/boardLifecycle';
+import { useNetworkSettingsDialogStore } from '../../../store/networkSettingsDialog';
 import { createWebUIFiles } from '../../../utils/create-webui-files';
+import { SKETCH_YAML_TEMPLATE } from '../../../utils/sketch-file-templates';
 import { sendAppLabNotification } from '../../notifications';
-import { splitFileName } from './hooks/filePaths';
+import { readAgentEditorContext } from './hooks/agentEditorContext';
+import { splitFileName, toAppRelativeId } from './hooks/filePaths';
+import {
+  isSketchFilePath,
+  SketchFileCheckError,
+  useAddSketch,
+} from './hooks/useAddSketch';
 import { useAppFiles } from './hooks/useAppFiles';
+import { useAppHasSketch } from './hooks/useAppHasSketch';
 import { useEditorFiles } from './hooks/useEditorFiles';
 import { useFileOperations } from './hooks/useFileOperations';
 import { useFileWatch } from './hooks/useFileWatch';
@@ -153,52 +165,128 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
   );
 
   const { data: isBoard } = useIsBoard();
+  const boardIsReachable = useBoardLifecycleStore(
+    (state) => state.boardIsReachable,
+  );
 
   const [updateOpenFile, setUpdateOpenFile] = useState<
     (currFileId: string, nextFileId: string) => void
     // eslint-disable-next-line @typescript-eslint/no-empty-function
   >(() => () => {});
 
-  const editorPaneSyncRef = useRef<{
-    renameRightPaneTab?: (oldId: string, newId: string) => void;
-    closeRightPaneTab?: (fileId: string) => void;
-    closeFileFromPaneA?: (fileId: string) => void;
-  }>({});
-
   const {
     data: app,
     isLoading: appDetailIsLoading,
+    isError: appDetailFailed,
     refetch: refetchAppDetail,
-  } = useQuery([BoardScopedQuery.LIST_MY_APPS, appId], () =>
-    getAppDetail(appId),
+  } = useQuery({
+    queryKey: [BoardScopedQuery.LIST_MY_APPS, appId],
+
+    queryFn: () => getAppDetail(appId),
+  });
+
+  // Read-only example/inspiration apps and installed releases can't run the
+  // agent, so the side panel is only available for the user's own custom apps.
+  const isReleaseApp = app?.release === true;
+  const isReadOnlyApp = section === 'examples' || isReleaseApp;
+
+  // The agent side panel's own open/close state — a second, additive entry point
+  // (toolbar icon, ⌘L) next to the footer bar's full-screen Agent Mode swap.
+  // Deliberately independent of that route-driven `aiAssistantActive` flag.
+  const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+  const toggleAgentPanel = useCallback(
+    () => setAgentPanelOpen((prev) => !prev),
+    [],
+  );
+  const closeAgentPanel = useCallback(() => setAgentPanelOpen(false), []);
+  const openAgentSettings = useCallback(
+    () => navigate({ to: '/settings', hash: AGENT_SETTINGS_SECTION_ID }),
+    [navigate],
   );
 
-  const { data: appBricks, refetch: refetchAppBricks } = useQuery(
-    [BoardScopedQuery.APP_BRICKS, appId],
-    () => getAppBricks(appId),
+  // ⌘L toggles the side panel. It lives here rather than in EditorPanel because the shortcut is
+  // window-wide while that component is presentational — and because main keeps this route mounted
+  // (hidden) in Agent Mode, where a listener of its own would toggle an invisible panel and swallow
+  // the keystroke. Read-only apps have no panel, so they leave ⌘L to whatever else wants it.
+  const agentModeActive = useRouterState({
+    select: (state) => state.location.pathname.startsWith('/ai-assistant'),
+  });
+  useEffect(() => {
+    if (isReadOnlyApp || agentModeActive) {
+      return;
+    }
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key.toLowerCase() === 'l' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        toggleAgentPanel();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isReadOnlyApp, agentModeActive, toggleAgentPanel]);
+
+  const editorPanelSyncRef = useRef<{
+    renameRightPanelTab?: (oldId: string, newId: string) => void;
+    closeRightPanelTab?: (fileId: string) => void;
+    closeFileFromPanelA?: (fileId: string) => void;
+  }>({});
+
+  const { data: appBricks, refetch: refetchAppBricks } = useQuery({
+    queryKey: [BoardScopedQuery.APP_BRICKS, appId],
+    queryFn: () => getAppBricks(appId),
+  });
+
+  const onListError = useCallback(
+    (relDir: string) => {
+      sendAppLabNotification({
+        message: formatMessage(messages.failedListFolder, { folder: relDir }),
+        variant: 'error',
+      });
+    },
+    [formatMessage],
   );
 
   const {
-    filesList,
-    defaultFile,
-    filesListIsLoaded,
+    defaultFilePath,
     fileTree,
-    filesListKey,
+    appDirListed,
+    appDirFailed,
+    expandDir,
+    collapseDir,
+    revealPath,
+    findFileNode,
+    invalidateDirs,
+    unlistDir,
+    relistDir,
+    listFailure,
+    renameDir,
     refetchAppYaml,
     refetchSketchYaml,
-    refetchAppFiles,
     fetchFile,
     refreshFileContents,
   } = useAppFiles({
     appId,
     appPath: app?.path,
+    onListError,
   });
 
-  // Redirect to the correct section if app is not found
-  const shouldRedirect = !appDetailIsLoading && !app?.id;
+  const handleFolderExpand = useCallback(
+    (path: string, isOpen: boolean) => {
+      if (isOpen) expandDir(path);
+      else collapseDir(path);
+    },
+    [expandDir, collapseDir],
+  );
+
+  // A failed refetch keeps the last good `app`, so an app that is gone needs a second signal: its directory on the board, missing only when it really went away — a broken app.yaml leaves the tree readable, and bouncing the user out of that one would strand them. Reachability gates the pair because invalidateManifest refetches both keys at once, so a single board hiccup fails both.
+  const appIsGone = appDetailFailed && appDirFailed && boardIsReachable;
+  // Cold (no cached app) this cannot help: appPath is unknown, so the file tree never runs and a broken app.yaml still redirects on the branch below.
+  const shouldRedirect = (!appDetailIsLoading && !app?.id) || appIsGone;
   useNotFound(shouldRedirect, section);
 
-  const { selectedBoard } = useBoards();
+  const selectedBoard = useBoardLifecycleStore(
+    (state) => state.selectedConnectedBoard,
+  );
 
   const {
     isLspEnabled,
@@ -207,13 +295,16 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     createLspNode,
     renameLspNode,
     deleteLspNode,
-    moveLspNode,
     syncLspWatchedChange,
     startLSP,
     sendLspMessage,
     subscribeLspMessages,
     getLspWorkspaceFile,
     reloadLspFile,
+    lspReferencesResult,
+    showLspReferences,
+    closeLspReferences,
+    lspGoToReference,
     lspState,
     onLspStateChange,
   } = useLSP(appId, selectedBoard);
@@ -230,7 +321,6 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
   }, [app, selectedBoard?.serial]);
 
   const {
-    unsavedFileIds,
     editorFiles,
     openFiles,
     openFileIds,
@@ -245,62 +335,95 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     storeSplitState,
   } = useEditorFiles({
     storeEntityId,
-    defaultFileId: defaultFile?.path,
-    filesList,
+    defaultFilePath,
+    appDirListed,
     appBricks,
     getUnsavedFilesSubject,
   });
 
-  const closeFileBothPanes = useCallback(
+  const closeFileBothPanels = useCallback(
     (fileId: string) => {
-      // Route pane A through the consolidating close (fold pane B's tabs
+      // Route panel A through the consolidating close (fold panel B's tabs
       // back into A when A's LAST tab closes, collapsing the split) — the
-      // same path a user's X-click takes. A raw closeFile that empties pane
-      // A blanks the whole editor panel (its render gates on pane A's open
-      // files) while pane B silently keeps its tabs: an external delete of
-      // pane A's only file then "closes" both panels, and reselecting the
-      // pane-B file resurrects it doubled (preview in A, committed in B).
-      const closePaneA =
-        editorPaneSyncRef.current.closeFileFromPaneA ?? closeFile;
-      closePaneA(fileId);
-      editorPaneSyncRef.current.closeRightPaneTab?.(fileId);
+      // same path a user's X-click takes. A raw closeFile that empties panel
+      // A blanks the whole editor panel (its render gates on panel A's open
+      // files) while panel B silently keeps its tabs: an external delete of
+      // panel A's only file then "closes" both panels, and reselecting the
+      // panel-B file resurrects it doubled (preview in A, committed in B).
+      const closePanelA =
+        editorPanelSyncRef.current.closeFileFromPanelA ?? closeFile;
+      closePanelA(fileId);
+      editorPanelSyncRef.current.closeRightPanelTab?.(fileId);
     },
     [closeFile],
   );
 
-  const {
-    renameFile,
-    deleteFile,
-    removeFolder,
-    addFile,
-    addFolder,
-    moveFile,
-    openFile,
-  } = useFileOperations({
+  const { renameFile, deleteFile, removeFolder, addFile, addFolder, openFile } =
+    useFileOperations({
+      appId,
+      appPath: app?.path,
+      invalidateDirs,
+      unlistDir,
+      renameDir,
+      fetchFile,
+      selectFile,
+      closeFile: closeFileBothPanels,
+      updateOpenFile,
+      createLspNode,
+      deleteLspNode,
+      renameLspNode,
+    });
+
+  const hasSketch = useAppHasSketch({
     appId,
     appPath: app?.path,
-    filesListKey,
-    files: filesList,
-    fetchFile,
-    selectFile,
-    closeFile: closeFileBothPanes,
-    updateOpenFile,
-    createLspNode,
-    deleteLspNode,
-    renameLspNode,
-    moveLspNode,
+    fileTree,
+    rootFailed: appDirFailed,
+    boardIsReachable,
   });
+
+  const notifyAddSketchFailed = useCallback(() => {
+    sendAppLabNotification({
+      message: formatMessage(messages.failedAddSketch),
+      variant: 'error',
+    });
+  }, [formatMessage]);
+
+  const { addSketch, createSketchFile } = useAddSketch({
+    appPath: app?.path,
+    addFolder,
+    addFile,
+    deleteFile,
+    removeFolder,
+    openFile,
+    revealPath,
+    invalidateDirs,
+    onAddSketchError: notifyAddSketchFailed,
+  });
+
+  const { isConnected, networkStatusChecked } = useContext(NetworkContext);
+  // Reachable and checked: an unreachable board, or the first poll still
+  // running, is not "offline".
+  const boardOffline =
+    boardIsReachable && !!networkStatusChecked && !isConnected;
+  const setNetworkSettingsDialogOpen = useNetworkSettingsDialogStore(
+    (state) => state.setOpen,
+  );
+  const openNetworkSettings = useCallback(
+    () => setNetworkSettingsDialogOpen(true),
+    [setNetworkSettingsDialogOpen],
+  );
 
   const selectableMainFile: SelectableFileData | undefined = undefined;
 
   useEffect(() => {
     setUpdateOpenFile(() => (currFileId: string, nextFileId: string) => {
       actualUpdateOpenFile(currFileId, nextFileId);
-      editorPaneSyncRef.current.renameRightPaneTab?.(currFileId, nextFileId);
+      editorPanelSyncRef.current.renameRightPanelTab?.(currFileId, nextFileId);
     });
   }, [actualUpdateOpenFile]);
 
-  // Auto-open a file requested from outside the router (e.g. the AI assistant's file chip): open the stashed target once the file list is ready and still contains it.
+  // Auto-open a file requested from outside the router (e.g. the AI assistant's file chip): open the stashed target once the tree has reached it. Listing its ancestors is what answers "does it exist" — no stat, and nothing to fail half way.
   const [pendingAgentFile] = useState(() => peekPendingAppFile(appId));
   const openedPendingFileRef = useRef(false);
   useEffect(() => {
@@ -308,24 +431,100 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     if (
       openedPendingFileRef.current ||
       !pendingAgentFile ||
-      !filesListIsLoaded ||
       openFilesStore === undefined
     ) {
       return;
     }
-    if (filesList?.some((f) => f.path === pendingAgentFile)) {
-      openedPendingFileRef.current = true;
-      clearPendingAppFile(appId);
-      void openFile(pendingAgentFile);
-    }
+    revealPath(pendingAgentFile);
+    if (!findFileNode(pendingAgentFile)) return;
+
+    openedPendingFileRef.current = true;
+    clearPendingAppFile(appId);
+    void openFile(pendingAgentFile);
   }, [
     appId,
     pendingAgentFile,
-    filesListIsLoaded,
-    filesList,
     openFile,
     openFilesStore,
+    revealPath,
+    findFileNode,
   ]);
+
+  const notifyConflictCheckFailed = useCallback((): void => {
+    sendAppLabNotification({
+      message: formatMessage(messages.failedCheckPathConflict),
+      variant: 'error',
+    });
+  }, [formatMessage]);
+
+  // Resolved against the backend, not the file list: the tree is lazily loaded
+  // and may never have listed the path being checked. It throws rather than
+  // reporting "free" when it cannot tell — every caller writes to the path it
+  // clears, and the backend truncates whatever is already there.
+  const checkPathConflict = useCallback(
+    async (
+      relPath: string,
+      wantedType: 'file' | 'folder',
+    ): Promise<{ hasDuplicate: boolean; conflictType: ConflictType }> => {
+      if (!app?.path) {
+        throw new Error('Cannot check for conflicts: the app has no path');
+      }
+
+      const existing = await statAppPath(`${app.path}/${relPath}`);
+      if (!existing) {
+        return { hasDuplicate: false, conflictType: null };
+      }
+
+      return {
+        hasDuplicate: true,
+        conflictType: `${wantedType}-${
+          existing.isDir ? 'folder' : 'file'
+        }` as ConflictType,
+      };
+    },
+    [app?.path],
+  );
+
+  // The backend hides an import from the file watcher, so the language
+  // servers learn about the imported file or folder here.
+  const importIntoApp = useCallback(
+    async (
+      remoteDir: string,
+      sourcePath: string,
+      isFolder?: boolean,
+      newFileName?: string,
+    ): ReturnType<typeof importResourceToAppFromPath> => {
+      const result = await importResourceToAppFromPath(
+        remoteDir,
+        sourcePath,
+        isFolder,
+        newFileName,
+      );
+      const path = toAppRelativeId(result.id, app?.path);
+      syncLspWatchedChange?.(path, 'create');
+      // An import may overwrite a file the server already holds open.
+      void reloadLspFile?.(path);
+      return result;
+    },
+    [app?.path, syncLspWatchedChange, reloadLspFile],
+  );
+
+  // The file tree and the OS import abort on a rejection but cannot report it,
+  // so the notification is raised here on the way out.
+  const checkPathConflictReported = useCallback(
+    async (
+      relPath: string,
+      wantedType: 'file' | 'folder',
+    ): Promise<{ hasDuplicate: boolean; conflictType: ConflictType }> => {
+      try {
+        return await checkPathConflict(relPath, wantedType);
+      } catch (error) {
+        notifyConflictCheckFailed();
+        throw error;
+      }
+    },
+    [checkPathConflict, notifyConflictCheckFailed],
+  );
 
   const duplicateFileDialogLogic: DuplicateFileDialogLogic = useCallback(
     () => ({
@@ -342,6 +541,13 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
             console.error('Source or target path is missing');
             return false;
           }
+          // What is being moved is the first half of the conflict type: a
+          // `folder-file` is a folder dropped onto a file, not a file.
+          const movedNodeType = duplicateDialog.conflictType?.startsWith(
+            'folder',
+          )
+            ? 'folder'
+            : 'file';
           // For folder-folder conflicts, delete target folder first, then move source
           if (duplicateDialog.conflictType === 'folder-folder') {
             // Close all files in target folder
@@ -375,27 +581,20 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
               ? `${app?.path}/${targetDir}`
               : app?.path ?? '';
 
-            await importResourceToAppFromPath(
+            await importIntoApp(
               remoteDir,
               duplicateDialog.sourcePath,
               isFolder,
             );
-            queryClient.invalidateQueries({
-              queryKey: [BoardScopedQuery.APP_FILES],
-            });
+            invalidateDirs();
             queryClient.invalidateQueries({
               queryKey: ['get-batch-app-file-content'],
             });
           } else {
-            await moveFile(
+            await renameFile(
               duplicateDialog.sourcePath,
               duplicateDialog.targetPath,
-              {
-                nodeType:
-                  duplicateDialog.conflictType === 'folder-folder'
-                    ? 'folder'
-                    : 'file',
-              },
+              { nodeType: movedNodeType },
             );
           }
           const isLastItem = conflictQueue.length <= 1;
@@ -423,43 +622,18 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
           const extension =
             lastDotIndex !== -1 ? targetPath.substring(lastDotIndex) : '';
 
-          // Helper function to check if a path exists in fileTree
-          const checkPathExists = (path: string): boolean => {
-            const targetPathRelative = path.replace(app?.path + '/', '');
-            const fileExists = filesList?.some(
-              (file) => file.path === targetPathRelative,
-            );
-
-            const checkFolderExists = (
-              nodes: TreeNode[] | undefined,
-              target: string,
-            ): boolean => {
-              if (!nodes) return false;
-              for (const node of nodes) {
-                if (node.path === target) {
-                  return true;
-                }
-                if (node.type === 'folder' && node.children) {
-                  if (checkFolderExists(node.children, target)) {
-                    return true;
-                  }
-                }
-              }
-              return false;
-            };
-
-            const folderExists = checkFolderExists(
-              fileTree,
-              targetPathRelative,
-            );
-            return fileExists || folderExists;
-          };
-
           // Incremental naming logic
+          const keepBothType = duplicateDialog.conflictType?.startsWith(
+            'folder',
+          )
+            ? 'folder'
+            : 'file';
           let newPath = `${baseName}_copy${extension}`;
           let counter = 1;
 
-          while (checkPathExists(newPath)) {
+          while (
+            (await checkPathConflict(newPath, keepBothType)).hasDuplicate
+          ) {
             newPath = `${baseName}_copy_${counter}${extension}`;
             counter++;
           }
@@ -477,25 +651,19 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
               : app?.path ?? '';
             const newFileName = newPath.split('/').pop() || '';
 
-            await importResourceToAppFromPath(
+            await importIntoApp(
               remoteDir,
               duplicateDialog.sourcePath,
               isFolder,
               newFileName,
             );
-            queryClient.invalidateQueries({
-              queryKey: [BoardScopedQuery.APP_FILES],
-            });
+            invalidateDirs();
             queryClient.invalidateQueries({
               queryKey: ['get-batch-app-file-content'],
             });
           } else {
-            await moveFile(duplicateDialog.sourcePath, newPath, {
-              nodeType:
-                duplicateDialog.conflictType === 'folder-folder' ||
-                duplicateDialog.conflictType === 'folder-file'
-                  ? 'folder'
-                  : 'file',
+            await renameFile(duplicateDialog.sourcePath, newPath, {
+              nodeType: keepBothType,
             });
           }
 
@@ -517,13 +685,14 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     [
       conflictQueue,
       duplicateDialog,
-      moveFile,
+      renameFile,
       deleteFile,
       app?.path,
-      filesList,
-      fileTree,
+      checkPathConflict,
       openFiles,
       closeFile,
+      invalidateDirs,
+      importIntoApp,
     ],
   );
 
@@ -555,7 +724,6 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         if (brickId === 'arduino:web_ui' && app?.name) {
           try {
             await createWebUIFiles(app.name, addFolder, addFile);
-            await refetchAppFiles();
           } catch (error) {
             console.error('Failed to create WebUI files:', error);
             sendAppLabNotification({
@@ -589,7 +757,6 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
       app,
       refetchAppYaml,
       refetchAppBricks,
-      refetchAppFiles,
       addFolder,
       addFile,
       selectFile,
@@ -631,12 +798,12 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         const response = await addAppCustomBrickRequest(appId, body);
 
         if (response && response.id) {
+          invalidateDirs();
+          // A tab id missing from the brick list is shown as a file, so the
+          // tab opens only once the list has the new brick.
+          await refetchAppBricks();
           selectFile({ fileId: response.id });
-          await Promise.all([
-            refetchAppBricks(),
-            refetchAppFiles(),
-            refetchAppYaml(),
-          ]);
+          await refetchAppYaml();
           return response;
         }
 
@@ -657,7 +824,10 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
             ],
           });
         } else if ((error as WretchError).status === 409) {
-          addAppBrick(body.name, undefined, true);
+          sendAppLabNotification({
+            message: formatMessage(messages.failedAddCustomBrick),
+            variant: 'error',
+          });
         } else {
           sendAppLabNotification({
             message: formatMessage(messages.failedAddCustomBrick),
@@ -670,39 +840,54 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
       formatMessage,
       selectFile,
       refetchAppBricks,
-      refetchAppFiles,
+      invalidateDirs,
       refetchAppYaml,
       navigate,
-      addAppBrick,
     ],
   );
 
   const renameAppCustomBrick = useCallback(
     async (brickId: string, params: { name: string }): Promise<boolean> => {
-      const response = await renameAppCustomBrickRequest(
+      const newBrickId = await renameAppCustomBrickRequest(
         appId,
         brickId,
         params,
       );
-      if (response) {
-        await Promise.all([
-          refetchAppBricks(),
-          refetchAppFiles(),
-          refetchAppYaml(),
-        ]);
+      if (newBrickId) {
+        // The backend has already moved the folder, so `source: 'stream'` runs
+        // only the local side of a folder rename. It runs first: while the old
+        // folder is still expanded, any refetch of it fails.
+        await renameFile(`bricks/${brickId}`, `bricks/${newBrickId}`, {
+          nodeType: 'folder',
+          source: 'stream',
+        });
+        // The brick tab is keyed by the brick id, and a tab id missing from
+        // the brick list is shown as a file, so the tab is renamed only once
+        // the list has the new id.
+        await refetchAppBricks();
+        updateOpenFile(brickId, newBrickId);
+        await refetchAppYaml();
         sendAppLabNotification({
           message: formatMessage(messages.successfullyRenamedBrick),
           variant: 'success',
         });
+        return true;
       } else {
         sendAppLabNotification({
           message: formatMessage(messages.failedRenameBrick),
           variant: 'error',
         });
+        return false;
       }
-      return response;
     },
-    [appId, formatMessage, refetchAppBricks, refetchAppFiles, refetchAppYaml],
+    [
+      appId,
+      formatMessage,
+      refetchAppBricks,
+      refetchAppYaml,
+      renameFile,
+      updateOpenFile,
+    ],
   );
 
   const addFileHandler = useCallback(
@@ -713,23 +898,11 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         return;
       }
 
-      // Backstop for non-tree callers; the tree input refuses these inline.
-      if (!isValidResourceName(fullName)) {
-        sendAppLabNotification({
-          message: formatMessage(messages.invalidCharactersInFileName),
-          variant: 'error',
-        });
-        return;
-      }
-
       const { fileName, fileExtension } = splitFileName(fullName);
       const prevSelectedFileId = selectedFile?.fileId;
 
-      // Check for conflicts using checkForDuplicates
       try {
-        const { fileTree } = await getAppFiles(app?.path || '');
-        const { hasDuplicate, conflictType } = checkForDuplicates(
-          fileTree,
+        const { hasDuplicate, conflictType } = await checkPathConflict(
           path,
           'file',
         );
@@ -748,12 +921,22 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         }
       } catch (error) {
         console.error('Failed to check file existence:', error);
+        notifyConflictCheckFailed();
+        return;
       }
 
       // this row auto-open newly created files in editor
       selectFile({ fileId: path });
       try {
-        await addFile(path, fileName, fileExtension);
+        if (isSketchFilePath(path)) {
+          await createSketchFile(path);
+        } else {
+          // The daemon reads only `<app>/sketch/sketch.yaml`, but a sketch.yaml
+          // anywhere is given the profile it needs.
+          const content =
+            fullName === 'sketch.yaml' ? SKETCH_YAML_TEMPLATE : '';
+          await addFile(path, fileName, fileExtension, content);
+        }
         sendAppLabNotification({
           message: formatMessage(messages.successfullyCreatedFile),
           variant: 'success',
@@ -761,6 +944,10 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
       } catch (error) {
         if (prevSelectedFileId) {
           selectFile({ fileId: prevSelectedFileId });
+        }
+        if (error instanceof SketchFileCheckError) {
+          notifyConflictCheckFailed();
+          return;
         }
         const message =
           error instanceof Error && error.message === BOARD_STORAGE_FULL_ERROR
@@ -772,7 +959,15 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         });
       }
     },
-    [addFile, app?.path, formatMessage, selectFile, selectedFile?.fileId],
+    [
+      addFile,
+      createSketchFile,
+      checkPathConflict,
+      notifyConflictCheckFailed,
+      formatMessage,
+      selectFile,
+      selectedFile?.fileId,
+    ],
   );
 
   const addFolderHandler = useCallback(
@@ -783,20 +978,8 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         return;
       }
 
-      // Backstop for non-tree callers; the tree input refuses these inline.
-      if (!isValidResourceName(folderName)) {
-        sendAppLabNotification({
-          message: formatMessage(messages.invalidCharactersInFileName),
-          variant: 'error',
-        });
-        return;
-      }
-
-      // Check for conflicts using checkForDuplicates
       try {
-        const { fileTree } = await getAppFiles(app?.path || '');
-        const { hasDuplicate, conflictType } = checkForDuplicates(
-          fileTree,
+        const { hasDuplicate, conflictType } = await checkPathConflict(
           path,
           'folder',
         );
@@ -815,6 +998,8 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         }
       } catch (error) {
         console.error('Failed to check folder existence:', error);
+        notifyConflictCheckFailed();
+        return;
       }
 
       try {
@@ -834,7 +1019,7 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         });
       }
     },
-    [app?.path, addFolder, formatMessage],
+    [checkPathConflict, notifyConflictCheckFailed, addFolder, formatMessage],
   );
 
   const renameFileHandler = useCallback(
@@ -844,57 +1029,26 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
       appendExt?: boolean,
       nodeType?: 'file' | 'folder',
     ): Promise<void> => {
-      // Backstop for non-tree callers; the tree input refuses these inline.
-      if (!isValidResourceName(newName)) {
-        sendAppLabNotification({
-          message: formatMessage(messages.invalidCharactersInFileName),
-          variant: 'error',
-        });
-        return;
-      }
-
       const folder = path.split('/').slice(0, -1).join('/');
       let newPath = folder ? `${folder}/${newName}` : newName;
 
       if (appendExt) {
-        const file = filesList?.find((f) => f.path === path);
-        newPath += file?.extension ? `.${file.extension}` : '';
+        const { fileExtension } = splitFileName(path.split('/').pop() ?? '');
+        newPath += fileExtension ? `.${fileExtension}` : '';
       }
 
-      // Check if target name already exists
       try {
-        const { filesList, fileTree } = await getAppFiles(app?.path || '');
-        const targetPath = newPath.replace(app?.path + '/', '');
+        const { hasDuplicate, conflictType } = await checkPathConflict(
+          newPath,
+          nodeType ?? 'file',
+        );
 
-        // Check files
-        const fileExists = filesList.some((file) => file.path === targetPath);
-
-        // Check folders by traversing the tree
-        const checkFolderExists = (
-          nodes: TreeNode[],
-          targetPath: string,
-        ): boolean => {
-          for (const node of nodes) {
-            if (node.type === 'folder' && node.path === targetPath) {
-              return true;
-            }
-            if (node.type === 'folder' && node.children) {
-              if (checkFolderExists(node.children, targetPath)) {
-                return true;
-              }
-            }
-          }
-          return false;
-        };
-
-        const folderExists = checkFolderExists(fileTree, targetPath);
-
-        if (fileExists || folderExists) {
+        if (hasDuplicate) {
           sendAppLabNotification({
             message: formatMessage(
-              fileExists
-                ? messages.fileAlreadyExistsRename
-                : messages.folderAlreadyExistsRename,
+              conflictType?.endsWith('-folder')
+                ? messages.folderAlreadyExistsRename
+                : messages.fileAlreadyExistsRename,
             ),
             variant: 'error',
           });
@@ -902,6 +1056,8 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         }
       } catch (error) {
         console.error('Failed to check rename conflict:', error);
+        notifyConflictCheckFailed();
+        return;
       }
 
       try {
@@ -919,7 +1075,7 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         });
       }
     },
-    [filesList, app?.path, formatMessage, renameFile],
+    [checkPathConflict, notifyConflictCheckFailed, formatMessage, renameFile],
   );
 
   const deleteFileHandler = useCallback(
@@ -930,7 +1086,7 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
       const performDelete = async (): Promise<void> => {
         const fileIndex = openFiles.findIndex((f) => f.fileId === path);
         try {
-          editorPaneSyncRef.current.closeRightPaneTab?.(path);
+          editorPanelSyncRef.current.closeRightPanelTab?.(path);
           // Folders route through removeFolder so descendant tabs/buffers are
           // cleaned up; single files stay on deleteFile.
           await (isDir ? removeFolder(path) : deleteFile(path, { nodeType }));
@@ -964,9 +1120,9 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
       nodeType?: 'file' | 'folder',
       _filesToUpdate?: Array<{ oldPath: string; newPath: string }>,
     ): Promise<void> => {
-      await moveFile(fromPath, toPath, { nodeType });
+      await renameFile(fromPath, toPath, { nodeType });
     },
-    [moveFile],
+    [renameFile],
   );
 
   const updateAppBrick = useCallback(
@@ -988,11 +1144,12 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     async (
       bricks: Record<string, BrickCreateUpdateRequest>,
     ): Promise<boolean> => {
-      const responses = await Promise.all(
-        Object.entries(bricks).map(([brickId, params]) =>
-          updateAppBrickRequest(appId, brickId, params),
-        ),
-      );
+      // One PATCH at a time: the daemon can lose a value when two PATCHes
+      // to the same app run in parallel.
+      const responses: boolean[] = [];
+      for (const [brickId, params] of Object.entries(bricks)) {
+        responses.push(await updateAppBrickRequest(appId, brickId, params));
+      }
       const response = responses.every((res) => res);
       if (response) {
         await refetchAppYaml();
@@ -1029,13 +1186,6 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     [renameFileHandler],
   );
 
-  const handleValidationError = useCallback(() => {
-    sendAppLabNotification({
-      message: formatMessage(messages.invalidCharactersInFileName),
-      variant: 'error',
-    });
-  }, [formatMessage]);
-
   const editorPanelLogicParams: EditorPanelLogicParams = useMemo(() => {
     return {
       appId: app?.id,
@@ -1044,7 +1194,6 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
       selectedFile,
       selectFile: openFileFromEditor,
       selectableMainFile,
-      unsavedFileIds,
       closeFile,
       updateOpenFilesOrder,
       deleteAppFile: deleteFileHandler,
@@ -1055,13 +1204,12 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
       initialAppBrickTab,
       openFiles,
       allFiles: editorFiles,
-      readOnly: section === 'examples',
+      readOnly: isReadOnlyApp,
       fetchFile,
       previewFileId,
       openFilesStore,
-      filesContentLoaded: filesListIsLoaded,
+      filesContentLoaded: appDirListed,
       storeSplitState,
-      filesList,
       isLspEnabled,
       lspWorkspaceDir,
       lspClients,
@@ -1070,6 +1218,10 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
       subscribeLspMessages,
       getLspWorkspaceFile,
       onLspStateChange,
+      showLspReferences,
+      closeLspReferences,
+      onToggleAgentPanel: isReadOnlyApp ? undefined : toggleAgentPanel,
+      agentPanelOpen,
     };
   }, [
     app?.id,
@@ -1078,7 +1230,6 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     selectedFile,
     openFileFromEditor,
     selectableMainFile,
-    unsavedFileIds,
     closeFile,
     updateOpenFilesOrder,
     deleteFileHandler,
@@ -1089,13 +1240,11 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     initialAppBrickTab,
     openFiles,
     editorFiles,
-    section,
     fetchFile,
     previewFileId,
     openFilesStore,
-    filesListIsLoaded,
+    appDirListed,
     storeSplitState,
-    filesList,
     isLspEnabled,
     lspWorkspaceDir,
     lspClients,
@@ -1104,49 +1253,73 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     subscribeLspMessages,
     getLspWorkspaceFile,
     onLspStateChange,
+    showLspReferences,
+    closeLspReferences,
+    toggleAgentPanel,
+    agentPanelOpen,
+    isReadOnlyApp,
   ]);
 
   // Single owner of the editor-panel/split state machine. Instantiated
   // once here (rather than inside `useAppLabEditorPanelLogic`) so that
   // every consumer of `appLabEditorPanelLogic` shares the same instance,
   // and so the file-tree/brick drop handler below can route files into
-  // pane B by calling `openFileInPane` directly.
+  // panel B by calling `openFileInPanel` directly.
   const {
     editorPanelLogic,
-    openFileInPane,
-    getActivePane,
-    activePane,
-    rightPaneSelectedFile,
-    rightPaneTabs,
-    renameRightPaneTab,
-    closeRightPaneTab,
-    closeFileFromPaneA,
+    openFileInPanel,
+    getActiveEditorPanel,
+    activeEditorPanel,
+    rightPanelSelectedFile,
+    rightPanelTabs,
+    renameRightPanelTab,
+    closeRightPanelTab,
+    closeFileFromPanelA,
     openBrickAiModelsTab,
   } = useCreateEditorPanelLogic(editorPanelLogicParams);
 
   useEffect(() => {
-    editorPaneSyncRef.current = {
-      renameRightPaneTab,
-      closeRightPaneTab,
-      closeFileFromPaneA,
+    editorPanelSyncRef.current = {
+      renameRightPanelTab,
+      closeRightPanelTab,
+      closeFileFromPanelA,
     };
-  }, [renameRightPaneTab, closeRightPaneTab, closeFileFromPaneA]);
+  }, [renameRightPanelTab, closeRightPanelTab, closeFileFromPanelA]);
 
   // An external change reloads/reconciles a file open as a tab in *either*
-  // editor pane, so the watcher gets the union of both panes' tab ids. These
-  // are the RAW id states (pane-A `openFileIds` + pane-B tab ids), not the
-  // meta-derived `openFiles`: the latter tracks `filesList`, so a moved/removed
-  // file drops out of it the moment the tree refetches — i.e. exactly when the
-  // watcher still needs that id to close the ghost tab. Pane B's tabs live in
-  // the editor-panel logic above, which is why this is resolved here rather
-  // than fed straight from `useEditorFiles` (pane A only).
+  // editor panel, so the watcher gets the union of both panels' tab ids. These
+  // are the RAW id states (panel-A `openFileIds` + panel-B tab ids), not the
+  // meta-derived `openFiles`: that drops any id whose metadata hasn't resolved
+  // yet — i.e. possibly the very id the watcher needs to close a ghost tab.
+  // Panel B's tabs live in the editor-panel logic above, which is why this is
+  // resolved here rather than fed straight from `useEditorFiles` (panel A only).
   const openTabIds = useMemo(
     () =>
       Array.from(
-        new Set([...openFileIds, ...rightPaneTabs.map((t) => t.fileId)]),
+        new Set([...openFileIds, ...rightPanelTabs.map((t) => t.fileId)]),
       ),
-    [openFileIds, rightPaneTabs],
+    [openFileIds, rightPanelTabs],
   );
+
+  // Read when the user sends a prompt, so the agent gets the file as it is at that moment.
+  const editorPanelsRef = useRef({
+    selectedFile,
+    rightPanelSelectedFile,
+    getActiveEditorPanel,
+  });
+  editorPanelsRef.current = {
+    selectedFile,
+    rightPanelSelectedFile,
+    getActiveEditorPanel,
+  };
+  const getAgentEditorContext = useCallback((): AgentEditorContext => {
+    const panels = editorPanelsRef.current;
+    const panel = panels.getActiveEditorPanel();
+    return readAgentEditorContext(
+      panel,
+      panel === 'B' ? panels.rightPanelSelectedFile : panels.selectedFile,
+    );
+  }, []);
 
   useFileWatch({
     appId,
@@ -1154,21 +1327,36 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     openTabIds,
     refreshFileContents,
     deleteFile,
+    unlistDir,
+    relistDir,
     reloadLspFile,
     syncLspWatchedChange,
   });
 
   useEffect(() => {
     setActiveSelectedFile(
-      activePane === 'B' ? rightPaneSelectedFile : selectedFile,
+      activeEditorPanel === 'B' ? rightPanelSelectedFile : selectedFile,
     );
-  }, [activePane, rightPaneSelectedFile, selectedFile, setActiveSelectedFile]);
+  }, [
+    activeEditorPanel,
+    rightPanelSelectedFile,
+    selectedFile,
+    setActiveSelectedFile,
+  ]);
+
+  // The selection can name a file no listing has reached yet. Keyed on the id
+  // alone, and kept out of the bookkeeping effect below: that one depends on
+  // `findFileNode`, whose identity changes with every listing, so revealing
+  // from there re-expanded the selected file's folder after any watcher
+  // refetch — reopening the folder the user had just collapsed.
+  const activeSelectedFileId = activeSelectedFile?.fileId;
+  useEffect(() => {
+    if (activeSelectedFileId) revealPath(activeSelectedFileId);
+  }, [activeSelectedFileId, revealPath]);
 
   useEffect(() => {
     if (activeSelectedFile?.fileId) {
-      const foundFile = filesList?.find(
-        (file) => file.path === activeSelectedFile.fileId,
-      );
+      const foundFile = findFileNode(activeSelectedFile.fileId);
 
       if (
         foundFile &&
@@ -1187,7 +1375,7 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
       setSelectedNode(undefined);
       // Note: if selectedNode is a folder, keep it for file creation operations
     }
-  }, [activeSelectedFile, filesList, selectedNode]);
+  }, [activeSelectedFile, findFileNode, selectedNode]);
 
   const openExternal = useCallback(() => {
     if (!selectedNode) {
@@ -1214,13 +1402,13 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
       if (!app) return false;
       const result = await updateAppDetail(app.id, request);
       if (result === app.id) {
-        refetchAppDetail();
-
         if (Object.hasOwn(request, 'default')) {
+          // Prefix match: the status hook, every list section and this detail ([LIST_MY_APPS, appId]) all carry `default`.
           queryClient.invalidateQueries({
-            queryKey: [BoardScopedQuery.GET_DEFAULT_APP],
-            exact: true,
+            queryKey: [BoardScopedQuery.LIST_MY_APPS],
           });
+        } else {
+          refetchAppDetail();
         }
       } else if (result !== undefined) {
         onAppRename(result || '');
@@ -1232,29 +1420,31 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     },
   });
 
-  const { data: bricks } = useQuery([BoardScopedQuery.LIST_BRICKS], () =>
-    getBricks(),
-  );
+  const { data: bricks } = useQuery({
+    queryKey: [BoardScopedQuery.LIST_BRICKS],
+
+    queryFn: () => getBricks(),
+  });
 
   const setSelectedFile = useCallback(
     (
       node: string | TreeNode | undefined,
       isPreview = false,
-      targetPane?: 'A' | 'B',
+      targetPanel?: 'A' | 'B',
     ) => {
       if (!node) return;
       setInitialAppBrickTab(undefined);
       const path = typeof node === 'string' ? node : node.path;
 
-      // Route to the pane the user last focused when the caller doesn't
+      // Route to the panel the user last focused when the caller doesn't
       // pin a target (file-tree clicks). Explicit callers (drag-and-drop)
-      // still win. Pane-B routing falls back to default A behaviour while
+      // still win. Panel-B routing falls back to default A behaviour while
       // nothing is open in A: the split editor only renders alongside a
-      // populated pane A, so routing the first-ever file into B would
+      // populated panel A, so routing the first-ever file into B would
       // leave it invisible.
-      const resolvedPane = targetPane ?? getActivePane();
-      if (resolvedPane === 'B' && openFiles.length > 0) {
-        openFileInPane(path, 'B', isPreview);
+      const resolvedPanel = targetPanel ?? getActiveEditorPanel();
+      if (resolvedPanel === 'B' && openFiles.length > 0) {
+        openFileInPanel(path, 'B', isPreview);
         fetchFile(path);
         setSelectedFolderState(undefined);
         return;
@@ -1274,8 +1464,8 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     },
     [
       openFiles,
-      openFileInPane,
-      getActivePane,
+      openFileInPanel,
+      getActiveEditorPanel,
       fetchFile,
       openFile,
       selectedFile?.fileId,
@@ -1291,6 +1481,8 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
   const {
     libraries,
     librarySearchIsLoading,
+    librarySearchError,
+    retryLibrarySearch,
     searchSketchLibraries,
     appLibraries,
     appLibrariesById,
@@ -1301,6 +1493,7 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     addSketchLibraryError,
   } = useSketchLibraries({
     appId,
+    hasSketch,
     refetchSketchYaml,
     onAddSuccess: () =>
       sendAppLabNotification({
@@ -1330,6 +1523,8 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
   } = useAddSketchLibraryDialog({
     libraries,
     librarySearchIsLoading,
+    librarySearchError,
+    retryLibrarySearch,
     searchSketchLibraries,
     appLibrariesById,
     installingLibraryId,
@@ -1339,6 +1534,8 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     openExternalLink,
     isBoard,
     addSketchLibraryError,
+    blocked: hasSketch !== true || boardOffline,
+    closeOpenDialog: hasSketch === false,
   });
 
   // Pure closure over the single state-machine instance created above —
@@ -1490,7 +1687,7 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
                 (i) => i.downloadModelId === modelId,
               );
 
-              if (eiModel?.edgeImpulseProps && eiImpulse) {
+              if (eiModel && isEdgeImpulseModel(eiModel) && eiImpulse) {
                 downloadEIModel?.(
                   eiModel.edgeImpulseProps.projectId,
                   eiImpulse.id,
@@ -1562,7 +1759,7 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
           isFolder: boolean,
           newFileName?: string,
         ) =>
-          importResourceToAppFromPath(
+          importIntoApp(
             importTarget.path
               ? `${app?.path}/${importTarget.path}`
               : app?.path ?? '',
@@ -1572,14 +1769,12 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
           ),
         type: importTarget.isFolder ? 'folder' : 'file',
         invalidateQueries: () => {
-          queryClient.invalidateQueries({
-            queryKey: [BoardScopedQuery.APP_FILES],
-          });
+          invalidateDirs();
           queryClient.invalidateQueries({
             queryKey: ['get-batch-app-file-content'],
           });
         },
-        nodes: fileTree,
+        checkPathConflict: checkPathConflictReported,
         targetFolderPath: importTarget.path,
         onDuplicateConflict: handleDuplicateConflict,
       });
@@ -1595,6 +1790,11 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         selectedFile: activeSelectedFile,
         selectedFolder,
         selectedNode,
+        onFolderExpand: handleFolderExpand,
+        checkPathConflict: checkPathConflictReported,
+        // A folder dropped for a failed listing leaves its row open and empty
+        // until the tree is told to close it.
+        closeFolder: listFailure,
         defaultOpenFoldersState,
         setSelectedFile,
         setSelectedFolder,
@@ -1625,7 +1825,15 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
         openImportFileDialog: handleOpenImportFileDialog,
         onMoveBlocked: handleMoveBlocked,
         onDragOverFolderChange: handleDragOverFolderChange,
-        onValidationError: handleValidationError,
+        sendAppLabNotification,
+        lspReferencesResult,
+        closeLspReferences,
+        lspGoToReference,
+        hasSketch,
+        boardOffline,
+        boardType: selectedBoard?.type,
+        addSketch,
+        openNetworkSettings,
       };
     };
 
@@ -1640,6 +1848,10 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     activeSelectedFile,
     selectedFolder,
     selectedNode,
+    handleFolderExpand,
+    checkPathConflictReported,
+    importIntoApp,
+    listFailure,
     setSelectedFile,
     setSelectedFolder,
     openFilesFolder,
@@ -1665,7 +1877,15 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     handleDuplicateConflict,
     duplicateFileDialogLogic,
     handleMoveBlocked,
-    handleValidationError,
+    invalidateDirs,
+    lspReferencesResult,
+    closeLspReferences,
+    lspGoToReference,
+    hasSketch,
+    boardOffline,
+    selectedBoard?.type,
+    addSketch,
+    openNetworkSettings,
   ]);
 
   const { appStatus } = runtimeActionsLogic();
@@ -1694,5 +1914,9 @@ export const useAppDetailLogic: AppLabAppDetailLogic = function (
     runtimeActionsLogic,
     updateOpenFile,
     deleteTreeItemDialogLogic,
+    agentPanelVisible: agentPanelOpen && !isReadOnlyApp,
+    closeAgentPanel,
+    openAgentSettings,
+    getAgentEditorContext,
   };
 };

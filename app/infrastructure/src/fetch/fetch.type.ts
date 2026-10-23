@@ -84,11 +84,17 @@ export type HttpDeleteOptions = HttpExtendedOptions & HttpParams;
 
 export type HttpPatchOptions = HttpExtendedOptions & HttpBody;
 
-export type CreateRawRequestOptions = HttpUrl & HttpToken & HttpHeaders;
+export type CreateRawRequestOptions = HttpUrl &
+  HttpToken &
+  HttpHeaders &
+  HttpAbort;
 
-export type HttpGetRawOptions = HttpBaseOptions;
+export type HttpGetRawOptions = HttpBaseOptions & HttpParams & HttpAbort;
 
-export type HttpPostRawOptions = HttpBaseOptions & HttpBody & HttpHeaders;
+export type HttpPostRawOptions = HttpBaseOptions &
+  HttpBody &
+  HttpHeaders &
+  HttpAbort;
 
 export type HttpPutRawOptions = HttpBaseOptions & HttpBody & HttpHeaders;
 
@@ -98,6 +104,9 @@ export type HttpDeleteRawOptions = HttpBaseOptions & HttpHeaders;
 
 export type HttpHeadRawOptions = HttpCoreOptions;
 
-export type HttpFormDataPostOptions = HttpBaseOptions & HttpWretch & HttpBody;
+export type HttpFormDataPostOptions = HttpBaseOptions &
+  HttpWretch &
+  HttpBody &
+  HttpAbort;
 
 export type HttpJsonDeleteOptions = HttpCoreOptions & HttpWretch & HttpBody;

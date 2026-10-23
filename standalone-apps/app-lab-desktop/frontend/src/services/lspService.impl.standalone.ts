@@ -9,6 +9,8 @@ import {
   GetLspWorkspaceFile,
   InitLspWorkspace,
   IsLspEnabled,
+  ListLspFiles,
+  ListLspSketchFiles,
   SendLSPMessage,
   StartLSP,
   StopAllLSP,
@@ -44,6 +46,18 @@ export const getLspWorkspaceFile: LspService['getLspWorkspaceFile'] =
   async function (fileUri: string) {
     return GetLspWorkspaceFile(fileUri);
   };
+
+export const listLspSketchFiles: LspService['listLspSketchFiles'] =
+  async function (dir: string) {
+    return ListLspSketchFiles(dir);
+  };
+
+export const listLspFiles: LspService['listLspFiles'] = async function (
+  workspaceDir: string,
+  relDir: string,
+) {
+  return ListLspFiles(workspaceDir, relDir);
+};
 
 export const sendLspMessage: LspService['sendLspMessage'] = async function (
   lspId: LspId,

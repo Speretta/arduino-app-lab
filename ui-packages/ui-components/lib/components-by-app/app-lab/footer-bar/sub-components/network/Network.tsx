@@ -2,10 +2,18 @@ import {
   WifiConnected,
   WifiDisconnected,
 } from '@cloud-editor-mono/images/assets/icons';
+import {
+  ButtonAppearance,
+  ButtonSize,
+  ButtonVariant,
+  useI18n,
+} from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
 
+import { IconButton } from '../../../essential/icon-button';
 import { SystemResource } from '../../FooterBar.type';
+import { messages } from '../../messages';
 import NetworkPanel from '../network-panel/NetworkPanel';
 import styles from './network.module.scss';
 
@@ -20,7 +28,10 @@ export const Network: React.FC<NetworkProps> = ({
 }: NetworkProps) => {
   const [isMenuVisible, setMenuVisible] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const menuTriggerRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const { formatMessage } = useI18n();
+
+  const isConnected = networkItem?.state === 'default';
 
   // This effect handles clicks outside of the menu
   useEffect(() => {
@@ -49,44 +60,41 @@ export const Network: React.FC<NetworkProps> = ({
     setMenuVisible(!isMenuVisible);
   }
 
-  const onChange = (): void => {
-    setMenuVisible(false);
-    if (networkItem?.onClick) {
-      networkItem.onClick();
-    }
-  };
+  const networkClick = networkItem?.onClick;
+  const onChange = networkClick
+    ? (): void => {
+        setMenuVisible(false);
+        networkClick();
+      }
+    : undefined;
 
   return (
-    <div
-      ref={menuTriggerRef}
-      role="button"
-      tabIndex={0}
-      className={styles['network-container']}
-      onClick={clickHandlerNotifications}
-      onKeyUp={clickHandlerNotifications}
-    >
-      <div
-        className={clsx(styles['network-icon-container'], {
-          [styles['active']]: isMenuVisible,
-          [styles['connected']]: networkItem?.state === 'default',
-        })}
-      >
-        {networkItem?.state === 'default' ? (
-          <WifiConnected />
-        ) : (
-          <WifiDisconnected />
-        )}
-      </div>
+    <>
+      <IconButton
+        ref={menuTriggerRef}
+        label={networkItem?.label || formatMessage(messages.network)}
+        Icon={isConnected ? WifiConnected : WifiDisconnected}
+        variant={ButtonVariant.Tertiary}
+        appearance={ButtonAppearance.LowContrast}
+        size={ButtonSize.XSmall}
+        onClick={clickHandlerNotifications}
+        classes={{
+          button: clsx(styles['network-button'], {
+            [styles['connected']]: isConnected,
+            [styles['active']]: isMenuVisible,
+          }),
+        }}
+      />
       {isMenuVisible && (
         <NetworkPanel
           ref={menuRef}
           triggerRef={menuTriggerRef}
           ssid={networkItem?.label}
           ipAddress={boardIP}
-          isConnected={networkItem?.state === 'default'}
+          isConnected={isConnected}
           onChange={onChange}
         />
       )}
-    </div>
+    </>
   );
 };

@@ -4,7 +4,7 @@
   border-radius: 16px;
   display: flex;
   border: 1px solid var(--border-default, #232b2e);
-  background-color: var(--surface-bg-primary, #090f11);
+  background-color: var(--surface-bg-below-2);
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
@@ -85,7 +85,7 @@
       }
 
       .sub-title {
-        color: var(--text-secondary, #95a5a6);
+        color: var(--text-subtle);
       }
 
       .content {

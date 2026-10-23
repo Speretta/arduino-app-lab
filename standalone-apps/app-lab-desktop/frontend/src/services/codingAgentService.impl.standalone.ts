@@ -92,8 +92,10 @@ export const stop: CodingAgentService['stop'] = async () => {
 export const listAgents: CodingAgentService['listAgents'] = () =>
   AGENTS.map((a) => ({ ...a }));
 
-export const newSession: CodingAgentService['newSession'] = async (appId) =>
-  AgentNewSession(appId ?? '');
+export const newSession: CodingAgentService['newSession'] = async (
+  appId,
+  appName,
+) => AgentNewSession(appId ?? '', appName ?? '');
 
 export const listSessions: CodingAgentService['listSessions'] = async () =>
   (await AgentListSessions()).map(mapSessionSummary);
@@ -125,8 +127,14 @@ export const deleteSession: CodingAgentService['deleteSession'] = async (
   await AgentDeleteSession(sessionId);
 };
 
-export const prompt: CodingAgentService['prompt'] = async (sessionId, text) => {
-  await AgentPrompt(sessionId, text);
+export const prompt: CodingAgentService['prompt'] = async (
+  sessionId,
+  text,
+  editorContext,
+) => {
+  // No editor (Agent Mode) reaches Go as a nil context, which sends the agent nothing.
+  const editor = editorContext && agent.EditorContext.createFrom(editorContext);
+  await AgentPrompt(sessionId, text, editor as agent.EditorContext);
 };
 
 export const cancel: CodingAgentService['cancel'] = async (sessionId) => {
@@ -191,6 +199,13 @@ export const onRestart: CodingAgentService['onRestart'] = (handler) =>
 // The subscription login CLI prints its OAuth URL; Go forwards the first one here.
 export const onLoginUrl: CodingAgentService['onLoginUrl'] = (handler) =>
   EventsOn('agent:login-url', (url: string) => handler(url));
+
+// Go dropped a deleted app's grants and chats — from the delete dialog, or from the agent's own apps_delete.
+export const onWorkspaceAppForgotten: CodingAgentService['onWorkspaceAppForgotten'] =
+  (handler) =>
+    EventsOn('agent:workspace-app-forgotten', (appId: string) =>
+      handler(appId),
+    );
 
 // Reports a persisted subscription login (or an API key set this session) so a returning user skips connect.
 export const getAuthStatus: CodingAgentService['getAuthStatus'] =

@@ -43,7 +43,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     togglePicker,
     closePicker,
     inputRef,
-    toolbarPickersRef,
     onComposerKeyDown,
     submit,
     canSend,
@@ -102,10 +101,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       </div>
 
       <div className={styles['chat-input-toolbar']}>
-        <div
-          className={styles['chat-input-toolbar-right']}
-          ref={toolbarPickersRef}
-        >
+        <div className={styles['chat-input-toolbar-right']}>
           {modes.length > 0 && selectedMode && (
             <ChatInputPicker
               items={modes}
@@ -113,6 +109,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               label={formatMessage(messages.agentModePicker)}
               isOpen={openPicker === 'mode'}
               onToggle={(): void => togglePicker('mode')}
+              onClose={closePicker}
               onSelect={(modeId): void => {
                 void setMode(modeId);
                 closePicker();
@@ -128,6 +125,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               isOpen={openPicker === 'model'}
               getLabel={modelLabel}
               onToggle={(): void => togglePicker('model')}
+              onClose={closePicker}
               onSelect={(modelId): void => {
                 void setModel(modelId);
                 closePicker();

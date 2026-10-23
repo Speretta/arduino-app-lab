@@ -274,7 +274,9 @@ export const createSearchExt = (searchDep: SearchData): Extension[] => {
   //Whenever the codeMirror doc is update the search is updated.
   const setupSearchExt = (searchDep: SearchData): Extension => {
     return EditorView.updateListener.of((viewUpdate: ViewUpdate) => {
-      if (viewUpdate.docChanged) {
+      // Guard here and not in `runSearch`: `useFindAndReplace` calls `runSearch`
+      // with an empty query to clear the highlights.
+      if (viewUpdate.docChanged && getSearchQuery(viewUpdate.state).valid) {
         runSearch(
           () => getSearchQuery(viewUpdate.state),
           viewUpdate.view,

@@ -16,16 +16,20 @@ import {
   BrickCreateUpdateRequest,
   checkBoardUpdateV1Request,
   cloneAppV1Request,
+  createAppBuildV1Request,
   createAppV1Request,
   deleteAIModelV1Request,
   deleteAppBrickV1Request,
   deleteAppSketchLibraryV1Request,
   deleteAppV1Request,
   deleteSystemPropertyV1Request,
+  downloadAIModelV1Request,
   EventSourceHandlers,
+  exportAppArchiveV1Request,
   getAIModelsV1Request,
   getAppBrickInstanceV1Request,
   getAppBricksV1Request,
+  getAppBuildEventsStreamV1Request,
   getAppDetailV1Request,
   getAppLogsStreamV1Request,
   getAppPortsV1Request,
@@ -43,29 +47,35 @@ import {
   getSystemPropertyV1Request,
   getSystemResourcesStreamV1Request,
   getVersionV1Request,
+  installAIModelV1Request,
+  installAppReleaseV1Request,
   installEIModelV1Request,
   ListAppParams,
   ListLibrariesParams,
   postAppStartStreamV1Request,
   postAppStopStreamV1Request,
+  prepareAppV1Request,
   renameAppCustomBrickV1Request,
   updateAppBrickV1Request,
   updateAppDetailV1Request,
-  uploadAIModelV1Request,
   upsertSystemPropertyV1Request,
   WebSocketHandlers,
 } from '@cloud-editor-mono/infrastructure';
 import { ImportResourceResult } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 
 import {
+  ChooseReleaseSavePath,
   ExportApp,
+  ForgetWorkspaceApp,
   GetFileContent,
-  GetFileTree,
   GetOrchestratorURL,
   ImportAppFromPath,
+  ReadReleaseArchive,
+  ReadReleaseManifest,
+  RebindWorkspaceApp,
   SelectAppDialog,
+  WriteReleaseFile,
 } from '../../wailsjs/go/app/App';
-import { mapFSNode } from './orchestratorService.mapper';
 
 const getOrchestratorURL = async (): Promise<string | undefined> => {
   try {
@@ -101,7 +111,12 @@ export const getAppDetail: OrchestratorService['getAppDetail'] =
 export const updateAppDetail: OrchestratorService['updateAppDetail'] =
   async function (id: string, body) {
     const origin = await getOrchestratorURL();
-    return updateAppDetailV1Request(id, body, origin);
+    const newId = await updateAppDetailV1Request(id, body, origin);
+    // A rename mints a new app id: carry the agent's workspace across here rather than in the screens that rename, so no future caller can forget it.
+    if (newId && newId !== id) {
+      await RebindWorkspaceApp(id, newId, body.name ?? '');
+    }
+    return newId;
   };
 
 export const createApp: OrchestratorService['createApp'] = async function (
@@ -119,18 +134,94 @@ export const cloneApp: OrchestratorService['cloneApp'] = async function (
   return cloneAppV1Request(id, body, origin);
 };
 
+// Wails passes bytes to and from Go as base64 strings.
+const blobToBase64 = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (): void =>
+      resolve(
+        String(reader.result).slice(String(reader.result).indexOf(',') + 1),
+      );
+    reader.onerror = (): void => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+
+const base64ToBlob = (base64: string): Blob => {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: 'application/gzip' });
+};
+
+export const startReleaseBuild: OrchestratorService['startReleaseBuild'] =
+  async function (id, buildId, body, abortController) {
+    const origin = await getOrchestratorURL();
+    return createAppBuildV1Request(
+      id,
+      { ...body, build_id: buildId },
+      abortController,
+      origin,
+    );
+  };
+
+export const getReleaseBuildEvents: OrchestratorService['getReleaseBuildEvents'] =
+  async function (handlers: EventSourceHandlers, abortController) {
+    const origin = await getOrchestratorURL();
+    return getAppBuildEventsStreamV1Request(handlers, abortController, origin);
+  };
+
+export const chooseReleaseSavePath: OrchestratorService['chooseReleaseSavePath'] =
+  async function (defaultFileName) {
+    const filePath = await ChooseReleaseSavePath(defaultFileName);
+    return filePath || undefined;
+  };
+
+export const writeReleaseFile: OrchestratorService['writeReleaseFile'] =
+  async function (filePath, archive) {
+    return WriteReleaseFile(filePath, await blobToBase64(archive));
+  };
+
+export const prepareApp: OrchestratorService['prepareApp'] = async function (
+  id: string,
+  handlers: EventSourceHandlers,
+  abortController,
+) {
+  const origin = await getOrchestratorURL();
+  return prepareAppV1Request(id, handlers, abortController, origin);
+};
+
+export const readReleaseManifest: OrchestratorService['readReleaseManifest'] =
+  async function (filePath) {
+    return ReadReleaseManifest(filePath);
+  };
+
+export const readReleaseArchive: OrchestratorService['readReleaseArchive'] =
+  async function (filePath) {
+    return base64ToBlob(await ReadReleaseArchive(filePath));
+  };
+
+export const installRelease: OrchestratorService['installRelease'] =
+  async function (archive, fileName, abortController) {
+    const origin = await getOrchestratorURL();
+    return installAppReleaseV1Request(
+      archive,
+      fileName,
+      abortController,
+      origin,
+    );
+  };
+
 export const deleteApp: OrchestratorService['deleteApp'] = async function (
   id: string,
 ) {
   const origin = await getOrchestratorURL();
-  return deleteAppV1Request(id, origin);
-};
-
-export const getFiles: OrchestratorService['getFiles'] = async function (
-  id: string,
-) {
-  const file = await GetFileTree(id);
-  return [mapFSNode(file)];
+  const deleted = await deleteAppV1Request(id, origin);
+  // The id is reusable by a later app of the same name, which would inherit permissions nobody granted it.
+  // Go announces the drop on `agent:workspace-app-forgotten`, which is what moves any chat panel off the app.
+  if (deleted) {
+    await ForgetWorkspaceApp(id);
+  }
+  return deleted;
 };
 
 export const getFileContent: OrchestratorService['getFileContent'] =
@@ -425,6 +516,21 @@ export const exportApp = async (
   return result !== '';
 };
 
+export const exportAppArchive: OrchestratorService['exportAppArchive'] =
+  async function (
+    appId: string,
+    includeData: boolean,
+    abortController?: AbortController,
+  ) {
+    const origin = await getOrchestratorURL();
+    return exportAppArchiveV1Request(
+      appId,
+      includeData,
+      abortController,
+      origin,
+    );
+  };
+
 export const importApp = async (): Promise<ImportResourceResult | null> => {
   const response = await SelectAppDialog();
 
@@ -475,18 +581,35 @@ export const importAppFromPath = async (
 export const getAIModels: OrchestratorService['getAIModels'] =
   async (): Promise<AIModelItem[]> => {
     const origin = await getOrchestratorURL();
-    const resp = await getAIModelsV1Request(undefined, origin);
+    const resp = await getAIModelsV1Request(origin);
     return resp.models || [];
   };
 
-export const uploadAIModel: OrchestratorService['uploadAIModel'] = async (
+export const installAIModel: OrchestratorService['installAIModel'] = async (
   modelId: string,
   handlers: EventSourceHandlers,
   abortController: AbortController,
 ): Promise<void> => {
   const origin = await getOrchestratorURL();
 
-  await uploadAIModelV1Request(modelId, handlers, abortController, origin);
+  await installAIModelV1Request(modelId, handlers, abortController, origin);
+};
+
+export const downloadAIModel: OrchestratorService['downloadAIModel'] = async (
+  source: string,
+  handlers: EventSourceHandlers,
+  abortController: AbortController,
+  mmprojUrl?: string,
+): Promise<void> => {
+  const origin = await getOrchestratorURL();
+
+  await downloadAIModelV1Request(
+    source,
+    handlers,
+    abortController,
+    origin,
+    mmprojUrl,
+  );
 };
 
 export const installEIModel: OrchestratorService['installEIModel'] = async (

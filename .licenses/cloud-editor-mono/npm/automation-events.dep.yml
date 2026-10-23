@@ -1,6 +1,6 @@
 ---
 name: automation-events
-version: 7.1.6
+version: 7.1.19
 type: npm
 summary: A module which provides an implementation of an automation event list.
 homepage: https://github.com/chrisguttandin/automation-events
@@ -10,7 +10,7 @@ licenses:
   text: |
     MIT License
 
-    Copyright (c) 2025 Christoph Guttandin
+    Copyright (c) 2026 Christoph Guttandin
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal

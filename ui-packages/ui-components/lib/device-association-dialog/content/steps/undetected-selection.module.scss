@@ -30,16 +30,17 @@
         height: 68px;
         display: flex;
         flex-direction: column;
+        color: var(--text-default);
     }
 
     .unknown-board-port-label {
         padding-top: 6px;
-        color: shared.theme-var(--associate-dialog-card-port-name);
+        color: var(--text-subtle);
         display: flex;
 
         & > svg {
             & > path {
-                fill: shared.theme-var(--associate-dialog-card-port-icon);
+                fill: var(--icon-subtle);
             }
             margin-right: 12px;
         }
@@ -54,7 +55,12 @@
     align-self: center;
     width: 522px;
     border-radius: 8px;
-    background-color: shared.theme-var(--associate-dialog-card-picture-background);
+    color: var(--text-default);
+    svg path {
+        fill: var(--text-default);
+    }
+
+    background-color: var(--associate-dialog-card-picture-background);
 
     & > svg {
         padding-right: 16px;

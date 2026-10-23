@@ -1,5 +1,9 @@
+import { useTheme } from '@bcmi-labs/art-ui';
 import { ArrayElement } from '@cloud-editor-mono/common';
-import { NoResults } from '@cloud-editor-mono/images/assets/icons';
+import {
+  NoResults,
+  NoResultsDark,
+} from '@cloud-editor-mono/images/assets/icons';
 import clsx from 'clsx';
 import { orderBy } from 'lodash-es';
 import React, { forwardRef, useCallback } from 'react';
@@ -53,6 +57,7 @@ const DevicesList = forwardRef(
       usingWebSerial = false,
     } = props;
     const { formatMessage } = useI18n();
+    const { themeName } = useTheme();
 
     const filterItems = useCallback(
       (
@@ -83,7 +88,7 @@ const DevicesList = forwardRef(
         return (
           <div className={styles['no-results-container']}>
             <DialogImage
-              Icon={<NoResults />}
+              Icon={themeName === 'light' ? <NoResults /> : <NoResultsDark />}
               classes={{ container: styles['no-results-image'] }}
             />
             <DialogContentHeader

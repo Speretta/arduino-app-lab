@@ -1,9 +1,6 @@
 import { FileId } from '@cloud-editor-mono/domain/src/services/services-by-app/shared';
-import { BrickInstance } from '@cloud-editor-mono/infrastructure';
-import {
-  FileNode,
-  SelectableFileData,
-} from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+import { AppBrickListItem } from '@cloud-editor-mono/infrastructure';
+import { SelectableFileData } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { Subject } from 'rxjs';
 
 import {
@@ -13,11 +10,11 @@ import {
 
 export type UseEditorFilesParams = {
   storeEntityId?: string;
-  defaultFileId?: string;
-  // Sources for the tab-meta catalogue. Passed straight through to
-  // `useEditorFileMeta`. Step 5 adds an `externalFiles` source here.
-  filesList?: FileNode[];
-  appBricks?: BrickInstance[];
+  // undefined while it is still being resolved, null once resolved to nothing.
+  defaultFilePath?: string | null;
+  // A board that never answered must not look like an app with no tabs.
+  appDirListed: boolean;
+  appBricks?: AppBrickListItem[];
   getUnsavedFilesSubject: () => Subject<Set<FileId>>;
 };
 
@@ -26,13 +23,12 @@ export type UseEditorFilesReturn = {
   // externals). Stable per-id identities — see `useEditorFileMeta`.
   editorFiles: SelectableFileData[];
   openFiles: SelectableFileData[];
-  // Raw open-tab ids for pane A. Unlike `openFiles` (which is filtered through
-  // the meta catalogue and so tracks `filesList`), this is pure state — it does
-  // not change when the file tree refetches, making it the reliable source for
-  // reconciling tabs against external filesystem events.
+  // Raw open-tab ids for panel A. Unlike `openFiles` (which is filtered through
+  // the meta catalogue), this is pure state — it does not change when the file
+  // tree refetches, making it the reliable source for reconciling tabs against
+  // external filesystem events.
   openFileIds: string[];
   selectedFile: SelectableFileData | undefined;
-  unsavedFileIds: Set<string> | undefined;
   previewFileId?: string;
   openFilesStore?: OpenFilesStoreItem | null;
   selectFile: (params: {

@@ -75,16 +75,8 @@ func (m *WatchManager) onEvent(raw string, op string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// A held path is mid self-originated op: drop its events for the hold's
-	// duration, independent of time.
-	if m.holds[p] > 0 {
+	if m.suppressedLocked(p) {
 		return
-	}
-	if until, ok := m.suppress[p]; ok {
-		if time.Now().Before(until) {
-			return
-		}
-		delete(m.suppress, p)
 	}
 
 	if e, ok := m.debounce[p]; ok {
@@ -121,42 +113,82 @@ func (m *WatchManager) onEvent(raw string, op string) {
 			// and never re-resolve — the importing file's diagnostics then
 			// stay frozen until app restart (observed as an ENOENT "LSP
 			// opening file error" plus a missing workspace rescan).
-			m.mirrorToLspWorkspace(p, op)
+			// An apps-root event names a whole app, and the temp workspace
+			// holds only the open one.
+			if kind != KindApps {
+				m.mirrorToLspWorkspace(p, op)
+			}
 			runtime.EventsEmit(m.ctx, refreshEvent, RefreshPayload{Kind: kind, Path: p, Op: op})
 		}
 	})
 	m.debounce[p] = e
 }
 
+// suppressedLocked reports whether p, or a folder above it, is mid
+// self-originated op (held for the op's duration, independent of time) or in
+// the grace window after one. A folder op holds only the folder, and the
+// events of the files it copies or deletes must be dropped too: reported back,
+// a renamed folder's files reload over their unsaved edits. Must hold m.mu.
+func (m *WatchManager) suppressedLocked(p string) bool {
+	now := time.Now()
+	for q := p; ; q = path.Dir(q) {
+		if m.holds[q] > 0 {
+			return true
+		}
+		if until, ok := m.suppress[q]; ok {
+			if now.Before(until) {
+				return true
+			}
+			delete(m.suppress, q)
+		}
+		if parent := path.Dir(q); parent == q {
+			return false
+		}
+	}
+}
+
 // mirrorToLspWorkspace keeps the LSP temp workspace copy in sync with external
 // (watcher-detected) changes, using the same helpers as UI-driven fs mutations.
-// Guards inside the lsp package scope this to desktop board-apps LSP files, so
-// SBC, examples and host files are safe no-ops. Runs outside m.mu (does IO).
+// Guards inside the lsp package scope this to desktop board-apps paths, so SBC,
+// examples and host files are safe no-ops. A folder that appears or goes away
+// in one step (a terminal `mv`) produces no events for its files, so the
+// folder is copied or removed as a whole. Runs outside m.mu (does IO).
 func (m *WatchManager) mirrorToLspWorkspace(p string, op string) {
-	if !lsp.ShouldSyncRemoteFileToLspWorkspace(p) {
+	if !lsp.SyncsRemoteWorkspace() {
 		return
 	}
-	switch op {
-	case OpRemove:
-		lsp.RemoveWorkspaceFile(p)
-	case OpCreate, OpWrite:
-		// Snapshot the connection under the lock: it's mutated on board
-		// switch/shutdown (add / UnwatchAll), so reading the field off-lock
-		// would race and could nil-deref between the check and the call.
-		m.mu.Lock()
-		conn := m.remoteConn
-		m.mu.Unlock()
-		if conn == nil {
-			return
-		}
-		reader, err := conn.ReadFile(p)
-		if err != nil {
-			slog.Error("lsp workspace mirror: read failed", "path", p, "err", err)
-			return
-		}
-		defer reader.Close()
-		lsp.SyncRemoteFileToLspWorkspace(p, reader)
+	if op == OpRemove {
+		lsp.RemoveWorkspacePath(p)
+		return
 	}
+	isLspFile := lsp.ShouldSyncRemoteFileToLspWorkspace(p)
+	if !isLspFile && op != OpCreate {
+		return
+	}
+	// Snapshot the connection under the lock: it's mutated on board
+	// switch/shutdown (add / UnwatchAll), so reading the field off-lock
+	// would race and could nil-deref between the check and the call.
+	m.mu.Lock()
+	conn := m.remoteConn
+	m.mu.Unlock()
+	if conn == nil {
+		return
+	}
+	if !isLspFile {
+		info, err := conn.Stats(p)
+		if err != nil || !info.IsDir {
+			return
+		}
+		lsp.SyncRemoteDirToLspWorkspace(conn, p)
+		return
+	}
+	reader, err := conn.ReadFile(p)
+	if err != nil {
+		slog.Error("lsp workspace mirror: read failed", "path", p, "err", err)
+		return
+	}
+	defer reader.Close()
+	lsp.SyncRemoteFileToLspWorkspace(p, reader)
 }
 
 // coveringSurfaceLocked finds the watch responsible for a path and returns its

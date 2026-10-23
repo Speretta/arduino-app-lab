@@ -1,18 +1,19 @@
 import { SelectableFileData } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import * as IDB from 'idb-keyval';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEvent } from 'react-use';
 
 import {
-  mergeStoreItem,
-  OPEN_FILES_KEY,
-  OpenFilesStore,
   OpenFilesStoreItem,
   OpenFilesStorePatch,
 } from '../../../../../common/hooks/files';
-import { useObservable } from '../../../../../common/hooks/useObservable';
-import { withoutHostLocalIds } from './filePaths';
+import { useObservableRef } from '../../../../../common/hooks/useObservable';
+import {
+  getOpenFilesEntry,
+  moveOpenFilesEntry,
+  patchOpenFilesEntry,
+} from '../../../../services/openFilesStore';
+import { isAbsoluteId, withoutHostLocalIds } from './filePaths';
 import { resolveNewTabInsertion } from './tabInsertion';
 import { useEditorFileMeta } from './useEditorFileMeta';
 import {
@@ -23,26 +24,59 @@ import { usePreviewFileId } from './usePreviewFileId';
 
 export function useEditorFiles({
   storeEntityId,
-  defaultFileId,
-  filesList,
+  defaultFilePath,
+  appDirListed,
   appBricks,
   getUnsavedFilesSubject,
 }: UseEditorFilesParams): UseEditorFilesReturn {
-  const enabled = !!filesList;
+  const enabled = appDirListed && defaultFilePath !== undefined;
   const [selectedFileId, setSelectedFileId] = useState<string | undefined>(
     undefined,
   );
   const [openFileIds, setOpenFileIds] = useState<string[]>([]);
 
+  const queryClient = useQueryClient();
+  const { data: openFilesStore } = useQuery({
+    queryKey: ['get-stored-open-files', storeEntityId],
+    queryFn: async () => {
+      if (!storeEntityId) {
+        return null;
+      }
+      const storeItem = await getOpenFilesEntry(storeEntityId);
+      return storeItem ? withoutHostLocalIds(storeItem) : null;
+    },
+  });
+
   const externalPaths = useMemo(
-    () =>
-      openFileIds.filter(
-        (id) => id.startsWith('/') || id.startsWith('file://'),
-      ),
+    () => openFileIds.filter(isAbsoluteId),
     [openFileIds],
   );
 
-  const editorFileMap = useEditorFileMeta(filesList, appBricks, externalPaths);
+  // Panel B is hydrated by the editor panel from this same record, so its tabs
+  // are never in `openFileIds` — but they still resolve through the catalogue
+  // below. `items` is the pre-panels shape of the record.
+  const storedFileIds = useMemo(
+    () => [
+      ...(openFilesStore?.panes?.A?.items ?? openFilesStore?.items ?? []),
+      ...(openFilesStore?.panes?.B?.items ?? []),
+    ],
+    [openFilesStore],
+  );
+
+  // Meta is derived from the id, so only ids that can reach a tab need one.
+  const appFilePaths = useMemo(
+    () =>
+      Array.from(new Set([...openFileIds, ...storedFileIds])).filter(
+        (id) => !isAbsoluteId(id),
+      ),
+    [openFileIds, storedFileIds],
+  );
+
+  const editorFileMap = useEditorFileMeta(
+    appFilePaths,
+    appBricks,
+    externalPaths,
+  );
 
   // Latest catalogue, read by `closeFile` to pick a next selection that
   // actually renders. Mirrored into a ref so the callback keeps a stable
@@ -55,26 +89,15 @@ export function useEditorFiles({
     [editorFileMap],
   );
 
-  const queryClient = useQueryClient();
-  const { data: openFilesStore } = useQuery(
-    ['get-stored-open-files', storeEntityId],
-    async () => {
-      if (!storeEntityId) {
-        return null;
-      }
-      const store = await IDB.get<OpenFilesStore>(OPEN_FILES_KEY);
-      const storeItem = store?.[storeEntityId];
-      return storeItem ? withoutHostLocalIds(storeItem) : null;
-    },
-  );
-
-  const unsavedFileIds = useObservable(getUnsavedFilesSubject());
+  // Only the `beforeunload` guard reads the set here; the tabs bars subscribe where they render.
+  const unsavedFiles$ = getUnsavedFilesSubject();
+  const unsavedFileIdsRef = useObservableRef(unsavedFiles$);
 
   const [previewFileId, setPreviewFileId, previewFileIdRef] =
-    usePreviewFileId(unsavedFileIds);
+    usePreviewFileId(unsavedFiles$);
 
   useEvent('beforeunload', (e: Event) => {
-    if ((unsavedFileIds ?? new Set()).size !== 0) {
+    if ((unsavedFileIdsRef.current?.size ?? 0) !== 0) {
       e.preventDefault();
     }
   });
@@ -95,7 +118,11 @@ export function useEditorFiles({
 
     const storedIds = openFilesStore?.items ?? [];
     const currOpenFilesIds =
-      storedIds.length > 0 ? storedIds : defaultFileId ? [defaultFileId] : [];
+      storedIds.length > 0
+        ? storedIds
+        : defaultFilePath
+        ? [defaultFilePath]
+        : [];
 
     setOpenFileIds(currOpenFilesIds);
 
@@ -106,7 +133,7 @@ export function useEditorFiles({
         : currOpenFilesIds[0];
 
     setSelectedFileId(currSelectedFileId ?? undefined);
-  }, [enabled, openFilesStore, defaultFileId]);
+  }, [enabled, openFilesStore, defaultFilePath]);
 
   useEffect(() => {
     // Reset when the data source becomes unavailable so a new app's
@@ -129,16 +156,10 @@ export function useEditorFiles({
       if (!storeEntityId) {
         return;
       }
-      await IDB.update(OPEN_FILES_KEY, (prevValue?: OpenFilesStore) => {
-        const prevStoreItem = prevValue?.[storeEntityId];
-        return {
-          ...prevValue,
-          [storeEntityId]: withoutHostLocalIds(
-            mergeStoreItem(prevStoreItem, buildPatch(prevStoreItem)),
-          ),
-        };
+      await patchOpenFilesEntry(storeEntityId, buildPatch, withoutHostLocalIds);
+      queryClient.invalidateQueries({
+        queryKey: ['get-stored-open-files', storeEntityId],
       });
-      queryClient.invalidateQueries(['get-stored-open-files', storeEntityId]);
     },
     [storeEntityId, queryClient],
   );
@@ -184,7 +205,7 @@ export function useEditorFiles({
    * "open this"), prefer `openFile` from `useFileOperations`, which
    * composes `fetchFile + selectFile` into one call. Use `selectFile`
    * directly only when re-selecting an already-cached tab (boot
-   * restoration, tab-strip clicks, pane split/merge logic).
+   * restoration, tab-strip clicks, panel split/merge logic).
    */
   const selectFile = useCallback(
     (params: {
@@ -236,8 +257,8 @@ export function useEditorFiles({
       if (!enabled) {
         return;
       }
-      // Release the preview slot with the tab, mirroring pane B's
-      // `closeRightPaneTab`. Otherwise the slot keeps naming a closed file and
+      // Release the preview slot with the tab, mirroring panel B's
+      // `closeRightPanelTab`. Otherwise the slot keeps naming a closed file and
       // the next preview open resolves its insertion against a ghost id.
       if (previewFileIdRef.current === fileId) {
         setPreviewFileId(undefined);
@@ -325,13 +346,10 @@ export function useEditorFiles({
 
       const newStoreEntityId = storeEntityId.replace(prevAppId, newAppId);
 
-      await IDB.update(OPEN_FILES_KEY, (prevValue?: OpenFilesStore) => {
-        if (!prevValue) return {};
-        const storeItem = prevValue?.[storeEntityId];
-        delete prevValue?.[storeEntityId];
-        return { ...prevValue, [newStoreEntityId]: storeItem };
+      await moveOpenFilesEntry(storeEntityId, newStoreEntityId);
+      queryClient.invalidateQueries({
+        queryKey: ['get-stored-open-files', storeEntityId],
       });
-      queryClient.invalidateQueries(['get-stored-open-files', storeEntityId]);
     },
     [openFilesStore, queryClient, storeEntityId],
   );
@@ -358,7 +376,6 @@ export function useEditorFiles({
     openFiles,
     openFileIds,
     selectedFile,
-    unsavedFileIds,
     previewFileId,
     openFilesStore,
     selectFile,

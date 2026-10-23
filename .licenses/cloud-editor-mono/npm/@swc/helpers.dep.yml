@@ -1,6 +1,6 @@
 ---
 name: "@swc/helpers"
-version: 0.5.15
+version: 0.5.23
 type: npm
 summary: External helpers for the swc project.
 homepage: https://swc.rs

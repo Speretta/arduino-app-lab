@@ -3,6 +3,7 @@ import {
   decodeBase64ToString,
   deleteApp,
   exportApp,
+  getAppDetail,
   getApps,
   getConfig,
   onWatcherRefresh,
@@ -16,6 +17,7 @@ import {
   CreateAppDialogLogic,
   DeleteAppDialogLogic,
   ExportAppDialogLogic,
+  ReleaseInfoDialogLogic,
   RenameAppDialogLogic,
   useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
@@ -25,11 +27,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { queryClient } from '../../../../common/providers/data-fetching/QueryProvider';
 import { BoardScopedQuery } from '../../../boardScopedQuery';
+import { removeOpenFilesForApp } from '../../../services/openFilesStore';
 import { useBoardLifecycleStore } from '../../../store/boardLifecycle';
 import { useCreateAppDialogStore } from '../../../store/createAppDialog';
 import { useImportAppDialogStore } from '../../../store/importAppDialog';
 import { getBoardCacheId } from '../../../utils/board';
 import { sendAppLabNotification } from '../../notifications';
+import { MY_APPS_FILTER, releaseInfoDetails } from '../../release/releaseApp';
+import { useCreateReleaseTrigger } from '../../release/releaseDialogs.logic';
+import { notifyDefaultAppSet } from '../default-app/notifyDefaultAppSet';
 import { UseAppListLogic } from './appList.type';
 import { appListMessages } from './messages';
 
@@ -44,6 +50,7 @@ export const useAppListLogic = function (
   const [duplicateAppDialogOpen, setDuplicateAppDialogOpen] = useState(false);
   const [renameAppDialogOpen, setRenameAppDialogOpen] = useState(false);
   const [exportAppDialogOpen, setExportAppDialogOpen] = useState(false);
+  const [releaseInfoDialogOpen, setReleaseInfoDialogOpen] = useState(false);
   const [selectedApp, setSelectedApp] = useState<AppInfo | null>(null);
 
   const boardIsReachable = useBoardLifecycleStore(
@@ -56,14 +63,15 @@ export const useAppListLogic = function (
     getBoardCacheId(state.selectedConnectedBoard),
   );
 
-  const { data: apps, isLoading: getAppsLoading } = useQuery(
-    [BoardScopedQuery.LIST_MY_APPS, section],
-    () =>
+  const { data: apps, isLoading: getAppsLoading } = useQuery({
+    queryKey: [BoardScopedQuery.LIST_MY_APPS, section],
+
+    queryFn: () =>
       getApps({
-        query: { filter: section === 'my-apps' ? 'apps' : 'examples' },
+        query: { filter: section === 'my-apps' ? MY_APPS_FILTER : 'examples' },
       }),
-    { enabled: boardIsReachable },
-  );
+    enabled: boardIsReachable,
+  });
 
   // Filter out examples starting with excludedPrefixes
   const filteredApps = useMemo(() => {
@@ -85,11 +93,11 @@ export const useAppListLogic = function (
 
   // Watch the apps root (ArduinoApps) while the my-apps list is open, so apps
   // added/removed/renamed outside App Lab show up without a manual refresh.
-  const { data: appConfig } = useQuery(
-    [BoardScopedQuery.APP_CONFIG, boardSerial],
-    () => getConfig(),
-    { enabled: boardIsReachable && section === 'my-apps' },
-  );
+  const { data: appConfig } = useQuery({
+    queryKey: [BoardScopedQuery.APP_CONFIG, boardSerial],
+    queryFn: () => getConfig(),
+    enabled: boardIsReachable && section === 'my-apps',
+  });
   const appsRootDir = appConfig?.directories?.apps;
 
   // Watch the apps root while the my-apps list is open: a spec-correct rename
@@ -103,7 +111,9 @@ export const useAppListLogic = function (
     );
     const unsubscribe = onWatcherRefresh((event) => {
       if (event.kind === 'apps') {
-        queryClient.invalidateQueries([BoardScopedQuery.LIST_MY_APPS]);
+        queryClient.invalidateQueries({
+          queryKey: [BoardScopedQuery.LIST_MY_APPS],
+        });
       }
     });
 
@@ -175,34 +185,48 @@ export const useAppListLogic = function (
   const { mutateAsync: handleSetAsDefault } = useMutation({
     mutationFn: async (app: AppInfo) => {
       if (!app.id) return false;
-      const result = await updateAppDetail(app.id, {
-        default: defaultApp?.id !== app.id,
-      });
-      if (result) {
+      const isDefault = defaultApp?.id === app.id;
+      const result = await updateAppDetail(app.id, { default: !isDefault });
+      if (result && isDefault) {
         sendAppLabNotification({
-          message: formatMessage(
-            defaultApp?.id === app.id
-              ? appListMessages.removedAsDefault
-              : appListMessages.setAsDefault,
-            { appName: app.name },
-          ),
+          message: formatMessage(appListMessages.removedAsDefault, {
+            appName: app.name,
+          }),
           variant: 'success',
         });
+      } else if (result) {
+        notifyDefaultAppSet(
+          { id: app.id, name: app.name ?? '' },
+          formatMessage,
+        );
       }
       return result !== undefined;
     },
     onSuccess: () => {
+      // Prefix match: the detail toggle reads `default` from the unfiltered status list.
       queryClient.invalidateQueries({
-        queryKey: [BoardScopedQuery.LIST_MY_APPS, section],
+        queryKey: [BoardScopedQuery.LIST_MY_APPS],
       });
     },
   });
+
+  const { openCreateRelease, disabledReason: createReleaseDisabledReason } =
+    useCreateReleaseTrigger();
+
+  const handleReleaseInfo = useCallback(
+    (app: AppInfo) => createAppActionHandler(setReleaseInfoDialogOpen)(app),
+    [createAppActionHandler],
+  );
 
   const appActions = useCallback(
     () => ({
       onRename: handleRename,
       onDuplicate: handleDuplicate,
       onExport: handleExport,
+      onCreateRelease: openCreateRelease,
+      createReleaseDisabledReason: (app: AppInfo): string | undefined =>
+        createReleaseDisabledReason(app.id),
+      onReleaseInfo: handleReleaseInfo,
       onSetAsDefault: handleSetAsDefault,
       onDelete: handleDelete,
     }),
@@ -210,6 +234,9 @@ export const useAppListLogic = function (
       handleRename,
       handleDuplicate,
       handleExport,
+      openCreateRelease,
+      createReleaseDisabledReason,
+      handleReleaseInfo,
       handleSetAsDefault,
       handleDelete,
     ],
@@ -248,6 +275,7 @@ export const useAppListLogic = function (
       if (!selectedApp?.id) return false;
       const result = await deleteApp(selectedApp.id);
       if (result) {
+        await removeOpenFilesForApp(selectedApp.id, boardSerial);
         sendAppLabNotification({
           message: formatMessage(appListMessages.successfullyDeletedApp),
           variant: 'success',
@@ -341,7 +369,7 @@ export const useAppListLogic = function (
 
   const {
     mutate: onExport,
-    isLoading: exportLoading,
+    isPending: exportLoading,
     error: exportError,
     reset: exportReset,
   } = useMutation({
@@ -385,6 +413,24 @@ export const useAppListLogic = function (
     ],
   );
 
+  // The app list has no release note: the dialog reads the app detail.
+  const { data: releaseInfoApp } = useQuery({
+    queryKey: [BoardScopedQuery.LIST_MY_APPS, selectedApp?.id],
+    queryFn: () => getAppDetail(selectedApp?.id ?? ''),
+    enabled: releaseInfoDialogOpen && !!selectedApp?.id,
+  });
+
+  const releaseInfoDialogLogic = useCallback(
+    (): ReturnType<ReleaseInfoDialogLogic> => ({
+      open: releaseInfoDialogOpen,
+      release: selectedApp
+        ? releaseInfoDetails({ ...selectedApp, ...releaseInfoApp })
+        : undefined,
+      onOpenChange: setReleaseInfoDialogOpen,
+    }),
+    [releaseInfoDialogOpen, selectedApp, releaseInfoApp],
+  );
+
   return {
     apps: filteredApps || [],
     isLoading: getAppsLoading,
@@ -392,11 +438,13 @@ export const useAppListLogic = function (
     openCreateAppDialog: handleOpenCreateAppDialog,
     openImportAppDialog: handleOpenImportAppDialog,
     importedAppId,
+    resetImportedAppId,
     appActions: appActions(),
     deleteAppDialogLogic,
     duplicateAppDialogLogic,
     renameAppDialogLogic,
     exportAppDialogLogic,
+    releaseInfoDialogLogic,
     defaultApp,
     handleAppClick,
   };

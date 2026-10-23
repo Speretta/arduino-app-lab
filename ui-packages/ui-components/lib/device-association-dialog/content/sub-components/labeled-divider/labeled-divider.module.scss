@@ -10,11 +10,11 @@
 
 .divider {
     width: 100%;
-    border: 1px solid #{shared.theme-var(--associate-dialog-divider)};
+    border: 1px solid #{var(--border-default)};
 }
 
 .label {
-    color: shared.theme-var(--associate-dialog-foreground);
+    color: var(--text-default);
     text-transform: uppercase;
 
     padding: {

@@ -56,7 +56,7 @@ $ballSize: 14px;
 
   &.isSelected {
     .track {
-      background-color: shared.theme-var(--button-primary-background);
+      background-color: var(--accent-default);
     }
 
     .thumb {
@@ -64,18 +64,18 @@ $ballSize: 14px;
     }
 
     & svg > rect {
-      fill: shared.theme-var(--button-primary-background);
+      fill: var(--accent-default);
     }
 
     &:hover > svg {
       & > rect {
-        fill: shared.theme-var(--button-primary-background-hover);
+        fill: var(--accent-default-strong);
       }
     }
 
     &:hover {
       .track {
-        background-color: shared.theme-var(--button-primary-background-hover);
+        background-color: var(--accent-default-strong);
       }
     }
   }

@@ -1,6 +1,6 @@
 ---
 name: aria-hidden
-version: 1.2.4
+version: 1.2.6
 type: npm
 summary: Cast aria-hidden to everything, except...
 homepage: https://github.com/theKashey/aria-hidden#readme

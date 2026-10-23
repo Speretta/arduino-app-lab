@@ -21,8 +21,6 @@ export type UseSetup = () => {
   setNetworkCredentialsDraft: (credentials?: NetworkCredentials) => void;
   autoFlowLocked: boolean;
   setAutoFlowLocked: (locked: boolean) => void;
-  offlineWarningOpen: boolean;
-  setOfflineWarningOpen: (open: boolean) => void;
 };
 
 export const useSetup: UseSetup = function (): ReturnType<UseSetup> {
@@ -33,7 +31,6 @@ export const useSetup: UseSetup = function (): ReturnType<UseSetup> {
   const [networkCredentialsDraft, setNetworkCredentialsDraft] =
     useState<NetworkCredentials>();
   const [autoFlowLocked, setAutoFlowLocked] = useState(false);
-  const [offlineWarningOpen, setOfflineWarningOpen] = useState(false);
 
   return {
     setupCompleted,
@@ -46,7 +43,5 @@ export const useSetup: UseSetup = function (): ReturnType<UseSetup> {
     setNetworkCredentialsDraft,
     autoFlowLocked,
     setAutoFlowLocked,
-    offlineWarningOpen,
-    setOfflineWarningOpen,
   };
 };

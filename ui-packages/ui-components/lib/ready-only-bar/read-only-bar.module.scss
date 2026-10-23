@@ -1,8 +1,9 @@
-@use "../../public/shared.module.scss";
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
 
 .container {
     height: 70px;
-    background-color: shared.theme-var(--toolbar-background);
+    background-color: var(--component-bg-below-1);
+    color: var(--text-default);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -65,11 +66,11 @@
     align-items: center;
     justify-content: center;
 
-    border: 2px solid shared.theme-var(--button-secondary-border);
+    border: 2px solid var(--border-accent);
     border-radius: 20px;
 
     & > svg > path {
-        fill: shared.theme-var(--button-secondary-border);
+        fill: var(--text-accent);
     }
 }
 
@@ -98,7 +99,7 @@
     }
 
     .owner-link-disabled {
-        color: shared.theme-var(--header-title-label);
+        color: var(--text-default);
     }
 
     .sketch-attr-show {
@@ -111,7 +112,7 @@
         .info-icon-container {
             margin-left: 8px;
             border-radius: 50%;
-            background-color: #dae3e3;
+            background-color: var(--surface-bg-baseline);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -126,10 +127,10 @@
 
             &:hover {
                 cursor: help;
-                background-color: #374146;
+                background-color: var(--tooltip-background);
 
                 svg > path {
-                    fill: #ffffff;
+                    fill: var(--tooltip-foreground);
                 }
             }
         }
@@ -144,7 +145,7 @@
             left: 8px;
             z-index: shared.$zIndex3;
             padding: 16px;
-            background: #fff;
+            background: var(--grayscale-nevada);
             box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.25);
             border-radius: 3px;
             width: 250px;

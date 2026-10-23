@@ -3,10 +3,12 @@ import { create } from 'zustand';
 import {
   Checklist,
   ChoiceRequest,
+  onWorkspaceAppForgotten,
   PermissionRequest,
   SessionSummary,
   ToolCall,
   ToolCallStatus,
+  Unsubscribe,
 } from '../services';
 
 // A cross-tree request to switch the chat's active session. The side panel writes it; ChatPanel.logic
@@ -14,7 +16,8 @@ import {
 // makes each request distinct so re-clicking "New chat" (or reopening the same session) re-fires.
 export type SessionRequest =
   | { type: 'open'; session: SessionSummary; nonce: number }
-  | { type: 'new'; nonce: number };
+  // `workspace` moves the panel as it opens the chat — the host sends it when the app it was on is gone.
+  | { type: 'new'; workspace?: { id: string; name?: string }; nonce: number };
 
 // Rendered projection of content AgentUpdates: text/thinking accumulate deltas, tool_call/checklist/choices hold a snapshot; inline markdown (code/table/diff) lives inside `text`, not here.
 export type MessagePart =
@@ -66,6 +69,10 @@ interface Thread {
   streamingMessageId?: string; // assistant message currently being appended to (this session's live turn)
   pendingPermission?: PermissionRequest;
   resolvedChoiceIds?: string[]; // choice questions already answered/skipped/closed — hidden on redisplay so they don't re-prompt after a reopen
+  // The turn's meters live here, not in the panel: the editor's side panel unmounts when it closes.
+  turnStartedAt?: number; // epoch ms, so the elapsed time is derived and survives a remount exactly
+  usedTokens?: number; // this turn's growth, already net of the baseline below
+  tokenBaseline?: number; // the turn's first reading: the engine reports the whole context
 }
 
 interface ChatStore {
@@ -75,6 +82,11 @@ interface ChatStore {
   // resumes it; its title rides along to restore the header.
   lastSessionId: string | null;
   lastSessionTitle?: string;
+  // Its workspace rides along too: a remount resumes through bootstrap, which has no session summary to read it from.
+  lastSessionWorkspaceId?: string;
+  lastSessionWorkspaceName?: string;
+  // Per workspace, the session that was open in it, so switching away and back lands where the user left off; forgotten on restart like every field here.
+  lastSessionByWorkspace: Record<string, { id: string; title?: string }>;
   // Per-session in-flight-turn flag; the UI's `isStreaming` is derived from the current session's entry.
   streamingSessions: Record<string, boolean>;
   // Sessions whose turn finished while the user was viewing another session — a reply is waiting
@@ -89,16 +101,31 @@ interface ChatStore {
   // the "New Session" entry selected instead, until the first prompt promotes it to a real row.
   draftSessionId: string | null;
 
+  // Which mounted ChatPanel drives the agent: two can be mounted at once, and both subscribing put every update in the thread twice.
+  chatOwners: ChatOwner[];
+  claimChat: (ownerId: string, onScreen: boolean) => void;
+  releaseChat: (ownerId: string) => void;
+  // App Lab hides the surface it is not showing instead of unmounting it, so each panel needs telling.
+  agentModeActive: boolean;
+  setAgentModeActive: (active: boolean) => void;
+
   setCurrentSessionId: (sessionId: string | null) => void;
-  setLastSession: (sessionId: string | null, title?: string) => void;
-  // Mark the open session as an unused draft (on "New Session"), or clear it (on the first prompt).
+  setLastSession: (
+    sessionId: string | null,
+    title?: string,
+    workspace?: { id: string; name?: string },
+  ) => void;
+  // Mark the open session as an unused draft or clear it, and drop a workspace's remembered session once it turns out not to be loadable.
+  forgetWorkspaceSession: (workspaceId: string) => void;
+  // Drop a deleted session from every workspace that remembered it — the sidebar can delete another workspace's.
+  forgetSession: (sessionId: string) => void;
   setDraftSessionId: (sessionId: string | null) => void;
   // Flag a session as having a reply ready (its background turn finished, unseen).
   markReplyReady: (sessionId: string) => void;
   // Ask the chat to open an existing session (from the side panel).
   requestOpenSession: (session: SessionSummary) => void;
   // Ask the chat to start a fresh session (from the side panel).
-  requestNewSession: VoidFunction;
+  requestNewSession: (workspace?: { id: string; name?: string }) => void;
   // Consume the pending request (called by ChatPanel.logic after acting on it).
   clearSessionRequest: VoidFunction;
   addMessage: (sessionId: string, message: ChatMessage) => void;
@@ -149,6 +176,10 @@ interface ChatStore {
   // Mark a choice question resolved (answered/skipped/closed) so it stops rendering as an active prompt.
   resolveChoice: (sessionId: string, choiceId: string) => void;
   setSessionStreaming: (sessionId: string, streaming: boolean) => void;
+  // Starts this session's turn meters: the clock from now, the token count from its next reading.
+  startTurnMeters: (sessionId: string) => void;
+  // One usage_update: the first of a turn sets the baseline, so each question counts from zero.
+  recordUsage: (sessionId: string, usedTokens: number) => void;
   // Empty a session's thread (before a cold reload replays its history).
   resetThread: (sessionId: string) => void;
   // Drop a session entirely (on delete).
@@ -174,6 +205,21 @@ const initialState = {
   draftSessionId: null,
   lastSessionId: null,
   lastSessionTitle: undefined,
+  lastSessionWorkspaceId: undefined,
+  lastSessionWorkspaceName: undefined,
+  lastSessionByWorkspace: {},
+};
+
+interface ChatOwner {
+  id: string;
+  onScreen: boolean;
+}
+
+// The panel on screen drives; with none on screen the last mounted one keeps watching, so recency only breaks ties and a hidden remount can't steal the stream.
+export const chatDriver = (owners: ChatOwner[]): string | undefined => {
+  const onScreen = owners.filter((owner) => owner.onScreen);
+  const pool = onScreen.length > 0 ? onScreen : owners;
+  return pool[pool.length - 1]?.id;
 };
 
 const mapMessage = (
@@ -186,17 +232,19 @@ const mapMessage = (
   );
 
 export const useChatStore = create<ChatStore>((set) => {
-  // Immutably update one session's thread (creating it if absent).
+  // Immutably update one session's thread, but never create it: a turn settling after
+  // resetLoadedSessions (its Go epilogue outlives the teardown) would otherwise leave an empty thread
+  // behind, which bootstrap reads as a loaded session and skips the replay for. Only addMessage starts one.
   const patchThread = (
     sessionId: string,
     fn: (thread: Thread) => Thread,
   ): void =>
-    set((state) => ({
-      threads: {
-        ...state.threads,
-        [sessionId]: fn(state.threads[sessionId] ?? emptyThread()),
-      },
-    }));
+    set((state) => {
+      const thread = state.threads[sessionId];
+      return thread
+        ? { threads: { ...state.threads, [sessionId]: fn(thread) } }
+        : state;
+    });
   const patchMessages = (
     sessionId: string,
     fn: (messages: ChatMessage[]) => ChatMessage[],
@@ -206,10 +254,55 @@ export const useChatStore = create<ChatStore>((set) => {
   return {
     ...initialState,
 
+    chatOwners: [],
+    claimChat: (ownerId, onScreen): void =>
+      set((state) => ({
+        chatOwners: [
+          ...state.chatOwners.filter((o) => o.id !== ownerId),
+          { id: ownerId, onScreen },
+        ],
+      })),
+    releaseChat: (ownerId): void =>
+      set((state) => ({
+        chatOwners: state.chatOwners.filter((o) => o.id !== ownerId),
+      })),
+
+    agentModeActive: false,
+    setAgentModeActive: (agentModeActive): void => set({ agentModeActive }),
+
     setDraftSessionId: (draftSessionId): void => set({ draftSessionId }),
 
-    setLastSession: (lastSessionId, lastSessionTitle): void =>
-      set({ lastSessionId, lastSessionTitle }),
+    setLastSession: (lastSessionId, lastSessionTitle, workspace): void =>
+      set((state) => ({
+        lastSessionId,
+        lastSessionTitle,
+        lastSessionWorkspaceId: workspace?.id,
+        lastSessionWorkspaceName: workspace?.name,
+        // The overall last session drives a remount; this map drives a workspace switch, which must not resurrect a chat open elsewhere.
+        lastSessionByWorkspace:
+          workspace && lastSessionId
+            ? {
+                ...state.lastSessionByWorkspace,
+                [workspace.id]: { id: lastSessionId, title: lastSessionTitle },
+              }
+            : state.lastSessionByWorkspace,
+      })),
+
+    forgetWorkspaceSession: (workspaceId): void =>
+      set((state) => {
+        const next = { ...state.lastSessionByWorkspace };
+        delete next[workspaceId];
+        return { lastSessionByWorkspace: next };
+      }),
+
+    forgetSession: (sessionId): void =>
+      set((state) => ({
+        lastSessionByWorkspace: Object.fromEntries(
+          Object.entries(state.lastSessionByWorkspace).filter(
+            ([, last]) => last.id !== sessionId,
+          ),
+        ),
+      })),
 
     setCurrentSessionId: (currentSessionId): void =>
       // Opening a session clears its "reply ready" dot — the user is now looking at it.
@@ -242,17 +335,27 @@ export const useChatStore = create<ChatStore>((set) => {
           nonce: (state.sessionRequest?.nonce ?? 0) + 1,
         },
       })),
-    requestNewSession: (): void =>
+    requestNewSession: (workspace): void =>
       set((state) => ({
         sessionRequest: {
           type: 'new',
+          workspace,
           nonce: (state.sessionRequest?.nonce ?? 0) + 1,
         },
       })),
     clearSessionRequest: (): void => set({ sessionRequest: undefined }),
 
+    // The one action that starts a thread (first prompt of a session, or its replay).
     addMessage: (sessionId, message): void =>
-      patchMessages(sessionId, (messages) => [...messages, message]),
+      set((state) => {
+        const thread = state.threads[sessionId] ?? emptyThread();
+        return {
+          threads: {
+            ...state.threads,
+            [sessionId]: { ...thread, messages: [...thread.messages, message] },
+          },
+        };
+      }),
 
     appendText: (sessionId, messageId, delta): void =>
       patchMessages(sessionId, (messages) =>
@@ -418,6 +521,30 @@ export const useChatStore = create<ChatStore>((set) => {
           : [...(t.resolvedChoiceIds ?? []), choiceId],
       })),
 
+    // Seeds the thread where patchThread would not: every later reading of this turn needs it to exist.
+    startTurnMeters: (sessionId): void =>
+      set((state) => ({
+        threads: {
+          ...state.threads,
+          [sessionId]: {
+            ...(state.threads[sessionId] ?? emptyThread()),
+            turnStartedAt: Date.now(),
+            usedTokens: 0,
+            tokenBaseline: undefined,
+          },
+        },
+      })),
+
+    recordUsage: (sessionId, usedTokens): void =>
+      patchThread(sessionId, (t) => {
+        const tokenBaseline = t.tokenBaseline ?? usedTokens;
+        return {
+          ...t,
+          tokenBaseline,
+          usedTokens: Math.max(0, usedTokens - tokenBaseline),
+        };
+      }),
+
     setSessionStreaming: (sessionId, streaming): void =>
       set((state) => {
         const next = { ...state.streamingSessions };
@@ -455,7 +582,43 @@ export const useChatStore = create<ChatStore>((set) => {
           ...initialState,
           lastSessionId: wasDraft ? null : state.lastSessionId,
           lastSessionTitle: wasDraft ? undefined : state.lastSessionTitle,
+          lastSessionWorkspaceId: wasDraft
+            ? undefined
+            : state.lastSessionWorkspaceId,
+          lastSessionWorkspaceName: wasDraft
+            ? undefined
+            : state.lastSessionWorkspaceName,
+          // The surviving session keeps its place in the per-workspace map too, or that workspace opens an empty chat after an agent restart.
+          lastSessionByWorkspace:
+            wasDraft || !state.lastSessionId
+              ? {}
+              : {
+                  [state.lastSessionWorkspaceId ?? '']: {
+                    id: state.lastSessionId,
+                    title: state.lastSessionTitle,
+                  },
+                },
         };
       }),
   };
 });
+
+// Whether any session has a turn in flight, across every session (not just the one on screen). The host reads it
+// before actions that would kill that turn — switching board tears the agent down — to warn first.
+export const agentIsBusy = (): boolean =>
+  Object.values(useChatStore.getState().streamingSessions).some(Boolean);
+
+// An app is gone: its chats went with it, so the workspace must stop offering one and any panel there has to move off.
+const forgetWorkspaceApp = (appId: string): void => {
+  const store = useChatStore.getState();
+  store.forgetWorkspaceSession(appId);
+  if (store.lastSessionWorkspaceId === appId) {
+    store.setLastSession(null); // a panel opened later must not resume a chat the app took with it
+    store.requestNewSession({ id: '' }); // and one already open moves back to the whole board
+  }
+};
+
+// Watches the host for deleted apps. Started once at startup, right after the service is bound, rather than
+// from a panel: the pointer to a deleted app's chat has to be dropped whether or not any chat UI is mounted.
+export const subscribeWorkspaceAppForgotten = (): Unsubscribe =>
+  onWorkspaceAppForgotten(forgetWorkspaceApp);

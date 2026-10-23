@@ -11,6 +11,10 @@ export interface CachedPickers {
   currentModeId?: string;
 }
 
+// Why the agent is down: it crashed, the board it was bound to was swapped, or that board was reflashed.
+// The last two are deliberate teardowns by the host, and the prompt words each of them differently.
+export type AgentDownReason = 'crashed' | 'board-changed' | 'board-flashed';
+
 // A session mutation the backend rejected, reported by the chat's toast area (the side panel has no
 // layer of its own).
 export type SessionActionError = 'rename' | 'pin' | 'delete';
@@ -35,8 +39,9 @@ interface AiAssistantStore {
   // shows a reconnect affordance instead of the chat — without it agent mode stays dead (and reads as
   // a fresh install) until the app restarts.
   agentDown: boolean;
-  // Why it is down, so the prompt can explain itself: a crash, or the board it was bound to changing.
-  agentDownReason?: 'crashed' | 'board-changed';
+  // Why it is down, so the prompt can explain itself: a crash, the board it was bound to changing, or that
+  // board being reflashed.
+  agentDownReason?: AgentDownReason;
   // Cached picker options from the most recent session, to avoid an empty toolbar (and layout shift)
   // while a freshly opened chat waits for its session state.
   pickers?: CachedPickers;
@@ -48,10 +53,7 @@ interface AiAssistantStore {
   setSessionExpired: (sessionExpired: boolean) => void;
   setAuthResolved: (authResolved: boolean) => void;
   setLastValidatedAt: (lastValidatedAt: number | undefined) => void;
-  setAgentDown: (
-    agentDown: boolean,
-    reason?: 'crashed' | 'board-changed',
-  ) => void;
+  setAgentDown: (agentDown: boolean, reason?: AgentDownReason) => void;
   setPickers: (pickers: CachedPickers) => void;
   setSessionActionError: (sessionActionError?: SessionActionError) => void;
 }

@@ -1,4 +1,3 @@
-import { ConflictType } from '../dialogs/app-lab/duplicate-file-dialog/types';
 import { FileNode, FolderNode, TreeNode } from './fileTree.type';
 
 /**
@@ -66,7 +65,7 @@ export const canEditNode = (node: TreeNode): boolean => {
 
 export const canBeDragged = (node: TreeNode): boolean => {
   // All files and folders can be dragged so they may be dropped onto the
-  // editor panes for viewing. Whether the drop is allowed to perform a
+  // editor panels for viewing. Whether the drop is allowed to perform a
   // *move* within the tree is decided by `canBeMoved`; protected entries
   // surface a notification instead.
   void node;
@@ -91,18 +90,6 @@ export const canEditFile = (node: FileNode): boolean => {
   const isMainPy = /^python\/main.py$/.test(node.path);
 
   return !isMainPy && !isAppYaml && !isSketchYaml && !isSketchIno;
-};
-
-export const countNodes = (node?: TreeNode): number => {
-  if (!node) {
-    return 0;
-  }
-
-  if (node.type === 'file' || !node.children) {
-    return 1;
-  }
-
-  return 1 + node.children.reduce((sum, child) => sum + countNodes(child), 0);
 };
 
 export function insertNewNode(
@@ -145,76 +132,3 @@ export function insertNewNode(
 
   return clone;
 }
-
-export const formatDate = (dateStr: string): string => {
-  const date = new Date(dateStr);
-  const now = new Date();
-
-  const isToday = date.toDateString() === now.toDateString();
-
-  const yesterday = new Date();
-  yesterday.setDate(now.getDate() - 1);
-  const isYesterday = date.toDateString() === yesterday.toDateString();
-
-  const time = date.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
-  if (isToday) return `Today, ${time}`;
-  if (isYesterday) return `Yesterday, ${time}`;
-
-  const day = date.getDate();
-  const month = date.toLocaleString('en-US', { month: 'short' });
-  const year = date.getFullYear();
-
-  return `${day} ${month} ${year}, ${time}`;
-};
-
-export const checkForDuplicates = (
-  nodes: TreeNode[] | undefined,
-  toPath: string,
-  draggedNodeType: 'file' | 'folder',
-): {
-  hasDuplicate: boolean;
-  conflictType: ConflictType;
-} => {
-  const targetFileName = toPath.split('/').pop() || '';
-  const targetParentPath = toPath.split('/').slice(0, -1).join('/');
-
-  const findDuplicate = (
-    nodes: TreeNode[] | undefined,
-    targetPath: string,
-    fileName: string,
-  ): {
-    hasDuplicate: boolean;
-    conflictType: ConflictType;
-  } => {
-    if (!nodes) return { hasDuplicate: false, conflictType: null };
-
-    for (const node of nodes) {
-      const nodePath = node.path;
-      const nodeParentPath = nodePath.split('/').slice(0, -1).join('/');
-      const nodeFileName = nodePath.split('/').pop() || '';
-
-      // Check if this node is at the target location with the same name
-      if (nodeParentPath === targetPath && nodeFileName === fileName) {
-        // Determine conflict type based on dragged node and existing node types
-        const conflictType = `${draggedNodeType}-${node.type}` as ConflictType;
-        return { hasDuplicate: true, conflictType };
-      }
-
-      // Recursively check children for folders
-      if (node.type === 'folder' && node.children) {
-        const childResult = findDuplicate(node.children, targetPath, fileName);
-        if (childResult.hasDuplicate) {
-          return childResult;
-        }
-      }
-    }
-
-    return { hasDuplicate: false, conflictType: null };
-  };
-
-  return findDuplicate(nodes, targetParentPath, targetFileName);
-};

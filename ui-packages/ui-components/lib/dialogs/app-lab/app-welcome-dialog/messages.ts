@@ -8,12 +8,12 @@ export const messages = defineMessages({
   },
   contentTitle: {
     id: 'app-lab.app-welcome-dialog.content-title',
-    defaultMessage: "Ready to Build? Explore App Lab's Core Concepts",
+    defaultMessage: "Ready to build? Explore App Lab's core concepts",
     description: 'Main content title in the welcome dialog',
   },
   confirmButton: {
     id: 'app-lab.app-welcome-dialog.confirm-button',
-    defaultMessage: 'Ok, got it',
+    defaultMessage: 'OK, got it',
     description: 'Text for the confirmation button',
   },
   appsTitle: {
@@ -24,7 +24,7 @@ export const messages = defineMessages({
   appsDescription: {
     id: 'app-lab.app-welcome-dialog.features.apps.description',
     defaultMessage:
-      'Now you can build apps that seamlessly blend Python on Linux with C as a Sketch.',
+      'Now you can build Apps that seamlessly blend Python on Linux with C as a Sketch.',
     description: 'Feature description for Apps section',
   },
   bricksTitle: {
@@ -46,7 +46,7 @@ export const messages = defineMessages({
   examplesDescription: {
     id: 'app-lab.app-welcome-dialog.features.examples.description',
     defaultMessage:
-      'The perfect starting point for beginners. Each example is a simple app that shows you how to combine Bricks to get powerful results with just a few lines of code.',
+      'The perfect starting point for beginners. Each example is a simple App that shows you how to combine Bricks to get powerful results with just a few lines of code.',
     description: 'Feature description for Examples section',
   },
 });

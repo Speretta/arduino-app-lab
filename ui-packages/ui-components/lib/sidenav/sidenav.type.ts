@@ -29,6 +29,7 @@ import { PressEvent } from '@react-aria/interactions';
 import { PressEvents } from '@react-types/shared';
 import {
   FetchNextPageOptions,
+  InfiniteData,
   InfiniteQueryObserverResult,
   QueryKey,
 } from '@tanstack/react-query';
@@ -106,7 +107,6 @@ export type DependentSidenavLogic = () => {
   isErrorExplanationStreamSending: boolean;
   stopErrorExplanationGeneration: () => void;
   errorFiles?: string[];
-  isAiRestrictionsEnabled?: boolean;
   openGenAIPolicyTermsDialog: () => void;
   hydrateByPaths: (paths: string[]) => Promise<void>;
 };
@@ -298,7 +298,12 @@ export type GetLibraries = (
   isFetchingNextPage: boolean;
   fetchNextPage: (
     arg?: FetchNextPageOptions | undefined,
-  ) => Promise<InfiniteQueryObserverResult<GetLibraries_Response, unknown>>;
+  ) => Promise<
+    InfiniteQueryObserverResult<
+      InfiniteData<GetLibraries_Response, unknown>,
+      Error
+    >
+  >;
   hasNextPage?: boolean;
   fromParams?: string;
 };
@@ -530,11 +535,6 @@ export type UseSettingsLogic = () => {
   getPreference: (id: Preferences) => PreferenceValue | undefined;
   setPreference: (id: Preferences, value: PreferenceValue) => void;
   restorePreferences: () => void;
-  themeContext: {
-    theme: string;
-    setTheme: React.Dispatch<React.SetStateAction<string>>;
-    isDarkModeOs: boolean;
-  };
   saveAllFiles: () => void;
   handleOptOut?: () => void;
 };

@@ -58,7 +58,9 @@ $text-warning: var(--global-snackbar-warning-text, #fff);
     }
 
     [class*="Snackbar-action"] {
-        font-family: var(--Family-Open-Sans, "Open Sans");
+        // Literal stack: the typography module lives in ui-components/lib, which
+        // core-ui stylesheets don't import, and fonts aren't design tokens.
+        font-family: "Open Sans", "Lucida Grande", lucida, verdana, sans-serif;
         font-size: 14px;
         font-weight: 700;
         letter-spacing: 0.14px;

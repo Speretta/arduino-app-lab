@@ -1,4 +1,4 @@
-import { UnknownDeviceIdentifiers } from '../../device-association-dialog';
+import { UnknownDeviceIdentifiers } from '../../device-association-dialog/context/deviceAssociationContext';
 import {
   DeleteLibraryDialogData,
   DeleteSketchDialogData,

@@ -42,11 +42,15 @@ export function transformContentToDataByMimeType(
   return transformContentToData(code);
 }
 
+// Both reducers return the input set when the contents do not change. The unsaved-files subjects
+// are read through `useSyncExternalStore`, which re-renders every subscriber on a new reference.
 export function addToSet<T>(set: Set<T>, item: T): Set<T> {
+  if (set.has(item)) return set;
   return new Set(set.add(item));
 }
 
 export function removeFromSet<T>(set: Set<T>, item: T): Set<T> {
+  if (!set.has(item)) return set;
   set.delete(item);
   return new Set(set);
 }

@@ -16,6 +16,11 @@ export const appTitleMessages = defineMessages({
     defaultMessage: 'Export App',
     description: 'Export the app',
   },
+  actionPublish: {
+    id: 'appTitle.actionPublish',
+    defaultMessage: 'Publish on Project Hub',
+    description: 'Publish the app on Project Hub',
+  },
   actionDelete: {
     id: 'appTitle.actionDelete',
     defaultMessage: 'Delete',
@@ -40,13 +45,13 @@ export const appTitleMessages = defineMessages({
   setAsDefault: {
     id: 'appTitle.setAsDefault',
     defaultMessage:
-      'This app is set as the startup app. This means it will automatically run every time you plug your board into <bold>any power source</bold>',
+      'This App is set as the startup App. This means it will automatically run every time you plug your board into <bold>any power source</bold>',
     description: 'Label for the set as default app',
   },
   overrideAsDefault: {
     id: 'appTitle.overrideAsDefault',
     defaultMessage:
-      'Only one app can be set to launch at startup. Enabling this feature for the current app will <bold>override the {appName} app</bold>.',
+      'Only one App can be set to launch at startup. Enabling this feature for the current App will <bold>override the {appName} App</bold>.',
     description: 'Label for the override default app',
   },
 });

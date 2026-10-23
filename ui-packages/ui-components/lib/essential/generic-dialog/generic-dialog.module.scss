@@ -18,7 +18,7 @@ $dialogContentHeaderHeight: 54;
     max-height: $dialogMaxHeight;
     height: $dialogHeight;
     border-radius: 5px !important;
-    background-color: shared.theme-var(--associate-dialog-background); // TODO: use the correct color
+    background-color: var(--component-bg-above); // TODO: use the correct color
     margin: 28px;
 
     @include arduino-sass.breakpoint(768) {
@@ -32,7 +32,7 @@ $dialogContentHeaderHeight: 54;
   position: relative;
   display: grid;
   grid-template-rows: 54px 1fr 78px;
-  background-color: white;
+  background-color: var(--component-bg-above);
   border-radius: 5px;
   overflow: hidden;
 }
@@ -43,7 +43,7 @@ $dialogContentHeaderHeight: 54;
   justify-items: center;
   align-items: center;
   height: $dialogContentHeaderHeight * 1px;
-  border-bottom: 1px solid #{shared.theme-var(--associate-dialog-divider)}; // TODO: use the correct color
+  border-bottom: 1px solid #{var(--border-default)}; // TODO: use the correct color
 
   span {
     grid-column-start: 2;
@@ -69,6 +69,7 @@ $dialogContentHeaderHeight: 54;
 .dialog-body {
   display: grid;
   padding: 28px 130px 36px 130px;
+  color: var(--associate-dialog-card-label);
   @include arduino-sass.breakpoint(768) {
     padding: 28px 30px 36px 30px;
   }
@@ -79,7 +80,7 @@ $dialogContentHeaderHeight: 54;
   justify-content: flex-end;
   align-items: center;
   gap: 20px;
-  background-color: arduino-sass.$feather;
+  background-color: var(--component-bg-above);
   padding: 28px 130px 28px 130px;
   @include arduino-sass.breakpoint(768) {
     padding: 28px 30px 28px 30px;

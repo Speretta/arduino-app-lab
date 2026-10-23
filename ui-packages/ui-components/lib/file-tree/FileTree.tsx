@@ -1,4 +1,3 @@
-import { isValidResourceName } from '@cloud-editor-mono/infrastructure';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import clsx from 'clsx';
 import {
@@ -23,6 +22,7 @@ import {
 } from 'react-arborist';
 
 import {
+  ConflictType,
   DuplicateFileDialogLogic,
   OnDuplicateConflictParams,
 } from '../dialogs/app-lab/duplicate-file-dialog/types';
@@ -32,13 +32,7 @@ import FileNode from './FileNode';
 import FileRow from './FileRow';
 import { FileTreeApi, TreeNode } from './fileTree.type';
 import { TreeContextMenu } from './TreeContextMenu';
-import {
-  canBeDragged,
-  canBeMoved,
-  checkForDuplicates,
-  insertNewNode,
-  isFileNode,
-} from './utils';
+import { canBeDragged, canBeMoved, insertNewNode, isFileNode } from './utils';
 
 const TEMP_CREATED_NODE_NAME = '__CREATE__';
 
@@ -64,7 +58,6 @@ interface FileTreeRenderContextValue {
   onMultiSelectedIdsChange: (ids: Set<string>) => void;
   onEditSubmit: (newName: string) => Promise<void>;
   onEditCancel: () => void;
-  onValidationError?: () => void;
 }
 
 const FileTreeRenderContext = createContext<FileTreeRenderContextValue | null>(
@@ -132,7 +125,6 @@ const FileTreeNode = (nodeProps: NodeRendererProps<TreeNode>): JSX.Element => {
       isReadOnly={ctx.isReadOnly}
       onEditSubmit={ctx.onEditSubmit}
       onEditCancel={ctx.onEditCancel}
-      onValidationError={ctx.onValidationError}
       onDelete={(): Promise<void> => ctx.onNodeDelete(node)}
       renderNodeIcon={ctx.renderNodeIcon}
     />
@@ -143,10 +135,15 @@ const renderEmptyDragPreview = (): ReactElement | null => null;
 const renderEmptyCursor = (): null => null;
 const idAccessor = (node: TreeNode): string => node.path;
 
+// react-arborist decides a node is a leaf when this isn't an array, so an
+// unlisted folder has to report empty to stay expandable.
+const childrenAccessor = (node: TreeNode): TreeNode[] | null =>
+  node.type === 'folder' ? node.children ?? [] : null;
+
 // Flatten every node path in the tree into a set, for reconciling selection
 // state against the current data.
 const collectNodePaths = (
-  nodes: TreeNode[] | undefined,
+  nodes: TreeNode[] | null | undefined,
   acc: Set<string> = new Set(),
 ): Set<string> => {
   if (!nodes) return acc;
@@ -188,7 +185,10 @@ interface FileTreeProps {
   onDuplicateConflict?: (params: OnDuplicateConflictParams) => void;
   duplicateFileDialogLogic?: DuplicateFileDialogLogic;
   onAddBrick: () => void;
-  onAddSketchLibrary: () => void;
+  // Optional menu items: each shows only when its handler is passed.
+  onCreateBrick?: () => void;
+  onAddSketch?: () => void;
+  onAddSketchLibrary?: () => void;
   onFileDragStart?: (nodes: TreeNode[]) => void;
   /**
    * Called when the user attempts to move a node within the tree that
@@ -200,7 +200,27 @@ interface FileTreeProps {
    */
   onMoveBlocked?: (node: TreeNode) => void;
   onDragOverFolderChange?: (path: string) => void;
-  onValidationError?: () => void;
+  /**
+   * Reports a folder opening (`isOpen`) or closing, so the consumer can list
+   * it lazily and stop listing it again. An open also reports every descendant
+   * that is already open, whose rows come back with it.
+   */
+  onFolderExpand?: (path: string, isOpen: boolean) => void;
+  /**
+   * Asks the consumer whether `toPath` is already taken. The tree only holds
+   * the folders it has listed, so a drop can only be checked by whoever owns
+   * the filesystem. A rejection aborts the move.
+   */
+  checkPathConflict: (
+    toPath: string,
+    nodeType: 'file' | 'folder',
+  ) => Promise<{ hasDuplicate: boolean; conflictType: ConflictType }>;
+  /**
+   * A folder to close, e.g. one the consumer stopped listing. Its row would
+   * otherwise stay open over nothing. `seq` makes the same folder closing
+   * twice a new value, so a repeat still arrives.
+   */
+  closeFolder?: { path: string; seq: number };
 }
 
 const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
@@ -225,21 +245,54 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
     updateOpenFile,
     onDuplicateConflict,
     onAddBrick,
+    onCreateBrick,
+    onAddSketch,
     onAddSketchLibrary,
     onFileDragStart,
     onMoveBlocked,
     onDragOverFolderChange,
-    onValidationError,
+    onFolderExpand,
+    checkPathConflict,
+    closeFolder,
   } = props;
 
   const treeApiRef = useRef<TreeApi<TreeNode>>(null);
   const treeContainerRef = useRef<HTMLDivElement>(null);
+
+  // react-arborist applies the new open state before calling back, so
+  // `isOpen` here is the state the user just asked for.
+  const handleToggle = useCallback(
+    (id: string): void => {
+      const node = treeApiRef.current?.get(id);
+      if (node?.data.type !== 'folder') return;
+
+      const path = node.data.path;
+      const isOpen = node.isOpen;
+      onFolderExpand?.(path, isOpen);
+      if (!isOpen) return;
+
+      // Subfolders that were open when this one was closed come back open with
+      // it, so their listings have to come back too. Their rows don't exist yet
+      // at this point (and the folder's own children may still be unlisted), so
+      // the open set is read from react-arborist rather than from the data.
+      const openState = treeApiRef.current?.openState ?? {};
+      for (const [openPath, open] of Object.entries(openState)) {
+        if (open && openPath.startsWith(`${path}/`)) {
+          onFolderExpand?.(openPath, true);
+        }
+      }
+    },
+    [onFolderExpand],
+  );
 
   const [isCreating, setIsCreating] = useState<{
     path: string;
     type: TreeNode['type'];
   } | null>(null);
   const [isEditingAt, setIsEditingAt] = useState<string | null>(null);
+  // A renamed folder's row is a new id, so it is closed even though the folder
+  // it stands for was open. Held until the data catches up with the rename.
+  const [folderToReopen, setFolderToReopen] = useState<string | null>(null);
   const [dragOverZone, setDragOverZone] = useState<'root' | string | null>(
     null,
   );
@@ -252,7 +305,8 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
   const dragOverZoneRef = useRef<'root' | string | null>(null);
   const draggingNodeRef = useRef<NodeApi<TreeNode> | null>(null);
   const draggingNodesRef = useRef<NodeApi<TreeNode>[]>([]);
-  const [isInternalDragging, setIsInternalDragging] = useState(false);
+  const isInternalDraggingRef = useRef(false);
+  const dropInProgressRef = useRef(false);
 
   // Clear multi-selection when clicking outside the file tree
   useEffect(() => {
@@ -327,11 +381,13 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
 
   useEffect(() => {
     const handleDragEnd = (): void => {
-      setIsInternalDragging(false);
-      handleDragOverZoneChange(null);
-      dragOverZoneRef.current = null;
-      draggingNodeRef.current = null;
-      draggingNodesRef.current = [];
+      if (!dropInProgressRef.current) {
+        isInternalDraggingRef.current = false;
+        handleDragOverZoneChange(null);
+        dragOverZoneRef.current = null;
+        draggingNodeRef.current = null;
+        draggingNodesRef.current = [];
+      }
     };
 
     const handleGlobalDragOver = (e: DragEvent): void => {
@@ -354,18 +410,33 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
     };
   }, [handleDragOverZoneChange]);
 
-  // automatically scroll to selected node and open parent folders when node is auto-selected
+  // Automatically scroll to the selected node and open its parent folders when
+  // it is selected from outside the tree. Keyed on the path, not the node: a
+  // new object for the same file would otherwise reopen a folder the user
+  // collapsed after any change inside it.
+  const selectedPath = selectedNode?.path;
   useEffect(() => {
-    if (!treeApiRef.current || !selectedNode) {
+    if (!treeApiRef.current || !selectedPath) {
       return;
     }
 
-    treeApiRef.current.openParents(selectedNode.path);
+    treeApiRef.current.openParents(selectedPath);
 
     setTimeout(() => {
-      scrollToNode(selectedNode.path);
+      scrollToNode(selectedPath);
     }, 100);
-  }, [selectedNode]);
+  }, [selectedPath]);
+
+  useEffect(() => {
+    if (closeFolder) treeApiRef.current?.close(closeFolder.path);
+  }, [closeFolder]);
+
+  // The renamed folder only exists once the consumer's data reaches us.
+  useEffect(() => {
+    if (!folderToReopen || !treeApiRef.current?.get(folderToReopen)) return;
+    treeApiRef.current.open(folderToReopen);
+    setFolderToReopen(null);
+  }, [folderToReopen, nodes]);
 
   const data = useMemo(() => {
     return nodes && isCreating !== null
@@ -439,6 +510,10 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
       scrollToNode(`${createAtPath}/${TEMP_CREATED_NODE_NAME}`);
       if (treeApiRef.current && createAtPath) {
         treeApiRef.current.openParents(createAtPath);
+        // The new row lives *inside* this folder, so the folder itself has to
+        // open too — and opening it reports through onToggle, which is what
+        // gets an unlisted folder listed.
+        treeApiRef.current.open(createAtPath);
       }
     },
     [],
@@ -469,10 +544,11 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
   );
 
   const handleDrop = useCallback(
-    (args: {
+    async (args: {
       dragNodes: NodeApi<TreeNode>[];
       parentNode: NodeApi<TreeNode> | null;
-    }) => {
+    }): Promise<void> => {
+      dropInProgressRef.current = true;
       const { dragNodes } = args;
       // Use draggingNodesRef if available (multi-selection), otherwise fall back to single node
       const authoritative =
@@ -484,6 +560,7 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
 
       if (!onFileMove || authoritative.length === 0) {
         handleDragOverZoneChange(null);
+        dropInProgressRef.current = false;
         return;
       }
 
@@ -495,6 +572,7 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
       if (blockedNode) {
         handleDragOverZoneChange(null);
         onMoveBlocked?.(blockedNode.data);
+        dropInProgressRef.current = false;
         return;
       }
       const validNodes = authoritative;
@@ -546,12 +624,19 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
           continue;
         }
 
-        // Check for duplicate files/folders at destination
-        const { hasDuplicate, conflictType } = checkForDuplicates(
-          nodes,
-          toPath,
-          nodeType,
-        );
+        // Only the consumer can answer this: an unlisted folder holds no
+        // children here, so a name already taken inside one would read as free
+        // and the move would overwrite it. A failed check aborts the move.
+        let hasDuplicate: boolean;
+        let conflictType: ConflictType;
+        try {
+          ({ hasDuplicate, conflictType } = await checkPathConflict(
+            toPath,
+            nodeType,
+          ));
+        } catch {
+          continue;
+        }
 
         if (hasDuplicate) {
           // Show dialog for all conflict types to let user decide
@@ -608,7 +693,8 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
               }
             })
             .finally(() => {
-              setIsInternalDragging(false);
+              isInternalDraggingRef.current = false;
+              dropInProgressRef.current = false;
             }),
         );
       }
@@ -619,13 +705,14 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
         handleDragOverZoneChange(null);
         draggingNodeRef.current = null;
         draggingNodesRef.current = [];
+        dropInProgressRef.current = false;
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       onFileMove,
       openFiles,
-      nodes,
+      checkPathConflict,
       updateOpenFile,
       selectedFileChange,
       onFolderSelect,
@@ -676,14 +763,6 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
         return;
       }
 
-      // Funnel check. FileNode refuses these inline (keeping the input open on
-      // the offending name), so reaching here means a programmatic submit; the
-      // notification explains why nothing happened.
-      if (!isValidResourceName(newName)) {
-        onValidationError?.();
-        return;
-      }
-
       if (isCreating !== null) {
         const path = isCreating.path
           ? `${isCreating.path}/${newName}`
@@ -699,18 +778,15 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
         // Use treeApi to find the node in the complete tree (need this to nested folders)
         const foundNode = treeApiRef.current?.get(isEditingAt);
         const nodeType = foundNode?.data?.type ?? 'file';
+        if (nodeType === 'folder' && foundNode?.isOpen) {
+          const parent = isEditingAt.slice(0, isEditingAt.lastIndexOf('/') + 1);
+          setFolderToReopen(`${parent}${newName}`);
+        }
         await onFileRename(isEditingAt, newName, nodeType);
         setIsEditingAt(null);
       }
     },
-    [
-      isCreating,
-      isEditingAt,
-      onFileCreate,
-      onFolderCreate,
-      onFileRename,
-      onValidationError,
-    ],
+    [isCreating, isEditingAt, onFileCreate, onFolderCreate, onFileRename],
   );
 
   const handleEditCancel = useCallback((): void => {
@@ -746,7 +822,7 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
 
   const handleRowDragStart = useCallback(
     (node: NodeApi<TreeNode>): void => {
-      setIsInternalDragging(true);
+      isInternalDraggingRef.current = true;
       draggingNodeRef.current = node;
       // Drag the whole selection only when the grabbed node is part of an
       // actual multi-selection (cmd/shift click). Grabbing any other node —
@@ -818,7 +894,6 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
     onMultiSelectedIdsChange: setMultiSelectedIds,
     onEditSubmit: handleEditSubmit,
     onEditCancel: handleEditCancel,
-    onValidationError,
   };
 
   return (
@@ -841,7 +916,9 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
             disabled={isReadOnly}
           >
             <div
-              data-native-dropzone={!isInternalDragging ? true : undefined}
+              data-native-dropzone={
+                !isInternalDraggingRef.current ? true : undefined
+              }
               onDragOver={(e): void => {
                 e.preventDefault();
                 const target = e.target as HTMLElement;
@@ -855,7 +932,9 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
               onDrop={(e): void => {
                 if (e.dataTransfer.types.includes('Files')) {
                   e.preventDefault();
-                  handleDragOverZoneChange(null);
+                  // Highlight only: handleDragOverZoneChange would zero importTarget too early.
+                  dragOverZoneRef.current = null;
+                  setDragOverZone(null);
                   return;
                 }
 
@@ -873,6 +952,7 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
                   className={styles['tree']}
                   data={data}
                   idAccessor={idAccessor}
+                  childrenAccessor={childrenAccessor}
                   width={'100%'}
                   height={height}
                   openByDefault={false}
@@ -881,9 +961,12 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
                   disableDrag={false}
                   disableDrop={isReadOnly || disableDropNode}
                   onMove={handleDrop}
+                  onToggle={handleToggle}
                   renderDragPreview={renderEmptyDragPreview}
                   renderCursor={renderEmptyCursor}
                   rowHeight={22}
+                  paddingTop={4}
+                  paddingBottom={50}
                   renderRow={FileTreeRow}
                 >
                   {FileTreeNode}
@@ -900,6 +983,8 @@ const FileTree = forwardRef<FileTreeApi, FileTreeProps>((props, ref) => {
               }
             }}
             onAddBrick={onAddBrick}
+            onCreateBrick={onCreateBrick}
+            onAddSketch={onAddSketch}
             onAddSketchLibrary={onAddSketchLibrary}
             onResourceImport={onResourceImport}
           />

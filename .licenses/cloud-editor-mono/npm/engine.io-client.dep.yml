@@ -1,6 +1,6 @@
 ---
 name: engine.io-client
-version: 3.5.4
+version: 3.5.6
 type: npm
 summary: Client for the realtime Engine
 homepage: https://github.com/socketio/engine.io-client

@@ -108,3 +108,25 @@ func TestIsAllowedAssetPathWithoutRoots(t *testing.T) {
 		t.Error("expected no roots to allow nothing")
 	}
 }
+
+// The webview renders an <img> only when the response says it is an image, and
+// for SVG the extension is the only thing that does.
+func TestAssetContentType(t *testing.T) {
+	tests := []struct {
+		file string
+		want string
+	}{
+		{file: "open_palm.svg", want: "image/svg+xml"},
+		{file: "diagram.png", want: "image/png"},
+		{file: "photo.jpg", want: "image/jpeg"},
+		{file: "README", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.file, func(t *testing.T) {
+			if got := assetContentType(tt.file); got != tt.want {
+				t.Errorf("assetContentType(%q) = %q, want %q", tt.file, got, tt.want)
+			}
+		})
+	}
+}

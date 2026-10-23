@@ -12,14 +12,15 @@
 }
 
 .info-tooltip {
+  @extend .popover;
+
   display: none;
   position: absolute;
   top: 44px;
   left: 22px;
   z-index: shared.$zIndex3;
   padding: 18px;
-  background: #fff;
-  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.25);
+  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.25); // TODO: Create suitable variable
   border-radius: 3px;
   font-weight: normal;
   white-space: wrap;
@@ -76,30 +77,18 @@
   height: 38px;
   max-width: 50%;
   padding: 6px 4px !important;
-  border: 1px solid #bdc7c7 !important;
-  background-color: #f7f9f9 !important;
+  border: 1px solid var(--border-default) !important;
+  background-color: var(--toolbar-device-selector-background) !important;
   max-width: 500px;
 
   &:hover:not(.disable-button) {
-    background-color: #dae3e3 !important;
+    background-color: var(--component-bg-above) !important;
     @extend .info-hover;
 
-    & .ps-container {
-      background-color: #bdc7c7;
+    &:focus {
+      background-color: var(--component-bg-above) !important;
+      @extend .info-hover;
     }
-
-    & .ps-icon-container {
-      border: 1px solid #bdc7c7;
-    }
-
-    & .ps-icon-container-selected {
-      border: 1px solid #95a5a6;
-    }
-  }
-
-  &:focus {
-    background-color: #dae3e3 !important;
-    @extend .info-hover;
   }
 }
 
@@ -114,7 +103,7 @@
 
 .text-button-label {
   padding: 2px 8px 2px 8px;
-  color: black;
+  color: var(--text-default);
   text-transform: none !important;
   overflow: hidden;
   white-space: nowrap;
@@ -157,6 +146,7 @@
 }
 
 .association-info-button-board-name {
+  color: var(--text-default) !important;
   &.disable-button {
     cursor: default;
 

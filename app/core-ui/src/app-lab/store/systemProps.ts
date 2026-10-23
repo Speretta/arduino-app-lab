@@ -16,6 +16,7 @@ export enum SystemPropKey {
   SetupCredentials = 'setup-credentials',
   SetupNetwork = 'setup-network',
   CarrierAcknowledged = 'carrier-acknowledged',
+  HatAcknowledged = 'hat-acknowledged',
 }
 
 export const useSystemPropsStore = create<SystemPropsStore>((set, get) => ({

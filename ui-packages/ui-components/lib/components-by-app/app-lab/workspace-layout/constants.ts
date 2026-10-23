@@ -14,4 +14,9 @@ export const EDITOR_PANEL_MIN_SIZE_PX = 48;
 // Side panel sizing.
 export const SIDE_PANEL_DEFAULT_SIZE_PX = 216;
 export const SIDE_PANEL_MIN_SIZE_PX = 152;
+export const SIDE_PANEL_MAX_SIZE_PX = 600;
 export const SIDE_PANEL_COLLAPSED_SIZE_PX = 44;
+
+// References panel sizing.
+export const LSP_REFERENCES_PANEL_DEFAULT_SIZE_PX = 312;
+export const LSP_REFERENCES_PANEL_MIN_SIZE_PX = 200;

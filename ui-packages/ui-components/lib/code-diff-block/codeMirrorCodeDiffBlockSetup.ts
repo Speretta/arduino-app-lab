@@ -23,7 +23,7 @@ import { codeBlockTags } from '../code-mirror/extensions/language/codeBlockHighL
 import { highlightStyle } from '../code-mirror/extensions/language/highlightStyle';
 
 export const codeDiffBlockSetup: Extension = [
-  EditorView.baseTheme({
+  EditorView.theme({
     '.cm-selectionBackground': {
       backgroundColor: '#FFCC00',
       opacity: '0.4',

@@ -16,6 +16,7 @@ export type UseReloadApp = (props: {
   apps?: AppInfo[];
   currentSection?: AppsSection;
   lastAppInfoLoaded?: boolean;
+  breadcrumbId?: string;
 }) => void;
 
 export const useReloadApp: UseReloadApp = ({
@@ -25,6 +26,7 @@ export const useReloadApp: UseReloadApp = ({
   apps,
   currentSection,
   lastAppInfoLoaded,
+  breadcrumbId,
 }) => {
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
@@ -56,6 +58,7 @@ export const useReloadApp: UseReloadApp = ({
   const appsLength = apps?.length;
   const lastAppId = lastAppInfo?.appId;
   const lastAppSection = lastAppInfo?.section;
+  const lastAppBreadcrumbId = lastAppInfo?.breadcrumbId;
   // The saved app id is no longer in the list — e.g. the agent renamed it, minting a new id. Decided only once the
   // list is loaded: while apps is undefined we don't know, so we don't treat it as missing.
   const savedAppMissing =
@@ -120,7 +123,9 @@ export const useReloadApp: UseReloadApp = ({
         return; // opened via a chip peek — don't record it as the board's resume app
       }
       clearPeekedApp();
-      saveAppId(currentAppId, currentSection).catch(console.error);
+      saveAppId(currentAppId, currentSection, breadcrumbId).catch(
+        console.error,
+      );
     } else if (!isInitialLoad && !agentModeActive) {
       // In agent mode the app is still the board's current one — keep it as the resume app.
       clearPeekedApp();
@@ -129,6 +134,7 @@ export const useReloadApp: UseReloadApp = ({
   }, [
     currentAppId,
     currentSection,
+    breadcrumbId,
     selectedBoardSerial,
     boardJustChanged,
     selectedBoard,
@@ -196,8 +202,17 @@ export const useReloadApp: UseReloadApp = ({
               ? '/examples/$appId'
               : '/my-apps/$appId';
           const navParams = { appId: lastAppId };
+          const navSearch =
+            lastAppSection === 'examples' &&
+            lastAppBreadcrumbId === 'inspirations'
+              ? { from: lastAppBreadcrumbId }
+              : undefined;
 
-          await navigateRef.current({ to: route, params: navParams });
+          await navigateRef.current({
+            to: route,
+            params: navParams,
+            search: navSearch,
+          });
           return;
         }
 
@@ -226,6 +241,7 @@ export const useReloadApp: UseReloadApp = ({
     agentModeActive,
     lastAppId,
     lastAppSection,
+    lastAppBreadcrumbId,
     savedAppMissing,
     lastAppInfoLoaded,
     currentAppId,

@@ -1,9 +1,13 @@
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
+
+$tooltip-color: var(--grayscale-smoke);
+
 .copy-to-clipboard {
   position: relative;
 
   .default-trigger {
     svg {
-      color: #374146;
+      color: var(--text-default);
     }
   }
 
@@ -13,16 +17,16 @@
     right: 0;
     transform: translate(-50%, -100%);
     padding: 2.5px 7px;
-    color: #C9D2D2;
-    background: #4E5B61;
-    border: 1px solid #C9D2D2;
+    color: $tooltip-color;
+    background: var(--tooltip-background);
+    border: 1px solid $tooltip-color;
   }
 
   .tooltip-success {
-    color: white;
-    background: #1DA086;
+    color: var(--tooltip-foreground);
+    background: var(--feedback-success-default);
   }
-  
+
   .tooltip-success-content {
     svg {
       display: inline-block;

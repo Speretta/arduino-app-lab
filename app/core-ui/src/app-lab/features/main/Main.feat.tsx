@@ -1,17 +1,23 @@
-import { isFFEnabled } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import {
   AppLabWelcomeDialog,
   BoardUpdateDialog,
   CreateAppDialog,
+  CreateReleaseDialog,
+  CreateReleaseIntroDialog,
   FlashBoardDialog,
   ImportResourceDialog,
   NetworkSettingsDialog,
   OfflineWarningDialog,
+  PreparationRequiredDialog,
   SidePanel,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { Outlet, useRouterState } from '@tanstack/react-router';
+import clsx from 'clsx';
 import { lazy, Suspense, useEffect, useState } from 'react';
 
+import { useAgentWorkspaces } from '../../hooks/useAgentWorkspaces';
+import { useAppsOnAgentExit } from '../../hooks/useAppsOnAgentExit';
+import { useIsBoard } from '../../hooks/useIsBoard';
 import AgentModeBanner from '../agent-mode-banner/AgentModeBanner.feat';
 import { FlasherFeat } from '../flasher/Flasher.feat';
 import FooterBar from '../footer-bar/FooterBar.feat';
@@ -35,10 +41,19 @@ const AgentPanel = lazy(() =>
   })),
 );
 
+const SwitchBoardDialog = lazy(() =>
+  import('@cloud-editor-mono/ai-assistant/panel').then((module) => ({
+    default: module.SwitchBoardDialog,
+  })),
+);
+
 const AppLabMain: React.FC = () => {
   const {
     sidePanelLogic,
     createAppDialogLogic,
+    createReleaseIntroDialogLogic,
+    createReleaseDialogLogic,
+    preparationRequiredDialogLogic,
     importAppDialogLogic,
     boardUpdateDialogLogic,
     flashBoardDialogLogic,
@@ -46,15 +61,19 @@ const AppLabMain: React.FC = () => {
     offlineWarningDialogLogic,
     networkSettingsDialogLogic,
     boardsProps,
-    agentSidePanelLogic,
+    agentSidePanelProps,
     boardIsFlashing,
     showRoutes,
   } = useMainLogic();
+
+  const { data: isBoard } = useIsBoard();
 
   // Agent mode is the /ai-assistant route; while there, the agent side panel replaces the app sidebar.
   const aiAssistantActive = useRouterState({
     select: (state) => state.location.pathname.startsWith('/ai-assistant'),
   });
+
+  useAppsOnAgentExit(aiAssistantActive);
 
   // Mount the chat panel on first entry into agent mode (keeps the bundle lazy), then keep it mounted —
   // hidden in Editor mode — so toggling modes never unmounts it. Seeded from the current route so a
@@ -66,50 +85,77 @@ const AppLabMain: React.FC = () => {
     }
   }, [aiAssistantActive]);
 
-  return boardIsFlashing ? (
-    <FlasherFeat selectBoard={boardsProps.autoSelectBoard} />
-  ) : (
+  const agentWorkspaces = useAgentWorkspaces(agentMounted);
+
+  return (
     <>
-      <Setup boardsProps={boardsProps} />
-      <BoardUpdateDialog logic={boardUpdateDialogLogic} />
-      <FlashBoardDialog logic={flashBoardDialogLogic} />
-      <AppLabWelcomeDialog logic={appLabWelcomeDialogLogic} />
+      {/* Outside the flasher branch, because these two run their logic hook in
+          their own render: unmounting them for a flash would stop the effects
+          that drive them and drop the network the agent asked to connect to,
+          which the hooks used to keep running here in main. */}
       <OfflineWarningDialog logic={offlineWarningDialogLogic} />
       <NetworkSettingsDialog logic={networkSettingsDialogLogic} />
-      {showRoutes ? (
+      {boardIsFlashing ? (
+        <FlasherFeat selectBoard={boardsProps.autoSelectBoard} />
+      ) : (
         <>
-          <CreateAppDialog logic={createAppDialogLogic} />
-          <ImportResourceDialog logic={importAppDialogLogic} />
-          <div className={styles['container']}>
-            {aiAssistantActive ? (
-              <Suspense fallback={null}>
-                <AgentSidePanel {...agentSidePanelLogic} />
-              </Suspense>
-            ) : (
-              <SidePanel
-                sidePanelLogic={sidePanelLogic}
-                banner={
-                  isFFEnabled('AI_ASSISTANT') ? <AgentModeBanner /> : undefined
-                }
+          <Setup boardsProps={boardsProps} />
+          <BoardUpdateDialog logic={boardUpdateDialogLogic} />
+          <FlashBoardDialog logic={flashBoardDialogLogic} />
+          <AppLabWelcomeDialog logic={appLabWelcomeDialogLogic} />
+          {agentMounted ? (
+            <Suspense fallback={null}>
+              <SwitchBoardDialog />
+            </Suspense>
+          ) : null}
+          {showRoutes ? (
+            <>
+              <CreateAppDialog logic={createAppDialogLogic} />
+              <ImportResourceDialog logic={importAppDialogLogic} />
+              <CreateReleaseIntroDialog logic={createReleaseIntroDialogLogic} />
+              <CreateReleaseDialog logic={createReleaseDialogLogic} />
+              <PreparationRequiredDialog
+                logic={preparationRequiredDialogLogic}
               />
-            )}
-            {/* Editor/app routes render here; hidden (not unmounted) while in agent mode. */}
-            <div className={styles['outlet']} hidden={aiAssistantActive}>
-              <Outlet />
-            </div>
-            {/* Persistent chat panel: mounted once, shown/hidden by mode so it never loses its stream. */}
-            {agentMounted ? (
-              <div className={styles['outlet']} hidden={!aiAssistantActive}>
-                <Suspense fallback={null}>
-                  <AgentPanel />
-                </Suspense>
+              {/* `isBoard` is undefined until the query resolves; only `true` means SBC. */}
+              <div
+                className={clsx(
+                  styles['container'],
+                  isBoard === true && styles['sbc'],
+                )}
+              >
+                {aiAssistantActive ? (
+                  <Suspense fallback={null}>
+                    <AgentSidePanel {...agentSidePanelProps} />
+                  </Suspense>
+                ) : (
+                  <SidePanel
+                    sidePanelLogic={sidePanelLogic}
+                    banner={<AgentModeBanner />}
+                  />
+                )}
+                {/* Editor/app routes render here; hidden (not unmounted) while in agent mode. */}
+                <div className={styles['outlet']} hidden={aiAssistantActive}>
+                  <Outlet />
+                </div>
+                {/* Persistent chat panel: mounted once, shown/hidden by mode so it never loses its stream. */}
+                {agentMounted ? (
+                  <div className={styles['outlet']} hidden={!aiAssistantActive}>
+                    <Suspense fallback={null}>
+                      <AgentPanel
+                        workspaces={agentWorkspaces}
+                        active={aiAssistantActive}
+                      />
+                    </Suspense>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
 
-          <FooterBar boardsProps={boardsProps} />
+              <FooterBar boardsProps={boardsProps} />
+            </>
+          ) : null}
         </>
-      ) : null}
+      )}
     </>
   );
 };

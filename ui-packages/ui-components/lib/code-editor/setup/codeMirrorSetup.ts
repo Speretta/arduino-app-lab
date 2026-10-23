@@ -28,7 +28,7 @@ export const setup: Extension = [
   highlightActiveLineGutter(),
   highlightActiveLine(),
   history(),
-  EditorView.baseTheme(editorViewStyle),
+  EditorView.theme(editorViewStyle),
   drawSelection(),
   dropCursor(),
   EditorState.allowMultipleSelections.of(true),

@@ -123,11 +123,9 @@ func excludeInotifyRegex() string {
 }
 
 // shellUnsafe: whitespace, shell metacharacters, control characters. Narrow
-// remit — it gates only the *watch roots* handed to isShellSafePath, because the
-// inotifywait argv in remote_inotify.go is the one path that still reaches the
-// board shell entirely unquoted (SSH's GetCmd raw-joins args, and ADB's quotes
-// only args that contain a space, so pre-quoting here would be double-quoted and
-// break).
+// remit — it gates only the *watch roots* handed to isShellSafePath (the
+// transports shell-quote the inotifywait argv like any other command, so this
+// filter is belt-and-braces, not the protection).
 //
 // In practice the roots are app directories, whose names the orchestrator
 // derives with slug.Make, plus the apps root — so none of this set occurs there
@@ -136,7 +134,7 @@ func excludeInotifyRegex() string {
 // It says nothing about the files *inside* a watched app: those are covered by
 // inotifywait's -r, never appear as an argument, and reach the shell only via
 // quoted conn.List/conn.ReadFile. Do not use this set for file names — see
-// isQuotedSafeName and IsCreatableName.
+// isQuotedSafeName.
 //
 // No '/': it is the separator, so it is checked per component. Interpreted (not
 // raw) string: the class contains a backtick, which a Go raw string literal
@@ -155,19 +153,9 @@ var shellUnsafe = regexp.MustCompile("[\\s;|&$`()<>\\\\\"'*?~#!{}\\[\\]\\x00-\\x
 // double quotes and therefore allowed in a filename.
 var expansionUnsafe = regexp.MustCompile("[$`]")
 
-// Illegal in a name on a Windows host — InitLspWorkspace mirrors names there.
-// '\\' joins them: it is that platform's separator and an escape character.
-var windowsUnsafe = regexp.MustCompile(`[<>:"|?*\\]`)
-
 // controlChars are rejected everywhere: unusable on the host filesystem and a
 // reliable sign something has gone wrong upstream.
 var controlChars = regexp.MustCompile("[\\x00-\\x1f]")
-
-// trailingDotsOrSpaces matches trailing dots or spaces which are invalid on Windows.
-var trailingDotsOrSpaces = regexp.MustCompile(`[. ]+$`)
-
-// reservedNames matches Windows reserved device names (case-insensitive).
-var reservedNames = regexp.MustCompile(`(?i)^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$`)
 
 // isShellSafePath validates a full path (e.g. "/home/arduino/ArduinoApps").
 // Every component must be shell-safe. Windows rules do NOT apply here,
@@ -188,50 +176,11 @@ func isShellSafePath(p string) bool {
 // counted and watched like any other.
 //
 // Windows rules deliberately do not apply: "log:2026.txt" already exists on the
-// board and is perfectly watchable; those rules belong at create/mirror time
-// (see IsCreatableName). '/' is rejected because a component containing one is
-// not a component — it would silently change the path once path.Join folds it in.
+// board and is perfectly watchable; those rules belong at create/mirror time.
+// '/' is rejected because a component containing one is not a component — it
+// would silently change the path once path.Join folds it in.
 func isQuotedSafeName(name string) bool {
 	return !expansionUnsafe.MatchString(name) &&
 		!controlChars.MatchString(name) &&
 		!strings.Contains(name, "/")
-}
-
-// IsCreatableName validates a name we are about to create, rename to, or mirror
-// onto the host. Deliberately much laxer than shellUnsafe: spaces and most
-// metacharacters are fine because conn.ReadFile/WriteFile quote the path, so
-// "my notes.txt" and "notes (draft).md" are ordinary, valid filenames.
-//
-// What must still go:
-//   - '$' and '`', which expand even inside the transports' double quotes;
-//   - the Windows-illegal set, trailing dots/spaces and reserved device names,
-//     because InitLspWorkspace mirrors names onto the host filesystem;
-//   - '/' and control characters, which are not usable in a name anywhere.
-//
-// Exported because it is the authoritative gate — the frontend performs the
-// same check for immediate feedback, but that check is bypassable, so the API
-// boundary in internal/app enforces this one.
-func IsCreatableName(name string) bool {
-	if name == "" {
-		return false
-	}
-	if expansionUnsafe.MatchString(name) {
-		return false
-	}
-	if controlChars.MatchString(name) {
-		return false
-	}
-	if windowsUnsafe.MatchString(name) {
-		return false
-	}
-	if trailingDotsOrSpaces.MatchString(name) {
-		return false
-	}
-	if reservedNames.MatchString(name) {
-		return false
-	}
-	if strings.Contains(name, "/") {
-		return false
-	}
-	return true
 }

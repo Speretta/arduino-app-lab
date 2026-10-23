@@ -75,9 +75,9 @@ export const CreateAppDialog: React.FC<CreateAppDialogProps> = ({
     return true;
   };
 
-  const { mutateAsync: createApp, isLoading } = useMutation(
-    ['crate-app'],
-    async () => {
+  const { mutateAsync: createApp, isPending } = useMutation({
+    mutationKey: ['crate-app'],
+    mutationFn: async () => {
       if (name.length === 0) {
         setErrorMessage(formatMessage(messages.appNameRequired));
         return;
@@ -89,6 +89,7 @@ export const CreateAppDialog: React.FC<CreateAppDialogProps> = ({
 
       try {
         const result = await confirmAction({ icon, name });
+
         if (result) {
           onOpenChange(false);
           sendNotification({
@@ -106,6 +107,7 @@ export const CreateAppDialog: React.FC<CreateAppDialogProps> = ({
           setErrorMessage(formatMessage(messages.appNameInUse));
           return;
         }
+
         if (
           error instanceof Error &&
           error.message === BOARD_STORAGE_FULL_ERROR
@@ -113,18 +115,19 @@ export const CreateAppDialog: React.FC<CreateAppDialogProps> = ({
           setErrorMessage(formatMessage(messages.storageFull));
           return;
         }
+
         const message =
           error instanceof Error
             ? error.message
             : formatMessage(
                 app ? messages.failedDuplicate : messages.failedCreate,
               );
+
         setErrorMessage(message);
         sendNotification({ message, variant: 'error' });
       }
     },
-  );
-
+  });
   const handleCreateApp = async (): Promise<void> => {
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
@@ -153,8 +156,8 @@ export const CreateAppDialog: React.FC<CreateAppDialogProps> = ({
               </Button>
               <Button
                 variant={ButtonVariant.Primary}
-                loading={isLoading}
-                disabled={name.length === 0 || isLoading}
+                loading={isPending}
+                disabled={name.length === 0 || isPending}
                 type="submit"
               >
                 {formatMessage(messages.confirmButton)}
@@ -183,7 +186,6 @@ export const CreateAppDialog: React.FC<CreateAppDialogProps> = ({
               onEnter={handleCreateApp}
               error={errorMessage ? new Error(errorMessage) : undefined}
               placeholder={formatMessage(messages.inputPlaceholder)}
-              /* eslint-disable-next-line jsx-a11y/no-autofocus */
               autoFocus
               classes={{
                 input: styles['app-name-input'],

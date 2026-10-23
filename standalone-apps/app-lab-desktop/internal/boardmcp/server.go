@@ -23,7 +23,7 @@ type Server struct {
 }
 
 // Start launches the board MCP server on 127.0.0.1:<random> with a per-run bearer token.
-func Start(access BoardAccess) (*Server, error) {
+func Start(access BoardAccess, installs *ModelInstaller) (*Server, error) {
 	token, err := randomToken()
 	if err != nil {
 		return nil, err
@@ -39,10 +39,12 @@ func Start(access BoardAccess) (*Server, error) {
 		registerBoardStatus(srv, access),
 		registerBoardsList(srv, access),
 		registerWifiStatus(srv, access),
+		registerWifiList(srv, access),
 		registerBricksList(srv, access),
 		registerBricksGet(srv, access),
 		registerAppBricksList(srv, access),
 		registerModelsList(srv, access),
+		registerModelsWaitInstalled(srv, access, installs),
 		registerSketchLibrariesList(srv, access),
 		registerSystemResources(srv, access),
 		registerSystemName(srv, access),
@@ -58,8 +60,12 @@ func Start(access BoardAccess) (*Server, error) {
 	registerAppBricksUpdate(srv, access)
 	registerAppBricksRemove(srv, access)
 	registerModelsDelete(srv, access)
+	registerModelsInstall(srv, access, installs)
+	registerModelsImportCustom(srv, access)
 	registerSketchLibrariesAdd(srv, access)
 	registerSketchLibrariesRemove(srv, access)
+	registerWifiConnect(srv, access)
+	registerWifiDisconnect(srv, access)
 	registerBoardExec(srv, access)
 
 	handler := mcp.NewStreamableHTTPHandler(

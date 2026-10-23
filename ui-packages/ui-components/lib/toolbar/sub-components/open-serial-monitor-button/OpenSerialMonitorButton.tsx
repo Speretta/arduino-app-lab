@@ -41,6 +41,9 @@ const OpenSerialMonitorButton: React.FC<OpenSerialMonitorButtonProps> = (
     <div
       id="serial-monitor"
       className={styles['open-serial-monitor-button-wrapper']}
+      ref={tooltipProps.ref}
+      onMouseEnter={tooltipProps.onMouseEnter}
+      onMouseLeave={tooltipProps.onMouseLeave}
     >
       <IconButton
         onPress={handleClick}
@@ -53,7 +56,7 @@ const OpenSerialMonitorButton: React.FC<OpenSerialMonitorButtonProps> = (
             disabled && styles['open-serial-monitor-button-disabled'],
           ),
         }}
-        {...tooltipProps}
+        aria-describedby={tooltipProps['aria-describedby']}
       >
         {formatMessage(messages.serialMonitor)}
       </IconButton>

@@ -3,12 +3,17 @@
 @use "./toolbar-common.module.scss";
 
 .toolbar {
+    // Indent the toolbar content so it lines up with the editor's left edge
+    // past the line-number gutter (the gutter's min-width in codeEditorStyle.ts).
+    // rc-97 derived this from the gutter-width vars; main's gutter is a fixed
+    // 48px min-width, so match it here. CE-only — App Lab uses EditorToolbar.
+    padding-left: 48px;
     padding-top: 14px;
     padding-bottom: 14px;
     padding-right: 14px;
     display: flex;
     align-items: center;
-    background: shared.theme-var(--toolbar-background);
+    background: var(--component-bg-below-1);
     position: relative;
 }
 
@@ -39,6 +44,11 @@ $busyButtonWidth: $toolbarButtonWidth * 2;
     width: $toolbarButtonWidth;
     svg {
         pointer-events: none;
+        // Fallback to the dark-theme on-accent value so the glyph is never
+        // invisible if --toolbar-button-primary-label doesn't resolve in this
+        // subtree (otherwise `fill` falls back to the SVG's currentColor, which
+        // .toolbar-items sets to transparent).
+        fill: var(--toolbar-button-primary-label, #1f272a);
     }
 }
 
@@ -50,27 +60,19 @@ $busyButtonWidth: $toolbarButtonWidth * 2;
     justify-content: center;
     border-radius: 20px;
     padding: 4px;
-
     margin-left: 12px;
-
-    & > svg > path {
-        fill: black;
-    }
-
     width: 40px;
     height: 40px;
 
     &:hover {
-        background-color: white;
+        background-color: var(--editor-background);
     }
 }
 
 .toolbar-button-disabled {
-    & > svg {
-        & > rect {
-            fill: shared.theme-var(--button-secondary-outline-active);
-        }
-    }
+    // Dim the whole button rather than recolouring the circle, so it reads as
+    // darker/lighter against whatever background it sits on.
+    opacity: 0.7;
 
     cursor: unset;
 }
@@ -82,19 +84,15 @@ $busyButtonWidth: $toolbarButtonWidth * 2;
     left: -120%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(
-        to right,
-        rgba(255, 255, 255, 0) 0%,
-        rgba(255, 255, 255, 0.5) 50%,
-        rgba(255, 255, 255, 0) 100%
-    );
+    background: linear-gradient(to right, transparent 0%, rgba(255, 255, 255, 0.5) 50%, transparent 100%);
     transform: skewX(-30deg);
     animation: shimmer 2.5s infinite;
 }
 
 .toolbar-button-icon-busy {
     display: flex;
-    background-color: shared.theme-var(--toolbar-button-primary-background);
+    // Busy pill is a primary button, so follow the accent (palette-aware) at 50% alpha rather than the hardcoded disabled token
+    background-color: color-mix(in srgb, var(--accent-default) 50%, transparent);
     width: $busyButtonWidth;
     height: 38px;
     border-radius: 30px;
@@ -139,7 +137,7 @@ $busyButtonWidth: $toolbarButtonWidth * 2;
 
 .toolbar-button-icon:not([disabled]) > svg:hover {
     & rect {
-        fill: #00979d; //correct variable needed
+        fill: var(--editor-syntax-highlight-constants);
     }
 }
 
@@ -162,7 +160,7 @@ $busyButtonWidth: $toolbarButtonWidth * 2;
         height: 16px;
 
         & path {
-            fill: shared.theme-var(--toolbar-button-primary-background);
+            fill: var(--accent-default);
         }
     }
 }
@@ -185,7 +183,7 @@ $busyButtonWidth: $toolbarButtonWidth * 2;
     }
 
     &:hover {
-        background-color: #fff;
+        background-color: var(--surface-bg-above);
     }
 }
 
@@ -229,14 +227,6 @@ $busyButtonWidth: $toolbarButtonWidth * 2;
     @extend .popover-container;
 }
 
-.upload-info-popover-container-smaller {
-    @extend .popover-container-smaller;
-}
-
-.upload-info-popover-container-smallest {
-    @extend .popover-container-smallest;
-}
-
 .upload-info-popover-container:hover {
     display: unset;
 }
@@ -268,14 +258,6 @@ $busyButtonWidth: $toolbarButtonWidth * 2;
     @extend .popover-container;
 }
 
-.board-bubble-popover-container-smaller {
-    @extend .popover-container-smaller;
-}
-
-.board-bubble-popover-container-smallest {
-    @extend .popover-container-smallest;
-}
-
 .associated-device-info-button-container:hover > .board-bubble-popover-container {
     display: unset;
 }
@@ -291,6 +273,16 @@ $busyButtonWidth: $toolbarButtonWidth * 2;
 .divider {
     width: 1px;
     height: 100%;
-    background-color: #c9d2d2;
+    background-color: var(--border-default);
     margin: 12px;
+}
+
+.toolbar-icon-background {
+    background-color: var(--accent-default);
+    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }

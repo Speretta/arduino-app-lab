@@ -1,10 +1,12 @@
 import { createRouter } from '@tanstack/react-router';
 
+import RouteError from './features/route-error/RouteError';
 import { routeTree } from './routeTree.gen';
 
 const router = createRouter({
   routeTree,
   defaultHashScrollIntoView: true,
+  defaultErrorComponent: RouteError,
 });
 
 // Register the router instance for type safety

@@ -7,15 +7,13 @@ import {
   validateFileNameLimit,
 } from '@cloud-editor-mono/domain';
 import {
+  type OnBeforeFileAction,
   FileNameValidation,
   FileNameValidationItem,
+  NewTabMenuItemIds,
+  TabMenuItemIds,
   useI18n,
 } from '@cloud-editor-mono/ui-components';
-import {
-  NewTabMenuItemIds,
-  OnBeforeFileAction,
-  TabMenuItemIds,
-} from '@cloud-editor-mono/ui-components/lib/editor-tabs-bar';
 import { useMatch } from '@tanstack/react-location';
 import { useCallback, useContext, useEffect, useMemo } from 'react';
 import { useLocation as reactUse_useLocation } from 'react-use';
@@ -32,7 +30,6 @@ import {
 } from '../../../../routing/Router';
 import {
   BYPASS_IOT_REDIRECT,
-  BYPASS_OPT_IN,
   CREATE_EXAMPLE_PARAM,
   CREATE_SKETCH_PARAM,
   CUSTOM_LIBRARY_ID_PARAM,
@@ -138,7 +135,6 @@ export const useSketchParams = function (): ReturnType<UseSketchParams> {
     exampleID: params.get(EXAMPLE_ID_PARAM) || undefined,
     createExampleParam: Boolean(params.get(CREATE_EXAMPLE_PARAM)),
     createSketchParam: Boolean(params.get(CREATE_SKETCH_PARAM)),
-    bypassOptIn: Boolean(params.get(BYPASS_OPT_IN)),
     bypassIotRedirect: Boolean(params.get(BYPASS_IOT_REDIRECT)),
     viewMode,
     scope,

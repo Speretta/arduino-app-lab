@@ -1,9 +1,6 @@
-@use "./theme-classes.module.scss";
-@use "./shared.module.scss";
-
 :root {
-  color: shared.theme-var(--editor-syntax-highlight-neutral);
-  background-color: shared.theme-var(--editor-background);
+  color: var(--editor-syntax-highlight-neutral);
+  background-color: var(--editor-background);
 }
 
 //TODO tokens needed for scrollbar styling
@@ -14,16 +11,16 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: shared.theme-var(--editor-lines-background);
+  background: var(--editor-lines-background);
 }
 
-// 4px transparent padding around the vertical and horizontal scrollbar
-// thumbs, achieved with a transparent border clipped to the padding box so
-// the visible thumb stays inset from the track edges.
+// Visible grey thumb (rc-97 value) inset within the track: the 4px border is
+// painted in the track colour so the thumb reads as padded. The previous
+// rgba(0,0,0,0.5) thumb was near-invisible against the dark track.
+// TODO: replace #7f8c8d with a design-system token once one exists.
 ::-webkit-scrollbar-thumb {
-  background-color: var(--component-bg-scrim, rgba(0, 0, 0, 0.5));
-  background-clip: padding-box;
-  border: 4px solid transparent;
+  background-color: #7f8c8d;
+  border: 4px solid var(--editor-lines-background);
   border-radius: 10px;
 }
 
@@ -45,6 +42,62 @@
   }
 }
 
+// ANSI terminal foreground color classes (used by CodeMirror console decorations)
+.ansi-fg-black         { color: var(--ansi-black,          #4c4c4c); }
+.ansi-fg-red           { color: var(--ansi-red,            #cc3333); }
+.ansi-fg-green         { color: var(--ansi-green,          #4e9a06); }
+.ansi-fg-yellow        { color: var(--ansi-yellow,         #c4a000); }
+.ansi-fg-blue          { color: var(--ansi-blue,           #3465a4); }
+.ansi-fg-magenta       { color: var(--ansi-magenta,        #75507b); }
+.ansi-fg-cyan          { color: var(--ansi-cyan,           #06989a); }
+.ansi-fg-white         { color: var(--ansi-white,          #d3d7cf); }
+.ansi-fg-bright-black  { color: var(--ansi-bright-black,   #888888); }
+.ansi-fg-bright-red    { color: var(--ansi-bright-red,     #ef2929); }
+.ansi-fg-bright-green  { color: var(--ansi-bright-green,   #8ae234); }
+.ansi-fg-bright-yellow { color: var(--ansi-bright-yellow,  #fce94f); }
+.ansi-fg-bright-blue   { color: var(--ansi-bright-blue,    #729fcf); }
+.ansi-fg-bright-magenta{ color: var(--ansi-bright-magenta, #ad7fa8); }
+.ansi-fg-bright-cyan   { color: var(--ansi-bright-cyan,    #34e2e2); }
+.ansi-fg-bright-white  { color: var(--ansi-bright-white,   #eeeeec); }
+
+// ANSI background colors
+.ansi-bg-black         { background-color: var(--ansi-black,          #4c4c4c); }
+.ansi-bg-red           { background-color: var(--ansi-red,            #cc3333); }
+.ansi-bg-green         { background-color: var(--ansi-green,          #4e9a06); }
+.ansi-bg-yellow        { background-color: var(--ansi-yellow,         #c4a000); }
+.ansi-bg-blue          { background-color: var(--ansi-blue,           #3465a4); }
+.ansi-bg-magenta       { background-color: var(--ansi-magenta,        #75507b); }
+.ansi-bg-cyan          { background-color: var(--ansi-cyan,           #06989a); }
+.ansi-bg-white         { background-color: var(--ansi-white,          #d3d7cf); }
+.ansi-bg-bright-black  { background-color: var(--ansi-bright-black,   #888888); }
+.ansi-bg-bright-red    { background-color: var(--ansi-bright-red,     #ef2929); }
+.ansi-bg-bright-green  { background-color: var(--ansi-bright-green,   #8ae234); }
+.ansi-bg-bright-yellow { background-color: var(--ansi-bright-yellow,  #fce94f); }
+.ansi-bg-bright-blue   { background-color: var(--ansi-bright-blue,    #729fcf); }
+.ansi-bg-bright-magenta{ background-color: var(--ansi-bright-magenta, #ad7fa8); }
+.ansi-bg-bright-cyan   { background-color: var(--ansi-bright-cyan,    #34e2e2); }
+.ansi-bg-bright-white  { background-color: var(--ansi-bright-white,   #eeeeec); }
+
+// ANSI character attributes
+.ansi-bold      { font-weight: bold; }
+.ansi-dim       { opacity: 0.6; }
+.ansi-italic    { font-style: italic; }
+.ansi-underline { text-decoration: underline; }
+.ansi-strike    { text-decoration: line-through; }
+.ansi-underline.ansi-strike { text-decoration: underline line-through; }
+
+.ansi-blink {
+  animation: ansi-blink 1s steps(2, start) infinite;
+}
+
+@keyframes ansi-blink {
+  to { visibility: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ansi-blink { animation: none; }
+}
+
 #ce-body {
   margin: 0;
   height: 100vh;
@@ -64,4 +117,13 @@
   position: absolute;
   white-space: nowrap;
   width: 1px;
+}
+
+// `react-resizable-panels` renders `div[data-panel]` with an inline `height: auto`. Every level with
+// an indefinite height above the editor costs WebKitGTK one more intrinsic-sizing pass on each caret
+// move after a DOM change, and the cost multiplies per level. `!important` is needed to beat the
+// inline style; `className` and `style` reach only the inner div, whose height each component sets
+// itself. A panel in a vertical group keeps its size: `flex-basis` decides that, not `height`.
+[data-panel] {
+  height: 100% !important;
 }

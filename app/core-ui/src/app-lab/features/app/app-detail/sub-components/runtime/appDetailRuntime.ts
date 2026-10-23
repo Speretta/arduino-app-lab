@@ -1,12 +1,13 @@
 import {
   getAppLogs,
   getSerialMonitorLogs,
+  onAgentModelImport,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import {
+  AppBrickListItem,
   AppDetailedInfo,
   AppStatus,
   BrickCreateUpdateRequest,
-  BrickInstance,
   MessageData,
   UpdateAppDetailRequest,
 } from '@cloud-editor-mono/infrastructure';
@@ -25,6 +26,7 @@ import {
   SwapRunningAppDialogLogic,
   TabsLogic,
   TreeNode,
+  useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import {
   useCallback,
@@ -37,19 +39,27 @@ import {
 import { usePreviousDistinct } from 'react-use';
 import { BehaviorSubject, Subject } from 'rxjs';
 
-import { useAiModels } from '../../../../../providers/ai-models/aiModelsContext';
+import { useInstalledAIModels } from '../../../../../hooks/useInstalledAIModels';
+import {
+  clearPendingModelImport,
+  peekPendingModelImport,
+  setModelImportSubscribed,
+  stashModelImport,
+} from '../../../../../openAppFile';
 import { CloudConnectorContext } from '../../../../../providers/cloud-connector/cloudConnectorContext';
 import { RuntimeContext } from '../../../../../providers/runtime/runtimeContext';
 import { useBoardLifecycleStore } from '../../../../../store/boardLifecycle';
+import { notifyDefaultAppSet } from '../../../default-app/notifyDefaultAppSet';
 import { useAppSSE } from '../../hooks/useAppSSE';
 import { useAppWebSocket } from '../../hooks/useAppWebSocket';
-import { checkIfHasIno, checkIfHasPython } from '../../utils/checkFileTypes';
 import { LINE_SEPARATOR } from '../../utils/constants';
 
 export type UseAppDetailRuntimeLogic = (
   app?: AppDetailedInfo,
-  appBricks?: BrickInstance[],
-  fileTree?: TreeNode[],
+  appBricks?: AppBrickListItem[],
+  // The app's root entries. A `python` / `sketch` folder there is what says
+  // which log streams the running app has.
+  rootNodes?: TreeNode[],
   openApp?: (app: AppDetailedInfo) => void,
   updateApp?: (request: UpdateAppDetailRequest) => Promise<boolean>,
   updateAppBricks?: (
@@ -74,14 +84,15 @@ export type UseAppDetailRuntimeLogic = (
 
 export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
   app?: AppDetailedInfo,
-  appBricks?: BrickInstance[],
-  fileTree?: TreeNode[],
+  appBricks?: AppBrickListItem[],
+  rootNodes?: TreeNode[],
   openApp?: (app: AppDetailedInfo) => void,
   updateApp?: (request: UpdateAppDetailRequest) => Promise<boolean>,
   updateAppBricks?: (
     bricks: Record<string, BrickCreateUpdateRequest>,
   ) => Promise<boolean>,
 ): ReturnType<UseAppDetailRuntimeLogic> {
+  const { formatMessage } = useI18n();
   const [open, setOpen] = useState(false);
 
   const panels = useMemo(() => ['editor', 'console'] as const, []);
@@ -114,7 +125,7 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
       stopAction,
       swapAction,
     },
-    consoleLogic: {
+    consoleState: {
       consoleSources,
       consoleTabs,
       activeConsoleTab,
@@ -127,7 +138,52 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
   } = useContext(RuntimeContext);
   const { status, showRequiredDialog } = useContext(CloudConnectorContext);
 
-  const { getInstalledModel } = useAiModels();
+  const { getInstalledModel } = useInstalledAIModels();
+
+  // The agent can only ask; the Edge Impulse key stays with App Lab, so the user picks the model in this dialog.
+  // Being subscribed is what tells Main to hand the request over directly instead of stashing it and navigating.
+  const appId = app?.id;
+  const bricksLoaded = appBricks !== undefined;
+  useEffect(() => {
+    if (!appId) {
+      return;
+    }
+    setModelImportSubscribed(appId, true);
+    // The dialog names the model in its message, so resolve it like the run-time check below does.
+    const openPicker = (brickId: string): void =>
+      aiModelRequired.open({
+        brickId,
+        modelId: appBricks?.find((brick) => brick.id === brickId)?.model,
+      });
+
+    const stashed = peekPendingModelImport(appId);
+    // Only the bricks name the model, so a request that beats them is parked for the rerun their arrival causes.
+    if (stashed && bricksLoaded) {
+      clearPendingModelImport(appId);
+      openPicker(stashed);
+    }
+    const unsubscribe = onAgentModelImport((requestedApp, brickId) => {
+      if (requestedApp !== appId) {
+        return;
+      }
+      if (bricksLoaded) {
+        openPicker(brickId);
+      } else {
+        stashModelImport(appId, brickId);
+      }
+    });
+    return () => {
+      setModelImportSubscribed(appId, false);
+      unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appId, appBricks]);
+
+  const startApp = useCallback((): void => {
+    if (!app) return;
+    runAction(app, setOpen);
+    setActivePanel('console');
+  }, [app, runAction]);
 
   const runApp = useCallback((): void => {
     if (!app) return;
@@ -160,8 +216,7 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
     ) {
       setConfigureAppBricksDialogOpen(true);
     } else {
-      runAction(app, setOpen);
-      setActivePanel('console');
+      startApp();
     }
   }, [
     app,
@@ -170,24 +225,32 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
     showRequiredDialog,
     getInstalledModel,
     aiModelRequired,
-    runAction,
+    startApp,
   ]);
 
   const setAsDefaultApp = useCallback(
     async (isSelected: boolean): Promise<void> => {
-      if (!updateApp) return;
-      await updateApp({
+      if (!updateApp || !app) return;
+      const result = await updateApp({
         default: isSelected,
       });
+      if (result && isSelected) {
+        notifyDefaultAppSet(app, formatMessage);
+      }
     },
-    [updateApp],
+    [app, formatMessage, updateApp],
   );
 
   const onMessageLogs = useCallback(
     (message: MessageData) => {
-      if (!message.id) return; //Some bricks are returning empty ids, this line prevents the logging of those
+      // Brick containers get one tab each, labeled "brick_id [container_name]".
+      const tabKey =
+        message.id !== CONSOLE_SOURCE_KEYS.PYTHON
+          ? `${message.id} [${message.container_name}]`
+          : message.id;
+      if (!tabKey) return; // some bricks emit empty ids: skip to avoid a bogus tab
       if (app?.id) {
-        appendData(app.id, message.id, message, true);
+        appendData(app.id, tabKey, message, true);
       }
     },
     [appendData, app?.id],
@@ -235,35 +298,47 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
     if (!app) return;
 
     createMonitorSourceOnMsg.current = false;
-    getSerialMonitorLogsAbort();
-    getAppLogsAbort();
 
     setActivePanel('console');
     stopAction(app);
-  }, [app, getAppLogsAbort, getSerialMonitorLogsAbort, stopAction]);
+  }, [app, stopAction]);
 
   useEffect(() => {
-    if (currentActionStatus !== ActionStatus.Pending) {
-      if (!getAppLogsAbortController.current && !socketRef.current) {
-        resetCurrentAction();
-      }
+    if (
+      currentActionStatus !== ActionStatus.Pending &&
+      app?.status !== 'running'
+    ) {
+      resetCurrentAction();
+    }
+  }, [app?.status, currentActionStatus, resetCurrentAction]);
+
+  // The streams stay open until the app status leaves 'running', so output
+  // written while the app shuts down still arrives. No stream connects while a
+  // stop is in progress: every log connect replays the tail, so a page opened
+  // again during a stop would print that history twice. A failed stop leaves
+  // the app running, so connecting is allowed again once the stop has errored.
+  const isStopping =
+    currentAction === Action.Stop &&
+    currentActionStatus !== ActionStatus.Errored;
+
+  useEffect(() => {
+    const appId = app?.id;
+    if (!appId || !rootNodes || app?.status !== 'running' || isStopping) {
+      return;
     }
 
-    if (!app?.id || !fileTree || app.status !== 'running') return;
+    const hasRootFolder = (name: string): boolean =>
+      rootNodes.some((node) => node.type === 'folder' && node.name === name);
 
-    const hasPython = fileTree ? checkIfHasPython(fileTree[0]) : false;
-    const hasIno = fileTree ? checkIfHasIno(fileTree[0]) : false;
-
-    if (hasPython) {
-      addConsoleSource(app.id, CONSOLE_SOURCE_KEYS.PYTHON);
+    if (hasRootFolder('python')) {
       if (!getAppLogsAbortController.current) {
-        getAppLogsStream(app.id);
+        getAppLogsStream(appId);
       }
     }
 
-    if (hasIno) {
+    if (hasRootFolder('sketch')) {
       createMonitorSourceOnMsg.current = true;
-      addConsoleSource(app.id, CONSOLE_SOURCE_KEYS.SERIAL_MONITOR);
+      addConsoleSource(appId, CONSOLE_SOURCE_KEYS.SERIAL_MONITOR);
       if (!socketRef.current && !socketIsConnectingRef.current) {
         getSerialMonitorLogsStream();
       }
@@ -272,12 +347,11 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
     addConsoleSource,
     app?.id,
     app?.status,
-    currentActionStatus,
-    fileTree,
+    rootNodes,
+    isStopping,
     getAppLogsAbortController,
     getAppLogsStream,
     getSerialMonitorLogsStream,
-    resetCurrentAction,
     socketIsConnectingRef,
     socketRef,
   ]);
@@ -299,10 +373,13 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
         resetCurrentAction();
 
         if (currentAppId) {
-          resetConsoleSources(currentAppId, [
-            CONSOLE_SOURCE_KEYS.SERIAL_MONITOR,
-            CONSOLE_SOURCE_KEYS.PYTHON,
-          ]);
+          // "App launch" is only relevant while starting, so drop it but keep
+          // the real log sources so their history survives navigation.
+          const currentKeys = Object.keys(consoleSources[currentAppId] || {});
+          resetConsoleSources(
+            currentAppId,
+            currentKeys.filter((k) => k !== CONSOLE_SOURCE_KEYS.STARTUP),
+          );
         }
       }
     };
@@ -329,6 +406,38 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
     setActiveConsoleTab(currentAppId, currentTabs[0]);
   }, [app?.id, activeConsoleTab, consoleTabs, setActiveConsoleTab]);
 
+  // The source reset below clears the active tab in the same commit as this
+  // effect and its update lands later, so the Python choice has to be
+  // re-asserted once the tab is empty again. While stopping it is not, because
+  // the stop log goes to "App launch".
+  const pythonTabAppliedRef = useRef(false);
+  useEffect(() => {
+    const currentAppId = app?.id;
+    if (!currentAppId) return;
+
+    if (app?.status !== 'running') {
+      pythonTabAppliedRef.current = false;
+      return;
+    }
+    if (currentAction === Action.Stop) return;
+
+    const currentTabs = consoleTabs[currentAppId] || [];
+    if (!currentTabs.includes(CONSOLE_SOURCE_KEYS.PYTHON)) return;
+
+    // A tab the user picked stays picked; only an empty one is re-asserted.
+    if (pythonTabAppliedRef.current && activeConsoleTab[currentAppId]) return;
+
+    pythonTabAppliedRef.current = true;
+    setActiveConsoleTab(currentAppId, CONSOLE_SOURCE_KEYS.PYTHON);
+  }, [
+    app?.status,
+    app?.id,
+    activeConsoleTab,
+    consoleTabs,
+    currentAction,
+    setActiveConsoleTab,
+  ]);
+
   useEffect(() => {
     if (app?.status !== 'running') {
       createMonitorSourceOnMsg.current = false;
@@ -346,14 +455,17 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
       keysToRemain.push(CONSOLE_SOURCE_KEYS.STARTUP);
     }
 
-    // Keep Serial Monitor and Python if it's running OR if an action is in progress
+    // "App launch" is transient, so keep it only while an action runs; the
+    // real log sources are kept below whenever the app is running.
     if (
       currentAction !== null ||
       !!prevCurrentAction ||
       app?.status === 'running'
     ) {
-      keysToRemain.push(CONSOLE_SOURCE_KEYS.SERIAL_MONITOR);
-      keysToRemain.push(CONSOLE_SOURCE_KEYS.PYTHON);
+      const currentKeys = Object.keys(consoleSources[app?.id || ''] || {});
+      keysToRemain.push(
+        ...currentKeys.filter((k) => k !== CONSOLE_SOURCE_KEYS.STARTUP),
+      );
     }
 
     if (app?.id) {
@@ -375,8 +487,10 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
       confirmAction: async (bricks): Promise<boolean> => {
         if (!updateAppBricks) return false;
         const result = await updateAppBricks(bricks);
+        // This closure holds the bricks from before the save, so running the
+        // Run checks again here would reopen this dialog.
         if (result) {
-          runApp();
+          startApp();
         }
         return result;
       },
@@ -384,7 +498,7 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
 
   const configureAppBricksDialogLogic = useCallback(
     useConfigureAppBricksDialogLogic,
-    [appBricks, configureAppBricksDialogOpen, runApp, updateAppBricks],
+    [appBricks, configureAppBricksDialogOpen, startApp, updateAppBricks],
   );
 
   const isActiveApp =
@@ -396,13 +510,16 @@ export const useAppDetailRuntimeLogic: UseAppDetailRuntimeLogic = function (
     () => ({
       open,
       setOpen,
+      runningAppName: runningApp?.name ?? '',
+      newAppName: app?.name ?? '',
+      runningAppIsDefault: !!runningApp && runningApp.id === defaultApp?.id,
       handleSwap: (): void => {
         if (!app) return;
         swapAction(app);
         setOpen(false);
       },
     }),
-    [app, open, swapAction],
+    [app, defaultApp?.id, open, runningApp, swapAction],
   );
 
   const serialMonitorLogic: SerialMonitorLogic = useCallback(

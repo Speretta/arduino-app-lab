@@ -17,12 +17,16 @@ export { CodeBlock } from './CodeBlock/CodeBlock';
 export { ConfirmDialog } from './ConfirmDialog/ConfirmDialog';
 export { InlineDiff } from './DiffBlock/InlineDiff';
 export { ExpandableCard } from './ExpandableCard/ExpandableCard';
-export { Header } from './Header/Header';
 export { Heading } from './Heading/Heading';
 export { FileOpenProvider, useFileOpen } from './Link/FileOpenContext';
 export { Link } from './Link/Link';
 export { List } from './List/List';
-export { openInSystemBrowser } from './openInSystemBrowser';
+export {
+  type PickerOptionContent,
+  type PickerProps,
+  Picker,
+  pickerStyles,
+} from './Picker/Picker';
 export { ProgressBar } from './ProgressBar/ProgressBar';
 export {
   type PromptAction,
@@ -41,9 +45,12 @@ export {
 } from './Timeline/Timeline';
 export { Toast } from './Toast/Toast';
 export {
+  fileNameFromPath,
   formatToolTitle,
-  stripKeyFromPath,
+  mcpToolName,
+  stripKeysFromText,
   webToolLabel,
 } from './ToolCall/formatToolTitle';
 export { ToolCall } from './ToolCall/ToolCall';
 export { Typing } from './Typing/Typing';
+export { WorkspaceChip } from './WorkspaceChip/WorkspaceChip';

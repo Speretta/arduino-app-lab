@@ -1,0 +1,4 @@
+// Composer-toolbar width below which the first picker flips its menu to the
+// left edge: a right-aligned menu on a trigger near the left edge extends past
+// the panel, whose overflow then clips it.
+$narrow-toolbar-max-width: 560px;

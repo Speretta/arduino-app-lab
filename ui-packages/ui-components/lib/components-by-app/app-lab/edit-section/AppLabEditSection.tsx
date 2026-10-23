@@ -1,10 +1,11 @@
 import { ArduinoLogo } from '@cloud-editor-mono/images/assets/icons';
-import type { BrickInstance } from '@cloud-editor-mono/infrastructure';
+import type { AppBrickListItem } from '@cloud-editor-mono/infrastructure';
 import {
   AppLabEditorPanel,
   Banner,
   BRICK_FILE_EXTENSION,
   isFileNode,
+  LspReferencesPanel,
   MultipleConsolePanel,
   useI18n,
   WorkspaceLayout,
@@ -70,7 +71,18 @@ const AppFilesSection: React.FC<AppEditSectionProps> = (
     openImportFileDialog,
     onMoveBlocked,
     onDragOverFolderChange,
-    onValidationError,
+    onFolderExpand,
+    checkPathConflict,
+    closeFolder,
+    sendAppLabNotification,
+    lspReferencesResult,
+    closeLspReferences,
+    lspGoToReference,
+    hasSketch,
+    boardOffline,
+    boardType,
+    addSketch,
+    openNetworkSettings,
   } = appLabEditSectionLogic();
 
   const { lspState } = appLabEditorPanelLogic();
@@ -81,8 +93,8 @@ const AppFilesSection: React.FC<AppEditSectionProps> = (
     draggingFileNodesRef.current = nodes;
   }, []);
 
-  const draggingBrickRef = useRef<BrickInstance | null>(null);
-  const onBrickDragStart = useCallback((brick: BrickInstance): void => {
+  const draggingBrickRef = useRef<AppBrickListItem | null>(null);
+  const onBrickDragStart = useCallback((brick: AppBrickListItem): void => {
     draggingBrickRef.current = brick;
   }, []);
   const onBrickDragEnd = useCallback((): void => {
@@ -133,7 +145,15 @@ const AppFilesSection: React.FC<AppEditSectionProps> = (
       onBrickDragStart,
       onBrickDragEnd,
       onDragOverFolderChange,
-      onValidationError,
+      onFolderExpand,
+      checkPathConflict,
+      closeFolder,
+      sendAppLabNotification,
+      hasSketch,
+      boardOffline,
+      boardType,
+      addSketch,
+      openNetworkSettings,
     }),
     [
       app,
@@ -176,7 +196,15 @@ const AppFilesSection: React.FC<AppEditSectionProps> = (
       onBrickDragStart,
       onBrickDragEnd,
       onDragOverFolderChange,
-      onValidationError,
+      onFolderExpand,
+      checkPathConflict,
+      closeFolder,
+      sendAppLabNotification,
+      hasSketch,
+      boardOffline,
+      boardType,
+      addSketch,
+      openNetworkSettings,
     ],
   );
 
@@ -195,7 +223,8 @@ const AppFilesSection: React.FC<AppEditSectionProps> = (
 
   useEffect(() => {
     const clearPreview = (): void => {
-      draggingFileNodesRef.current = null;
+      // Don't clear the ref here - only clear the visual preview
+      // The ref should only be cleared on dragend or drop
       setDragPreview(null);
     };
 
@@ -253,32 +282,32 @@ const AppFilesSection: React.FC<AppEditSectionProps> = (
       e.preventDefault();
       e.stopPropagation();
 
-      // Decide the target pane once for the whole drop so multi-file and
+      // Decide the target panel once for the whole drop so multi-file and
       // folder drops land together.
       const editorEl = e.currentTarget as HTMLElement;
-      const rightPaneEl = editorEl.querySelector<HTMLElement>('#split-right');
-      let targetPane: 'A' | 'B' = 'A';
-      if (rightPaneEl) {
-        if (e.clientX >= rightPaneEl.getBoundingClientRect().left) {
-          targetPane = 'B';
+      const rightPanelEl = editorEl.querySelector<HTMLElement>('#split-right');
+      let targetPanel: 'A' | 'B' = 'A';
+      if (rightPanelEl) {
+        if (e.clientX >= rightPanelEl.getBoundingClientRect().left) {
+          targetPanel = 'B';
         }
       } else {
         const rect = editorEl.getBoundingClientRect();
         // Must match FileTreeDropOverlay's CREATE_B_THRESHOLD.
         if (e.clientX - rect.left > rect.width * 0.7) {
-          targetPane = 'B';
+          targetPanel = 'B';
         }
       }
 
       if (brick) {
-        setSelectedFile(brick.id, false, targetPane);
+        setSelectedFile(brick.id, false, targetPanel);
         return;
       }
 
       if (!nodes) return;
       nodes.forEach((node) => {
         if (isFileNode(node)) {
-          setSelectedFile(node, false, targetPane);
+          setSelectedFile(node, false, targetPanel);
         } else {
           const getAllFilesInFolder = (folderNode: TreeNode): TreeNode[] => {
             const files: TreeNode[] = [];
@@ -294,7 +323,7 @@ const AppFilesSection: React.FC<AppEditSectionProps> = (
           };
 
           getAllFilesInFolder(node).forEach((file) => {
-            setSelectedFile(file, false, targetPane);
+            setSelectedFile(file, false, targetPanel);
           });
         }
       });
@@ -305,6 +334,9 @@ const AppFilesSection: React.FC<AppEditSectionProps> = (
   const editorHasOpenFile =
     (selectedNode && isFileNode(selectedNode)) ||
     selectedFile?.fileExtension === BRICK_FILE_EXTENSION;
+
+  const showLspReferencesPanel =
+    !!lspReferencesResult && !!closeLspReferences && !!lspGoToReference;
 
   return (
     <>
@@ -320,6 +352,15 @@ const AppFilesSection: React.FC<AppEditSectionProps> = (
             logic={filesManagerSectionLogic}
           />
         )}
+        referencesContent={
+          showLspReferencesPanel ? (
+            <LspReferencesPanel
+              result={lspReferencesResult}
+              onClose={closeLspReferences}
+              onOpenRow={lspGoToReference}
+            />
+          ) : null
+        }
         editorContent={
           <div
             ref={editorRef}

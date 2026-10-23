@@ -24,7 +24,6 @@ import {
   getBricks,
   getConfig,
   getFileContent,
-  getFiles,
   getSerialMonitorLogs,
   getSketchLibraries,
   getSystemProperty,
@@ -339,16 +338,6 @@ describe('orchestratorService.impl + MockOrchestratorService - startApp / stopAp
 });
 
 describe('orchestratorService.impl + MockOrchestratorService - Files', () => {
-  it('getFiles ritorna un array di TreeNode', async () => {
-    const files = await getFiles('/myapp');
-
-    expect(Array.isArray(files)).toBe(true);
-    expect(files.length).toBeGreaterThan(0);
-    expect(files[0]).toHaveProperty('name');
-    expect(files[0]).toHaveProperty('type');
-    expect(files[0]).toHaveProperty('path');
-  });
-
   it('getFileContent ritorna contenuto mock per README.md', async () => {
     const content = await getFileContent('/myapp/README.md');
 

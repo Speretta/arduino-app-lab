@@ -1,12 +1,13 @@
 import {
   Board,
-  Carrier,
-  CarrierDeviceType,
-  CarriersStatus,
   ConnectionType,
+  HwDeviceType,
+  HwKind,
+  HwList,
+  HwStatus,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 
-import { board, carrier } from '../../wailsjs/go/models';
+import { board, carrier, hw } from '../../wailsjs/go/models';
 
 function mapProtocol(protocol: string): ConnectionType {
   switch (protocol) {
@@ -38,35 +39,78 @@ export function mapGetBoards(boards: board.Board[]): Board[] {
   return boards.map(mapBoard);
 }
 
-export function mapCarrier(carrier: carrier.Carrier): Carrier {
+export function mapCarriers(carriers: carrier.CarrierResponse): HwList {
   return {
-    name: carrier.name,
-    devices: carrier.devices.map((device) => ({
-      name: device.name,
-      deviceType: device.device_type as CarrierDeviceType,
-      availableDevices: device.available_devices,
+    mounts: carriers.carriers.map((carrier) => ({
+      name: carrier.name,
+      kind: 'carrier',
+      devices: carrier.devices.map((device) => ({
+        name: device.name,
+        deviceType: device.device_type as HwDeviceType,
+        options: device.available_devices,
+        osSupport: true,
+      })),
+      osSupport: true,
     })),
   };
 }
 
 export function mapCarriersStatus(
   carriersStatus: carrier.ShowResult,
-): CarriersStatus {
+): HwStatus {
   return {
-    carriers: carriersStatus.carriers.map((carrier) => ({
-      carrierName: carrier.carrier_name,
-      current: carrier.current.map((device) => ({
+    mounts: carriersStatus.carriers.map((carrier) => ({
+      name: carrier.carrier_name,
+      kind: 'carrier',
+      currentDevices: carrier.current.map((device) => ({
         device: device.device,
         option: device.option,
-        deviceType: device.device_type as CarrierDeviceType,
+        deviceType: device.device_type as HwDeviceType,
       })),
       currentEnabled: carrier.current_enabled,
-      next: carrier.next.map((device) => ({
+      nextDevices: carrier.next.map((device) => ({
         device: device.device,
         option: device.option,
-        deviceType: device.device_type as CarrierDeviceType,
+        deviceType: device.device_type as HwDeviceType,
       })),
       nextEnabled: carrier.next_enabled,
+    })),
+  };
+}
+
+export function mapHwList(result: hw.ListResult): HwList {
+  return {
+    mounts: result.mounts.map((mount) => ({
+      name: mount.name,
+      kind: mount.kind as HwKind,
+      devices: mount.devices.map((device) => ({
+        name: device.name,
+        deviceType: device.device_type as HwDeviceType,
+        options: device.options,
+        osSupport: device.os_support,
+      })),
+      osSupport: mount.os_support,
+    })),
+  };
+}
+
+export function mapHwShow(result: hw.ShowResult): HwStatus {
+  return {
+    mounts: result.mounts.map((mount) => ({
+      currentDevices: mount.current.map((device) => ({
+        device: device.device,
+        deviceType: device.device_type as HwDeviceType,
+        option: device.option,
+      })),
+      currentEnabled: mount.current_enabled,
+      kind: mount.kind as HwKind,
+      name: mount.name,
+      nextDevices: mount.next.map((device) => ({
+        device: device.device,
+        deviceType: device.device_type as HwDeviceType,
+        option: device.option,
+      })),
+      nextEnabled: mount.next_enabled,
     })),
   };
 }

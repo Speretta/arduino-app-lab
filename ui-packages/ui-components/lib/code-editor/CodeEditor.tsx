@@ -16,6 +16,7 @@ import styleVars from './code-editor-variables.module.scss';
 import { CodeEditorLogic, EditorBannerKind } from './codeEditor.type';
 import CodeEditorElement from './CodeEditorElement';
 import { useContextMenu } from './hooks/useContextMenu';
+import { ContextMenuScrollArea } from './sub-components/ContextMenuScrollArea';
 
 const skeletonChildren = Number(styleVars.skeletonChildren);
 
@@ -63,15 +64,16 @@ const CodeEditor: React.FC<CodeEditorProps> = (props: CodeEditorProps) => {
     isLspEnabled,
     selectFile,
     lspClients,
-    filesList,
     startLSP,
     sendLspMessage,
     subscribeLspMessages,
     getLspWorkspaceFile,
     setLspFileValue,
     ensureLspFileValue,
-    getActivePane,
+    getActiveEditorPanel,
     onLspStateChange,
+    showLspReferences,
+    closeLspReferences,
   } = codeEditorLogic();
   const code = getCode?.();
 
@@ -123,15 +125,17 @@ const CodeEditor: React.FC<CodeEditorProps> = (props: CodeEditorProps) => {
     disabledKeys,
     sections: contextMenuSections,
     setIsOpen,
-  } = useContextMenu(
-    viewInstances[viewInstanceId].instance,
+  } = useContextMenu({
+    viewInstance: viewInstances[viewInstanceId].instance,
     setCode,
     code,
     isLspEnabled,
     lspClients,
-    getCodeExt?.(),
+    currentFileExt: getCodeExt?.(),
     readOnly,
-  );
+    showLspReferences,
+    closeLspReferences,
+  });
 
   const { formatMessage } = useI18n();
 
@@ -174,7 +178,6 @@ const CodeEditor: React.FC<CodeEditorProps> = (props: CodeEditorProps) => {
               lspWorkspaceDir={lspWorkspaceDir}
               isLspEnabled={isLspEnabled}
               lspClients={lspClients}
-              filesList={filesList}
               selectFile={selectFile}
               startLSP={startLSP}
               sendLspMessage={sendLspMessage}
@@ -182,39 +185,43 @@ const CodeEditor: React.FC<CodeEditorProps> = (props: CodeEditorProps) => {
               getLspWorkspaceFile={getLspWorkspaceFile}
               setLspFileValue={setLspFileValue}
               ensureLspFileValue={ensureLspFileValue}
-              getActivePane={getActivePane}
+              getActiveEditorPanel={getActiveEditorPanel}
               onLspStateChange={onLspStateChange}
+              showLspReferences={showLspReferences}
+              closeLspReferences={closeLspReferences}
             />
           </div>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
           <ContextMenu.Content className={styles['context-menu']}>
-            {contextMenuSections.map((section, sectionIndex) => (
-              <ContextMenu.Group key={section.name}>
-                {sectionIndex > 0 && (
-                  <ContextMenu.Separator
-                    className={styles['context-menu-separator']}
-                  />
-                )}
-                {section.items.map((item) => {
-                  const label =
-                    typeof item.label === 'string'
-                      ? item.label
-                      : formatMessage(item.label);
-                  return (
-                    <ContextMenu.Item
-                      key={item.id}
-                      className={styles['context-menu-item']}
-                      disabled={disabledKeys.includes(item.id)}
-                      onSelect={(): void => clickHandlers[item.id]()}
-                    >
-                      {label}
-                      <kbd>{item.shortcut}</kbd>
-                    </ContextMenu.Item>
-                  );
-                })}
-              </ContextMenu.Group>
-            ))}
+            <ContextMenuScrollArea>
+              {contextMenuSections.map((section, sectionIndex) => (
+                <ContextMenu.Group key={section.name}>
+                  {sectionIndex > 0 && (
+                    <ContextMenu.Separator
+                      className={styles['context-menu-separator']}
+                    />
+                  )}
+                  {section.items.map((item) => {
+                    const label =
+                      typeof item.label === 'string'
+                        ? item.label
+                        : formatMessage(item.label);
+                    return (
+                      <ContextMenu.Item
+                        key={item.id}
+                        className={styles['context-menu-item']}
+                        disabled={disabledKeys.includes(item.id)}
+                        onSelect={(): void => clickHandlers[item.id]()}
+                      >
+                        {label}
+                        <kbd>{item.shortcut}</kbd>
+                      </ContextMenu.Item>
+                    );
+                  })}
+                </ContextMenu.Group>
+              ))}
+            </ContextMenuScrollArea>
           </ContextMenu.Content>
         </ContextMenu.Portal>
       </ContextMenu.Root>

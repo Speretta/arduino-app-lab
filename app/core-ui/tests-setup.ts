@@ -19,6 +19,22 @@ global.AudioContext = MockAudioContext as unknown as {
   prototype: AudioContext;
 };
 
+if (!window.matchMedia) {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 class Worker extends EventTarget {
   url: string;
   constructor(stringUrl: string) {
@@ -61,6 +77,21 @@ vi.mock('@bcmi-labs/art-auth', async (importOriginal) => {
     },
   };
 });
+
+vi.mock('@bcmi-labs/art-ui', () => ({
+  useTheme: () => ({
+    theme: 'light',
+    setTheme: vi.fn(),
+  }),
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
+  AccountActivity: ({ children }: { children: React.ReactNode }) => children,
+  Button: ({ children }: { children: React.ReactNode }) => children,
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => children,
+  ARTThemeManager: class {
+    constructor(_mode: string, _storage: unknown) {}
+  },
+  defaultThemeManagerStorage: {},
+}));
 
 const mockUploadStream = new Subject<string>();
 const mockMappedPortsObservable = new BehaviorSubject<MappedPorts>([]);

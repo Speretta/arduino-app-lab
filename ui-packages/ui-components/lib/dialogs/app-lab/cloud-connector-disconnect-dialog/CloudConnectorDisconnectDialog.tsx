@@ -67,7 +67,6 @@ export const CloudConnectorDisconnectDialog: React.FC<
             variant={ButtonVariant.Secondary}
             appearance={ButtonAppearance.Destructive}
             type="submit"
-            /* eslint-disable-next-line jsx-a11y/no-autofocus */
             autoFocus
           >
             {formatMessage(messages.confirmButton)}

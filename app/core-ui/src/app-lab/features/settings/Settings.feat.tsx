@@ -1,4 +1,3 @@
-import { isFFEnabled } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import {
   AppLabSettings,
   PageLayout,
@@ -24,11 +23,9 @@ const Settings: React.FC = () => {
         <AppLabSettings
           settingsLogic={settingsLogic}
           agentSection={
-            isFFEnabled('AI_ASSISTANT') ? (
-              <Suspense fallback={null}>
-                <AgentSettings />
-              </Suspense>
-            ) : undefined
+            <Suspense fallback={null}>
+              <AgentSettings />
+            </Suspense>
           }
         />
       </div>

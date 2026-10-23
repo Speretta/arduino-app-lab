@@ -2,13 +2,13 @@ import { BOARD_FQBN, Config } from '@cloud-editor-mono/common';
 import {
   AccountArduinoCloud,
   Board2,
+  ChevronDown,
   Download,
-  InfoSetup,
+  Hardware,
   NavigationGroupOutline,
   OperationSort,
   Pencil,
   Reload,
-  Sort,
   Success,
   Tools,
   World,
@@ -19,6 +19,7 @@ import {
   BadgeStyle,
   BadgeVariant,
   Banner,
+  BoardExtensionsAttachDialog,
   Button,
   ButtonAppearance,
   ButtonSize,
@@ -27,22 +28,21 @@ import {
   CloudConnectorConnectDialog,
   CloudConnectorDisconnectDialog,
   DropdownMenuButton,
-  NetworkSettingsDialog,
   PasswordDialog,
-  UnsupportedCarrierDialog,
+  useTooltip,
+  XSmall,
   XXSmall,
-  XXXSmall,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { Fragment, useMemo } from 'react';
 
-import { AttachCarrierDialog } from '../../../dialogs/app-lab/attach-carrier-dialog/AttachCarrierDialog';
 import { useI18n } from '../../../i18n/useI18n';
 import { Toggle } from '../essential/toggle';
 import { SettingsSection } from '../settings-section';
 import {
   appMessages,
-  carrierMessages,
+  boardExtensionsMessages,
   cloudConnectorMessages,
+  csiCameraMessages,
   deviceMessages,
   networkMessages,
   osMessages,
@@ -51,11 +51,15 @@ import {
 } from './messages';
 import styles from './settings.module.scss';
 import { SettingsProps } from './settings.type';
+import { BoardExtensionsFooter } from './subcomponents/BoardExtensionsFooter';
 import { CarrierOption } from './subcomponents/CarrierOption';
 import { DeviceHeader } from './subcomponents/DeviceHeader';
 import { DeviceSerialNumber } from './subcomponents/DeviceSerialNumber';
 import { DeviceStorage } from './subcomponents/DeviceStorage';
 import { NetworkMode } from './subcomponents/NetworkMode';
+
+// Anchor for the agent section, so a caller can deep-link to it (`/settings#...`) rather than repeat the id.
+export const AGENT_SETTINGS_SECTION_ID = 'agent-settings-section';
 
 export const Settings: React.FC<SettingsProps> = ({
   settingsLogic,
@@ -68,11 +72,13 @@ export const Settings: React.FC<SettingsProps> = ({
   const DOCUMENTATION_URL = `${ARDUINO_DOCS_BASE_URL}/`;
   const RELEASE_NOTES_URL = `${ARDUINO_DOCS_BASE_URL}/getting-started/release-notes/`;
   const ARDUINO_CLOUD_URL = 'https://docs.arduino.cc/arduino-cloud/';
+  const CSI_CAMERA_SETUP_GUIDE_URL =
+    'https://docs.arduino.cc/tutorials/ventuno-q/mipi-csi-camera/';
 
   const {
     cloudConnectorSettingsLogic,
     boardSettingsLogic,
-    carrierSettingsLogic,
+    boardExtensionsSettingsLogic,
     networkModeLogic,
     networkSettingsLogic,
     systemSettingsLogic,
@@ -80,7 +86,7 @@ export const Settings: React.FC<SettingsProps> = ({
     onOpenExternal,
   } = settingsLogic();
 
-  const { openChangePasswordDialog, ...passwordDialogLogic } =
+  const { openChangePasswordDialog, changePasswordLogic } =
     passwordSettingsLogic();
 
   const {
@@ -93,25 +99,35 @@ export const Settings: React.FC<SettingsProps> = ({
     keyboardLayout,
     keyboardLayouts,
     setKeyboardLayout,
+    setBoardNameIsError,
+    boardNameErrorMsg,
   } = boardSettingsLogic();
 
   const {
-    unsupportedLogic,
-    attachLogic,
-    enabled: isCarriersEnabled,
-    pristine: isCarriersPristine,
-    onEnabledChange: onCarriersEnabledChange,
+    status: boardExtensionsStatus,
+    attachLogic: attachBoardExtensionsLogic,
+    supported: isBoardExtensionsSupported,
+    openAttachCarrierDialog,
+    openAttachHatDialog,
+    carrierEnabled: isCarrierEnabled,
+    onCarrierEnabledChange,
+    carrierPristine: isCarrierPristine,
     carriers,
-    status: carriersStatus,
-    setStatus: setCarriersStatus,
-    passwordLogic: carriersPasswordLogic,
-  } = carrierSettingsLogic();
+    setCarrierStatus,
+    passwordLogic: boardExtensionsPasswordLogic,
+    hatEnabled: isHatEnabled,
+    onHatEnabledChange,
+    hatPristine: isHatPristine,
+    hats,
+    setHatStatus,
+    openPasswordDialog: openBoardExtensionsPasswordDialog,
+  } = boardExtensionsSettingsLogic();
 
   const {
+    isConnected,
     selectedConnectedNetwork,
     selectedConnectedIPAddress,
     openNetworkSettingsDialog,
-    ...networkLogic
   } = networkSettingsLogic();
 
   const {
@@ -126,6 +142,66 @@ export const Settings: React.FC<SettingsProps> = ({
     openFlasher,
     startUpdate,
   } = systemSettingsLogic();
+
+  const {
+    props: tooltipPropsAppUpdate,
+    renderTooltip: renderTooltipAppUpdate,
+  } = useTooltip({
+    content: formatMessage(appMessages.appLabUpdateAvailable, {
+      newAppVersion: newAppVersion || '',
+    }),
+    timeout: 0,
+  });
+
+  const {
+    props: tooltipPropsDisconnect,
+    renderTooltip: renderTooltipDisconnect,
+  } = useTooltip({
+    content: formatMessage(cloudConnectorMessages.disconnectAction),
+    timeout: 0,
+  });
+
+  const { props: tooltipPropsConnect, renderTooltip: renderTooltipConnect } =
+    useTooltip({
+      content: formatMessage(cloudConnectorMessages.connectAction),
+      timeout: 0,
+    });
+
+  const {
+    props: tooltipPropsSystemUpdate,
+    renderTooltip: renderTooltipSystemUpdate,
+  } = useTooltip({
+    content: formatMessage(systemMessages.systemVersionUpdateAvailable),
+    timeout: 0,
+  });
+
+  const { props: tooltipPropsPassword, renderTooltip: renderTooltipPassword } =
+    useTooltip({
+      content: formatMessage(systemMessages.changePassword),
+      timeout: 0,
+    });
+
+  const {
+    props: tooltipPropsUpdateNow,
+    renderTooltip: renderTooltipUpdateNow,
+  } = useTooltip({
+    content: formatMessage(osMessages.updateNow),
+    timeout: 0,
+  });
+
+  const { props: tooltipPropsFlash, renderTooltip: renderTooltipFlash } =
+    useTooltip({
+      content: formatMessage(osMessages.flashBoard),
+      timeout: 0,
+    });
+
+  const {
+    props: tooltipPropsChangeNetwork,
+    renderTooltip: renderTooltipChangeNetwork,
+  } = useTooltip({
+    content: formatMessage(networkMessages.changeNetwork),
+    timeout: 0,
+  });
 
   const isVentunoQ = board?.fqbn === BOARD_FQBN.VENTUNO_Q;
 
@@ -167,7 +243,7 @@ export const Settings: React.FC<SettingsProps> = ({
     () => (
       <>
         {keyboardLayout?.label}
-        <Sort />
+        <ChevronDown />
       </>
     ),
     [keyboardLayout?.label],
@@ -191,16 +267,24 @@ export const Settings: React.FC<SettingsProps> = ({
               </div>
             )}
             {newAppVersion && !isBoard && (
-              <Button
-                Icon={Download}
-                iconPosition="right"
-                size={ButtonSize.XXSmall}
-                onClick={startUpdate}
-              >
-                {formatMessage(appMessages.appLabUpdateAvailable, {
-                  newAppVersion,
-                })}
-              </Button>
+              <>
+                <div
+                  {...tooltipPropsAppUpdate}
+                  className={styles['tooltip-wrapper']}
+                >
+                  <Button
+                    Icon={Download}
+                    iconPosition="right"
+                    size={ButtonSize.XSmall}
+                    onClick={startUpdate}
+                  >
+                    {formatMessage(appMessages.appLabUpdateAvailable, {
+                      newAppVersion,
+                    })}
+                  </Button>
+                </div>
+                {renderTooltipAppUpdate()}
+              </>
             )}
             {newAppVersion && isBoard && (
               <div className={styles['app-lab-version']}>
@@ -231,6 +315,8 @@ export const Settings: React.FC<SettingsProps> = ({
             board={board}
             boardName={boardName}
             onChange={setBoardName}
+            isError={setBoardNameIsError}
+            errorMsg={boardNameErrorMsg}
           />
           <SettingsSection.Row label={formatMessage(deviceMessages.fqbn)}>
             {board?.fqbn || 'unknown'}
@@ -248,7 +334,7 @@ export const Settings: React.FC<SettingsProps> = ({
           >
             <DeviceStorage
               boardResources={boardResources}
-              boardType={board?.type}
+              isVentunoQ={isVentunoQ}
               bytesToGiB={bytesToGiB}
             />
           </SettingsSection.Row>
@@ -322,15 +408,21 @@ export const Settings: React.FC<SettingsProps> = ({
                 <SettingsSection.Row
                   label={formatMessage(cloudConnectorMessages.disconnectTitle)}
                 >
-                  <Button
-                    disabled={isDisconnecting}
-                    appearance={ButtonAppearance.LowContrast}
-                    variant={ButtonVariant.Primary}
-                    size={ButtonSize.XXSmall}
-                    onClick={disconnectBoard}
+                  <div
+                    {...tooltipPropsDisconnect}
+                    className={styles['tooltip-wrapper']}
                   >
-                    {formatMessage(cloudConnectorMessages.disconnectAction)}
-                  </Button>
+                    <Button
+                      disabled={isDisconnecting}
+                      appearance={ButtonAppearance.LowContrast}
+                      variant={ButtonVariant.Primary}
+                      size={ButtonSize.XSmall}
+                      onClick={disconnectBoard}
+                    >
+                      {formatMessage(cloudConnectorMessages.disconnectAction)}
+                    </Button>
+                  </div>
+                  {renderTooltipDisconnect()}
                 </SettingsSection.Row>
               </>
             ) : (
@@ -346,24 +438,30 @@ export const Settings: React.FC<SettingsProps> = ({
                           styles['cloud-connector-section-connect-icon']
                         }
                       />
-                      <XXSmall
+                      <XSmall
                         className={
                           styles['cloud-connector-section-connect-title']
                         }
                       >
                         {formatMessage(cloudConnectorMessages.connectTitle)}
-                      </XXSmall>
+                      </XSmall>
                     </div>
                   }
                 >
-                  <Button
-                    disabled={isConnecting}
-                    variant={ButtonVariant.Secondary}
-                    size={ButtonSize.XXSmall}
-                    onClick={connectBoard}
+                  <div
+                    {...tooltipPropsConnect}
+                    className={styles['tooltip-wrapper']}
                   >
-                    {formatMessage(cloudConnectorMessages.connectAction)}
-                  </Button>
+                    <Button
+                      disabled={isConnecting}
+                      variant={ButtonVariant.Secondary}
+                      size={ButtonSize.XSmall}
+                      onClick={connectBoard}
+                    >
+                      {formatMessage(cloudConnectorMessages.connectAction)}
+                    </Button>
+                  </div>
+                  {renderTooltipConnect()}
                 </SettingsSection.Row>
                 <SettingsSection.Row
                   classes={{
@@ -384,74 +482,202 @@ export const Settings: React.FC<SettingsProps> = ({
           </SettingsSection.Card>
         </section>
       )}
-      {!isVentunoQ && (
+      {(!isBoardExtensionsSupported ||
+        carriers.length !== 0 ||
+        hats.length !== 0) && (
         <section>
           <SettingsSection.Title
-            title={formatMessage(carrierMessages.title)}
+            title={formatMessage(boardExtensionsMessages.title)}
+            variant="secondary"
+          />
+          <PasswordDialog logic={boardExtensionsPasswordLogic} />
+          <BoardExtensionsAttachDialog logic={attachBoardExtensionsLogic} />
+          {!isBoardExtensionsSupported ? (
+            <SettingsSection.Banner
+              className={styles['board-extensions-banner']}
+            >
+              <div className={styles['board-extensions-banner-label']}>
+                <Hardware />
+                <XSmall semibold>
+                  {formatMessage(boardExtensionsMessages.unsupportedTitle)}
+                </XSmall>
+              </div>
+              <XXSmall>
+                {formatMessage(boardExtensionsMessages.unsupportedDescription)}
+              </XXSmall>
+            </SettingsSection.Banner>
+          ) : (
+            <>
+              {carriers.length !== 0 && (
+                <SettingsSection.Card>
+                  <SettingsSection.Row
+                    label={formatMessage(boardExtensionsMessages.carrierTitle)}
+                    classes={{
+                      value: styles['board-extensions-button-row'],
+                    }}
+                  >
+                    <Toggle
+                      className={styles['toggle-button']}
+                      isSelected={isCarrierEnabled}
+                      onChange={onCarrierEnabledChange}
+                    />
+                    <Button
+                      variant={ButtonVariant.Tertiary}
+                      size={ButtonSize.XSmall}
+                      onClick={openAttachCarrierDialog}
+                    >
+                      {formatMessage(boardExtensionsMessages.carrierButton)}
+                    </Button>
+                  </SettingsSection.Row>
+                  {isCarrierEnabled && (
+                    <>
+                      <SettingsSection.Divider />
+                      <XXSmall
+                        semibold
+                        className={
+                          styles['board-extensions-carrier-description']
+                        }
+                      >
+                        {formatMessage(
+                          isVentunoQ
+                            ? boardExtensionsMessages.carrierDescriptionVentunoQ
+                            : boardExtensionsMessages.carrierDescription,
+                        )}
+                      </XXSmall>
+                      {carriers.map((group, index) => (
+                        <Fragment key={index}>
+                          {group.devices.map((device, deviceIndex) => (
+                            <CarrierOption
+                              key={deviceIndex}
+                              carrierName={group.name}
+                              device={device}
+                              status={boardExtensionsStatus}
+                              onChange={setCarrierStatus}
+                            />
+                          ))}
+                        </Fragment>
+                      ))}
+                    </>
+                  )}
+                  {!isCarrierPristine && (
+                    <BoardExtensionsFooter
+                      openPasswordDialog={openBoardExtensionsPasswordDialog}
+                    />
+                  )}
+                </SettingsSection.Card>
+              )}
+              {carriers.length !== 0 && hats.length !== 0 && (
+                <SettingsSection.Divider
+                  space={12}
+                  className={styles['board-extensions-divider']}
+                />
+              )}
+              {hats.length !== 0 && (
+                <SettingsSection.Card>
+                  <SettingsSection.Row
+                    label={formatMessage(boardExtensionsMessages.hatTitle)}
+                    classes={{
+                      value: styles['board-extensions-button-row'],
+                    }}
+                  >
+                    <Toggle
+                      className={styles['toggle-button']}
+                      isSelected={isHatEnabled}
+                      onChange={onHatEnabledChange}
+                    />
+                    <Button
+                      variant={ButtonVariant.Tertiary}
+                      size={ButtonSize.XSmall}
+                      onClick={openAttachHatDialog}
+                    >
+                      {formatMessage(boardExtensionsMessages.hatButton)}
+                    </Button>
+                  </SettingsSection.Row>
+                  {isHatEnabled && (
+                    <>
+                      <SettingsSection.Divider />
+                      <SettingsSection.Row
+                        label={formatMessage(boardExtensionsMessages.hatType)}
+                        classes={{
+                          value: styles['hat-type'],
+                        }}
+                      >
+                        <DropdownMenuButton
+                          sections={[
+                            {
+                              name: 'Actions',
+                              items: [
+                                {
+                                  id: 'none',
+                                  label: formatMessage(
+                                    boardExtensionsMessages.hatTypePlaceholder,
+                                  ),
+                                },
+                                ...hats.map((option) => ({
+                                  id: option.name,
+                                  label: option.name,
+                                })),
+                              ],
+                            },
+                          ]}
+                          buttonChildren={
+                            <>
+                              {boardExtensionsStatus.mounts.find(
+                                (mount) =>
+                                  mount.kind === 'hat' && mount.nextEnabled,
+                              )?.name ||
+                                formatMessage(
+                                  boardExtensionsMessages.hatTypePlaceholder,
+                                )}
+                              <ChevronDown />
+                            </>
+                          }
+                          useStaticPosition={false}
+                          onAction={(key): void => setHatStatus(key as string)}
+                          classes={{
+                            dropdownMenu: styles['dropdown-menu'],
+                            dropdownMenuButton: styles['dropdown-menu-button'],
+                            dropdownMenuButtonOpen:
+                              styles['dropdown-menu-button-open'],
+                            dropdownMenuButtonWrapper:
+                              styles['dropdown-menu-button-wrapper'],
+                            dropdownMenuPopover:
+                              styles['dropdown-menu-popover'],
+                          }}
+                        />
+                        <SettingsSection.Info>
+                          {formatMessage(boardExtensionsMessages.hatTooltip)}
+                        </SettingsSection.Info>
+                      </SettingsSection.Row>
+                    </>
+                  )}
+                  {!isHatPristine && (
+                    <BoardExtensionsFooter
+                      openPasswordDialog={openBoardExtensionsPasswordDialog}
+                    />
+                  )}
+                </SettingsSection.Card>
+              )}
+            </>
+          )}
+        </section>
+      )}
+      {isVentunoQ && linuxDistribution?.toLowerCase().includes('ubuntu') && (
+        <section>
+          <SettingsSection.Title
+            title={formatMessage(csiCameraMessages.title)}
             variant="secondary"
           />
           <SettingsSection.Card>
-            <UnsupportedCarrierDialog logic={unsupportedLogic} />
-            <AttachCarrierDialog logic={attachLogic} />
             <SettingsSection.Row
-              label={formatMessage(carrierMessages.carrierToggle, {
-                boardType: board?.type.replace(/arduino/i, '').trim(),
-              })}
+              label={formatMessage(csiCameraMessages.description)}
             >
-              <Toggle
-                className={styles['toggle-button']}
-                isSelected={isCarriersEnabled}
-                onChange={onCarriersEnabledChange}
+              <SettingsSection.ExternalLink
+                href={CSI_CAMERA_SETUP_GUIDE_URL}
+                onOpenExternal={onOpenExternal}
+                label={formatMessage(csiCameraMessages.link)}
               />
             </SettingsSection.Row>
-            {isCarriersEnabled &&
-              carriers.map((group, index) => (
-                <Fragment key={index}>
-                  <SettingsSection.Divider />
-                  <SettingsSection.Row
-                    label={formatMessage(carrierMessages.carrierType)}
-                  >
-                    {group.name}
-                  </SettingsSection.Row>
-                  <SettingsSection.Row
-                    label={formatMessage(carrierMessages.carrierDescription)}
-                  >
-                    <Fragment />
-                  </SettingsSection.Row>
-                  {group.devices.map((device, deviceIndex) => (
-                    <CarrierOption
-                      key={deviceIndex}
-                      carrierName={group.name}
-                      device={device}
-                      status={carriersStatus}
-                      onChange={setCarriersStatus}
-                    />
-                  ))}
-                </Fragment>
-              ))}
-            {!isCarriersPristine && (
-              <SettingsSection.Banner
-                className={styles['carrier-banner-container']}
-              >
-                <PasswordDialog logic={carriersPasswordLogic} />
-                <div className={styles['carrier-banner']}>
-                  <div className={styles['carrier-banner-label']}>
-                    <InfoSetup />
-                    <XXSmall>
-                      {formatMessage(carrierMessages.carrierInfo)}
-                    </XXSmall>
-                  </div>
-                  <Button
-                    size={ButtonSize.XXSmall}
-                    onClick={(): void =>
-                      carriersPasswordLogic.onOpenChange(true)
-                    }
-                  >
-                    {formatMessage(carrierMessages.carrierButton)}
-                  </Button>
-                </div>
-              </SettingsSection.Banner>
-            )}
           </SettingsSection.Card>
         </section>
       )}
@@ -461,7 +687,7 @@ export const Settings: React.FC<SettingsProps> = ({
           variant="secondary"
         />
         <SettingsSection.Card>
-          <ChangePasswordDialog logic={passwordDialogLogic} />
+          <ChangePasswordDialog logic={changePasswordLogic} />
           <SettingsSection.Row
             label={formatMessage(systemMessages.systemVersion)}
             info={formatMessage(systemMessages.systemVersionInfo)}
@@ -472,14 +698,22 @@ export const Settings: React.FC<SettingsProps> = ({
               />
             )}
             {hasBoardUpdate && (
-              <Button
-                Icon={Download}
-                iconPosition="right"
-                size={ButtonSize.XXSmall}
-                onClick={startUpdate}
-              >
-                {formatMessage(systemMessages.systemVersionUpdateAvailable)}
-              </Button>
+              <>
+                <div
+                  {...tooltipPropsSystemUpdate}
+                  className={styles['tooltip-wrapper']}
+                >
+                  <Button
+                    Icon={Download}
+                    iconPosition="right"
+                    size={ButtonSize.XSmall}
+                    onClick={startUpdate}
+                  >
+                    {formatMessage(systemMessages.systemVersionUpdateAvailable)}
+                  </Button>
+                </div>
+                {renderTooltipSystemUpdate()}
+              </>
             )}
           </SettingsSection.Row>
           <SettingsSection.Row
@@ -497,20 +731,29 @@ export const Settings: React.FC<SettingsProps> = ({
             <DropdownMenuButton
               sections={keyboardLayoutItems}
               buttonChildren={buttonChildren}
+              // react-aria computes the position against the viewport, which
+              // only matches where the popover is placed when it is portaled.
               useStaticPosition={false}
+              usePortal
               onAction={(key): void => setKeyboardLayout(key as string)}
               classes={dropdownClasses}
             />
           </SettingsSection.Row>
           <SettingsSection.Row label={formatMessage(systemMessages.osPassword)}>
-            <Button
-              size={ButtonSize.XXSmall}
-              appearance={ButtonAppearance.LowContrast}
-              onClick={openChangePasswordDialog}
-              Icon={Pencil}
+            <div
+              {...tooltipPropsPassword}
+              className={styles['tooltip-wrapper']}
             >
-              {formatMessage(systemMessages.changePassword)}
-            </Button>
+              <Button
+                size={ButtonSize.XSmall}
+                appearance={ButtonAppearance.LowContrast}
+                onClick={openChangePasswordDialog}
+                Icon={Pencil}
+              >
+                {formatMessage(systemMessages.changePassword)}
+              </Button>
+            </div>
+            {renderTooltipPassword()}
           </SettingsSection.Row>
           <SettingsSection.Divider />
           <SettingsSection.Row
@@ -518,8 +761,9 @@ export const Settings: React.FC<SettingsProps> = ({
             info={formatMessage(systemMessages.remoteAccessInfo)}
             border-top
           >
+            {/* connectionType can be 'USB', 'Network', or 'Local'. SBC Mode uses 'Local', which was incorrectly disabled by the !== 'USB' check. Only Network should be disabled (already connected over network). */}
             <NetworkMode
-              disabled={board?.connectionType !== 'USB'}
+              disabled={board?.connectionType === 'Network'}
               logic={networkModeLogic}
             />
           </SettingsSection.Row>
@@ -536,18 +780,24 @@ export const Settings: React.FC<SettingsProps> = ({
               <div className={styles['os-banner']}>
                 <div className={styles['os-banner-label']}>
                   <Tools />
-                  <XXSmall>
+                  <XSmall>
                     {formatMessage(osMessages.osBoardSoftwareBehind)}
-                  </XXSmall>
+                  </XSmall>
                 </div>
-                <Button
-                  Icon={Download}
-                  iconPosition="right"
-                  size={ButtonSize.XXSmall}
-                  onClick={startUpdate}
+                <div
+                  {...tooltipPropsUpdateNow}
+                  className={styles['tooltip-wrapper']}
                 >
-                  {formatMessage(osMessages.updateNow)}
-                </Button>
+                  <Button
+                    Icon={Download}
+                    iconPosition="right"
+                    size={ButtonSize.XSmall}
+                    onClick={isBoard ? startUpdate : openFlasher}
+                  >
+                    {formatMessage(osMessages.updateNow)}
+                  </Button>
+                </div>
+                {renderTooltipUpdateNow()}
               </div>
             </SettingsSection.Banner>
           ) : (
@@ -566,25 +816,28 @@ export const Settings: React.FC<SettingsProps> = ({
           <SettingsSection.Row label={formatMessage(osMessages.releaseDate)}>
             {osReleaseDate}
           </SettingsSection.Row>
-          {!isBoard && !needsImageUpdate && !isVentunoQ && (
+          {!isBoard && !needsImageUpdate && (
             <>
               <SettingsSection.Divider />
               <SettingsSection.Row
                 label={formatMessage(osMessages.installOsImage)}
                 info={formatMessage(osMessages.installOsImageInfo)}
-                classes={{
-                  value: styles['install-os-image'],
-                }}
               >
-                <Button
-                  Icon={Reload}
-                  appearance={ButtonAppearance.LowContrast}
-                  iconPosition="right"
-                  size={ButtonSize.XXSmall}
-                  onClick={openFlasher}
+                <div
+                  {...tooltipPropsFlash}
+                  className={styles['tooltip-wrapper']}
                 >
-                  {formatMessage(osMessages.flashBoard)}
-                </Button>
+                  <Button
+                    Icon={Reload}
+                    appearance={ButtonAppearance.LowContrast}
+                    iconPosition="right"
+                    size={ButtonSize.XSmall}
+                    onClick={openFlasher}
+                  >
+                    {formatMessage(osMessages.flashBoard)}
+                  </Button>
+                  {renderTooltipFlash()}
+                </div>
               </SettingsSection.Row>
             </>
           )}
@@ -596,14 +849,15 @@ export const Settings: React.FC<SettingsProps> = ({
           variant="secondary"
         />
         <SettingsSection.Card>
-          <NetworkSettingsDialog logic={networkLogic} />
+          {/* The network settings dialog itself is rendered once, app-wide, by
+              main; openNetworkSettingsDialog opens that instance. */}
           <SettingsSection.Row
             label={formatMessage(networkMessages.ssid)}
             classes={{
               value: styles['selected-network'],
             }}
           >
-            {networkLogic.isConnected ? (
+            {isConnected ? (
               <World
                 aria-label={formatMessage(networkMessages.connected)}
                 title={formatMessage(networkMessages.connected)}
@@ -616,14 +870,20 @@ export const Settings: React.FC<SettingsProps> = ({
             )}
 
             {selectedConnectedNetwork}
-            <Button
-              size={ButtonSize.XXSmall}
-              appearance={ButtonAppearance.LowContrast}
-              onClick={openNetworkSettingsDialog}
-              Icon={OperationSort}
+            <div
+              {...tooltipPropsChangeNetwork}
+              className={styles['tooltip-wrapper']}
             >
-              {formatMessage(networkMessages.changeNetwork)}
-            </Button>
+              <Button
+                size={ButtonSize.XSmall}
+                appearance={ButtonAppearance.LowContrast}
+                onClick={openNetworkSettingsDialog}
+                Icon={OperationSort}
+              >
+                {formatMessage(networkMessages.changeNetwork)}
+              </Button>
+            </div>
+            {renderTooltipChangeNetwork()}
           </SettingsSection.Row>
           <SettingsSection.Row label={formatMessage(networkMessages.ip)}>
             {selectedConnectedIPAddress}
@@ -631,13 +891,13 @@ export const Settings: React.FC<SettingsProps> = ({
         </SettingsSection.Card>
       </section>
       {agentSection ? (
-        <>
+        <div id={AGENT_SETTINGS_SECTION_ID}>
           <SettingsSection.Divider space={40} />
           {agentSection}
-        </>
+        </div>
       ) : null}
       <section className={styles['copyright']}>
-        <XXXSmall>{formatMessage(settingsMessages.copyright)}</XXXSmall>
+        <XXSmall>{formatMessage(settingsMessages.copyright)}</XXSmall>
       </section>
     </>
   );

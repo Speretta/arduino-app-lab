@@ -1,8 +1,8 @@
 ---
 name: react-arborist
-version: 3.4.3
+version: 3.16.0
 type: npm
-summary: 
+summary:
 homepage: https://react-arborist.netlify.app
 license: mit
 licenses:

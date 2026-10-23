@@ -11,7 +11,7 @@ import {
   LspState,
 } from '../code-mirror/codeMirror.type';
 import { GutterData } from '../code-mirror/codeMirrorViewInstances';
-import { FileNode } from '../file-tree';
+import { LspReferencesPanelActions } from '../code-mirror/extensions/lsp/lsp-references/lsp-references-types';
 
 export type OnChangeHandlerSetCode = (newDoc: CodeEditorText) => void;
 export type SaveCodeHandler = (newCode: string) => void;
@@ -61,7 +61,6 @@ export type CodeEditorLogic = () => {
   isLspEnabled?: boolean;
   lspWorkspaceDir?: string;
   lspClients?: Map<LspId, LspClientRef>;
-  filesList?: FileNode[];
   selectFile?: (params: {
     fileId?: string;
     openAtIndex?: number;
@@ -76,9 +75,9 @@ export type CodeEditorLogic = () => {
   getLspWorkspaceFile?: (fileUri: string) => Promise<string>;
   setLspFileValue?: (fileId: string, value: string) => boolean;
   ensureLspFileValue?: (fileId: string) => Promise<string | undefined>;
-  getActivePane?: () => 'A' | 'B';
+  getActiveEditorPanel?: () => 'A' | 'B';
   onLspStateChange?: (lspId: LspId, state: LspState) => void;
-};
+} & LspReferencesPanelActions;
 
 export type SelectedStrings = {
   label?: string;

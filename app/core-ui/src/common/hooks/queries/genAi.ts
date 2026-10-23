@@ -134,13 +134,11 @@ export const useGenAIChat: UseGenAIChat = function (
 
   const { sourceId, sourceType } = useSourceParams();
 
-  const { isFetching: conversationIsLoading } = useQuery(
-    ['start-gen-ai-chat'],
-    () => startConversation(sourceId, sourceType),
-    {
-      enabled,
-    },
-  );
+  const { isFetching: conversationIsLoading } = useQuery({
+    queryKey: ['start-gen-ai-chat'],
+    queryFn: () => startConversation(sourceId, sourceType),
+    enabled,
+  });
 
   const [longPromptToastId, setLongPromptToastId] = useState<string>();
 
@@ -202,10 +200,12 @@ export const useGenAIChat: UseGenAIChat = function (
   };
 
   const {
-    isLoading: promptResponseIsLoading,
+    isPending: promptResponseIsLoading,
     mutate: sendPrompt,
     reset,
-  } = useMutation(['send-prompt'], {
+  } = useMutation({
+    mutationKey: ['send-prompt'],
+
     mutationFn: (payload: GenAIContentComponent) => {
       navigate({ search: { ...search, [NAV_PARAM]: SidenavItemId.GenAI } });
       return addMessageToConversation(
@@ -217,11 +217,14 @@ export const useGenAIChat: UseGenAIChat = function (
         abortController.current,
       );
     },
+
     onMutate: () => {
       abortController.current = new AbortController();
     },
+
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries(['user-restrictions-recap'], {
+      queryClient.invalidateQueries({
+        queryKey: ['user-restrictions-recap'],
         exact: false,
       });
       const action =
@@ -258,9 +261,11 @@ export const useGenAIChat: UseGenAIChat = function (
 
   const {
     mutate: sketchPlanAction,
-    isLoading: sketchPlanActionIsLoading,
+    isPending: sketchPlanActionIsLoading,
     variables: sketchPlanVariables,
-  } = useMutation(['sketch-plan-response'], sendSketchPlanResponse, {
+  } = useMutation({
+    mutationKey: ['sketch-plan-response'],
+    mutationFn: sendSketchPlanResponse,
     onSuccess: (_, variables) => {
       if (variables.actionType === SketchPlanActionType.ConfirmSketchPlan) {
         ga4Emitter({
@@ -409,32 +414,32 @@ export const useClearChat: UseClearChat = function () {
 
   const { sourceId, sourceType } = useSourceParams();
 
-  const { mutate: clearChatConfirm } = useMutation(
-    ['clear-chat'],
-    () => {
+  const { mutate: clearChatConfirm } = useMutation({
+    mutationKey: ['clear-chat'],
+
+    mutationFn: () => {
       if (!isClearChatNotificationOpen) {
         return Promise.resolve(null);
       }
       setIsClearChatNotificationOpen(false);
       return clearConversation(sourceId, sourceType);
     },
-    {
-      onSuccess: () => {
-        ga4Emitter({
-          type: 'GEN_AI_INTERACTION',
-          payload: {
-            action: 'chat deleted',
-          },
-        });
-        sendAnalyticsEvent({
-          data: {
-            category: 'ai-interaction',
-            action: 'chat deleted',
-          },
-        });
-      },
+
+    onSuccess: () => {
+      ga4Emitter({
+        type: 'GEN_AI_INTERACTION',
+        payload: {
+          action: 'chat deleted',
+        },
+      });
+      sendAnalyticsEvent({
+        data: {
+          category: 'ai-interaction',
+          action: 'chat deleted',
+        },
+      });
     },
-  );
+  });
 
   const clearChat = useCallback(() => {
     setIsClearChatNotificationOpen(true);
@@ -471,17 +476,20 @@ export const useGenAiLegalDisclaimer = (): ReturnType<
       return set(GEN_AI_DISCLAIMER_KEY, true);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries([GEN_AI_DISCLAIMER_KEY]);
+      queryClient.invalidateQueries({
+        queryKey: [GEN_AI_DISCLAIMER_KEY],
+      });
     },
   });
 
-  const { data: isLegalDisclaimerAccepted, isLoading } = useQuery(
-    [GEN_AI_DISCLAIMER_KEY],
-    async () => {
+  const { data: isLegalDisclaimerAccepted, isLoading } = useQuery({
+    queryKey: [GEN_AI_DISCLAIMER_KEY],
+
+    queryFn: async () => {
       const data = (await get(GEN_AI_DISCLAIMER_KEY)) ?? false;
       return data;
     },
-  );
+  });
 
   return {
     acceptLegalDisclaimer,

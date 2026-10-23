@@ -48,7 +48,7 @@ export const useCodeFormatter: UseCodeFormatter = function (
 
   const {
     mutate: formatCode,
-    isLoading,
+    isPending: isLoading,
     reset,
     variables,
   } = useMutation({

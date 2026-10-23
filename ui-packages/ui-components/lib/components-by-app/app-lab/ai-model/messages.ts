@@ -48,4 +48,9 @@ export const messages = defineMessages({
     description:
       'Tooltip shown on the model selection radio when the model is not installed',
   },
+  modelCard: {
+    id: 'aiModel.modelCard',
+    defaultMessage: 'Model card',
+    description: 'Label for the model card',
+  },
 });

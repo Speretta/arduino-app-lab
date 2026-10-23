@@ -15,7 +15,8 @@ import { useState } from 'react';
 
 import { messages } from '../../messages';
 import { type AgentDescriptor } from '../../services';
-import { Button, openInSystemBrowser, Text } from '../../ui';
+import { Button, Text } from '../../ui';
+import { openInSystemBrowser } from '../../utils';
 import styles from './agent-auth.module.scss';
 import { type AuthTab } from './useAgentAuthFlow';
 
@@ -162,7 +163,6 @@ export const AgentAuth: React.FC<AgentAuthProps> = ({
                 void onSubmitToken(pasted);
               }}
               onEnter={(): void => void onSubmitToken()}
-              // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
               disabled={verifyingToken}
               placeholder={formatMessage(messages.signInTokenPlaceholder)}

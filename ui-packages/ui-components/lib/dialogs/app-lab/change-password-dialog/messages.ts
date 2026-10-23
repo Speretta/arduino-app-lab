@@ -3,7 +3,7 @@ import { defineMessages } from 'react-intl';
 export const messages = defineMessages({
   changePassword: {
     id: 'appLab.changePasswordDialog.changePassword',
-    defaultMessage: 'Change Linux Password',
+    defaultMessage: 'Change Linux password',
     description: 'Title for the change password dialog in the settings page',
   },
   save: {
@@ -13,7 +13,7 @@ export const messages = defineMessages({
   },
   subtitle: {
     id: 'appLab.changePasswordDialog.subtitle',
-    defaultMessage: 'Set a New Password',
+    defaultMessage: 'Set a new password',
     description: 'Subtitle for the change password dialog in the settings page',
   },
   description: {
@@ -25,12 +25,12 @@ export const messages = defineMessages({
   },
   newPassword: {
     id: 'appLab.changePasswordDialog.newPassword',
-    defaultMessage: 'New Password',
+    defaultMessage: 'New password',
     description: 'Label for the new password input',
   },
   confirmPassword: {
     id: 'appLab.changePasswordDialog.confirmPassword',
-    defaultMessage: 'Confirm Password',
+    defaultMessage: 'Confirm password',
     description: 'Label for the confirm password input',
   },
   helperText: {
@@ -42,10 +42,5 @@ export const messages = defineMessages({
     id: 'appLab.changePasswordDialog.passwordMismatch',
     defaultMessage: 'Passwords do not match',
     description: 'Error message when passwords do not match',
-  },
-  genericError: {
-    id: 'appLab.changePasswordDialog.genericError',
-    defaultMessage: 'An error occurred while changing the password',
-    description: 'Generic error message when changing password fails',
   },
 });

@@ -15,8 +15,6 @@ const SetupContextValue: SetupContextValue = {
   setNetworkCredentialsDraft: () => {},
   autoFlowLocked: false,
   setAutoFlowLocked: () => {},
-  offlineWarningOpen: false,
-  setOfflineWarningOpen: () => {},
 } as SetupContextValue;
 
 export const SetupContext = createContext<SetupContextValue>(SetupContextValue);

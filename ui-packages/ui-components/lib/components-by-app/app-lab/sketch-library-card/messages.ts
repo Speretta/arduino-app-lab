@@ -28,7 +28,7 @@ export const sketchLibraryCardMessages = {
   },
   moreInfoButton: {
     id: 'appLabSketchLibraryCard.moreInfoButton.label',
-    defaultMessage: 'More Info',
+    defaultMessage: 'More info',
     description:
       'Label for the button to get more information about the library',
   },

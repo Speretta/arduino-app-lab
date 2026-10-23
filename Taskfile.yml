@@ -1,6 +1,20 @@
 # See: https://taskfile.dev/#/usage
 version: "3"
 
+# licensed is Ruby, and Ruby takes its default external encoding from the locale. A fresh
+# macOS shell sets none, so Ruby falls back to US-ASCII and the first non-ASCII byte in
+# `go list` output aborts the run with `invalid byte sequence in US-ASCII` and a bare
+# backtrace naming neither encoding nor dependency. CI's ubuntu image sets C.UTF-8 and
+# never sees it — the worst shape for a bug, since it only breaks the person trying to
+# regenerate the cache their PR is failing on.
+#
+# Set at the top level, not on one task: `env:` in Task is per-task and a dependency's
+# environment does not propagate to its parent, so scoping it to cache-dep-licenses left
+# `licensed status` — which re-enumerates from the live tree through the same Ruby path —
+# hitting the abort the comment claimed to have fixed.
+env:
+  RUBYOPT: -Eutf-8
+
 tasks:
   # Source: https://github.com/arduino/tooling-project-assets/blob/main/workflow-templates/assets/check-dependencies-task/Taskfile.yml
   general:cache-dep-licenses:
@@ -8,6 +22,10 @@ tasks:
     deps:
       - task: general:check-licensed
       - task: general:prepare-deps
+    # Keep same licenses consistent across platforms
+    env:
+      GOOS: linux
+      GOARCH: amd64      
     cmds:
       # Pin GOOS/GOARCH to the canonical CI target so `go list` enumerates the
       # same dependency set on every machine (a Mac otherwise resolves
@@ -24,6 +42,14 @@ tasks:
     desc: Check for unapproved dependency licenses
     deps:
       - task: general:cache-dep-licenses
+    # Enumerate the same platform graph the cache was generated for
+    # (see general:cache-dep-licenses). Without this, `licensed status` and the
+    # scan below use the host platform, so Linux-only Go deps (e.g. dbus /
+    # secret-service keyring backends) are checked on CI but skipped on
+    # macOS/Windows, making the check pass locally and fail on CI.
+    env:
+      GOOS: linux
+      GOARCH: amd64
     cmds:
       - |
         MATCHES="$(
@@ -35,6 +61,7 @@ tasks:
           | \
             xargs \
               --null \
+              env -u GOOS -u GOARCH \
               go tool \
                 github.com/mikefarah/yq/v4 \
                   'select(.license == "other") | filename'

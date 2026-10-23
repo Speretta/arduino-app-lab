@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import type { AgentEditorContext } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { MessageDescriptor } from 'react-intl';
 
 import { messages } from '../../../messages';
@@ -11,6 +12,7 @@ import {
   closeSession,
   getSessionState,
   isAuthError,
+  isNetworkError,
   listSessions,
   loadSession,
   newSession,
@@ -30,6 +32,7 @@ import {
   setSessionModel,
 } from '../../../services';
 import {
+  chatDriver,
   ChatMessage,
   ChoiceEcho,
   SessionActionError,
@@ -41,9 +44,15 @@ import {
   formatToolTitle,
   webToolLabel,
 } from '../../../ui';
+import { isOffline } from '../../../utils';
 
 // Advanced permission-mode options the ExitPlanMode approval over-exposes; Claude Code surfaces a single "Yes, and …", so we hide these for a clean plan-approval.
-const PLAN_ADVANCED_OPTION_IDS = new Set(['bypassPermissions', 'auto']);
+const PLAN_ADVANCED_OPTION_IDS = new Set([
+  'exit-plan-bypass',
+  'exit-plan-clear-bypass',
+  'exit-plan-auto',
+  'exit-plan-clear-auto',
+]);
 
 let idCounter = 0;
 const nextId = (): string => `msg-${(idCounter += 1)}`;
@@ -66,6 +75,8 @@ export interface PermissionView {
   planApproval: boolean;
   command?: string;
   reason?: string;
+  // The call writes into another app: the host resolved it, so the badge and the refusal to auto-approve agree.
+  outsideWorkspace: boolean;
   actions: PermissionAction[];
 }
 
@@ -74,7 +85,12 @@ export interface PermissionView {
 // next, which is the composer's job, and it isn't part of the transcript.
 export interface RequestErrorView {
   messageId: string;
-  message: string;
+  // The agent's own words. Absent when the failure happened before it was reached at all (offline),
+  // where `kind` is what the view speaks from.
+  message?: string;
+  // 'network' when the request never reached the provider, so the view explains it in its own
+  // (localized) words instead of showing a raw transport error.
+  kind?: string;
 }
 
 export interface ChatPanelLogic {
@@ -108,6 +124,11 @@ export interface ChatPanelLogic {
   isLoadingSession: boolean;
   // No messages and nothing loading: the panel shows the centred empty state.
   isNewSession: boolean;
+  // The workspace the next session opens in ('' = general), and the picker's action.
+  workspaceId: string;
+  // Set only when the current session's app is missing from the picker's list, so it can still be named.
+  workspaceName?: string;
+  selectWorkspace: (id: string, name?: string) => void;
   reopen: (session: SessionSummary) => void;
   newChat: VoidFunction;
   currentSessionId: SessionId | null;
@@ -250,6 +271,7 @@ export const permissionView = (request: PermissionRequest): PermissionView => {
 
   return {
     planApproval,
+    outsideWorkspace: !!toolCall?.outsideWorkspace,
     command: toolCall && permissionCommand(toolCall),
     reason: (toolCall && permissionReason(toolCall)) || undefined,
     actions: options.map((option) => ({
@@ -274,26 +296,55 @@ const mergeModels = (prev: AgentModel[], next: AgentModel[]): AgentModel[] => {
   return merged;
 };
 
-export const useChatLogic = (): ChatPanelLogic => {
-  // The panel always displays the current session's thread; a background turn keeps building in its own thread.
+// lockedWorkspaceId binds the panel to one app (the editor's side panel): no picking, no resuming from elsewhere. onScreen says whether it is the panel being shown — see chatDriver.
+export const useChatLogic = (
+  lockedWorkspaceId?: string,
+  lockedWorkspaceName?: string,
+  onScreen = true,
+  getEditorContext?: () => AgentEditorContext,
+): ChatPanelLogic => {
+  const getEditorContextRef = useRef(getEditorContext);
+  getEditorContextRef.current = getEditorContext;
+  // The panel displays its OWN session: until it adopts one the shared pointer still names the chat shown before, and that thread would appear here.
+  const [ownSessionId, setOwnSessionId] = useState<SessionId | null>(null);
   const messages = useChatStore(
     (s) =>
-      (s.currentSessionId
-        ? s.threads[s.currentSessionId]?.messages
-        : undefined) ?? EMPTY_MESSAGES,
+      (ownSessionId ? s.threads[ownSessionId]?.messages : undefined) ??
+      EMPTY_MESSAGES,
   );
   const isStreaming = useChatStore((s) =>
-    s.currentSessionId ? !!s.streamingSessions[s.currentSessionId] : false,
+    ownSessionId ? !!s.streamingSessions[ownSessionId] : false,
   );
   const pendingPermission = useChatStore((s) =>
-    s.currentSessionId
-      ? s.threads[s.currentSessionId]?.pendingPermission
-      : undefined,
+    ownSessionId ? s.threads[ownSessionId]?.pendingPermission : undefined,
   );
+  // On the thread, so closing the side panel no longer takes the turn's counter and clock with it.
+  const usedTokens = useChatStore((s) =>
+    ownSessionId ? s.threads[ownSessionId]?.usedTokens ?? 0 : 0,
+  );
+  const turnStartedAt = useChatStore((s) =>
+    ownSessionId ? s.threads[ownSessionId]?.turnStartedAt : undefined,
+  );
+  const ownerId = useId();
+  const claimChat = useChatStore((s) => s.claimChat);
+  const releaseChat = useChatStore((s) => s.releaseChat);
+  const isActive = useChatStore((s) => chatDriver(s.chatOwners) === ownerId);
+  // Read at event time, not from a render-synced ref: a hand-over must not leave a gap where neither panel takes it.
+  const isDriving = useCallback(
+    (): boolean => chatDriver(useChatStore.getState().chatOwners) === ownerId,
+    [ownerId],
+  );
+
+  useEffect(() => {
+    claimChat(ownerId, onScreen);
+    return () => releaseChat(ownerId);
+  }, [ownerId, onScreen, claimChat, releaseChat]);
+
   const setCurrentSessionId = useChatStore((s) => s.setCurrentSessionId);
   const setLastSession = useChatStore((s) => s.setLastSession);
+  const forgetWorkspaceSession = useChatStore((s) => s.forgetWorkspaceSession);
+  const forgetSession = useChatStore((s) => s.forgetSession);
   const setDraftSessionId = useChatStore((s) => s.setDraftSessionId);
-  const activeSessionId = useChatStore((s) => s.currentSessionId);
   const addMessage = useChatStore((s) => s.addMessage);
   const appendText = useChatStore((s) => s.appendText);
   const addToolCall = useChatStore((s) => s.addToolCall);
@@ -307,6 +358,8 @@ export const useChatLogic = (): ChatPanelLogic => {
   const removeMessage = useChatStore((s) => s.removeMessage);
   const setStreamingMessageId = useChatStore((s) => s.setStreamingMessageId);
   const setSessionStreaming = useChatStore((s) => s.setSessionStreaming);
+  const startTurnMeters = useChatStore((s) => s.startTurnMeters);
+  const recordUsage = useChatStore((s) => s.recordUsage);
   const markReplyReady = useChatStore((s) => s.markReplyReady);
   const setPendingPermission = useChatStore((s) => s.setPendingPermission);
   const resetThread = useChatStore((s) => s.resetThread);
@@ -325,8 +378,8 @@ export const useChatLogic = (): ChatPanelLogic => {
   const sessionIdRef = useRef<SessionId | null>(null);
   // Bumped on every (re)bootstrap so an in-flight new/load bails if superseded or unmounted.
   const bootstrapToken = useRef(0);
-  // Context token count at the current turn's start; the display subtracts it so each question counts from ~0.
-  const tokenBaselineRef = useRef<number | undefined>(undefined);
+  // The workspace the held session belongs to: a hidden panel can be rebound to another app before it is shown again.
+  const sessionWorkspaceRef = useRef('');
 
   // Pickers: the agent advertises models + modes per session (read after newSession). Seed from the
   // last session's cache so the toolbar renders the pickers immediately instead of popping in (and
@@ -344,30 +397,45 @@ export const useChatLogic = (): ChatPanelLogic => {
 
   // Soon after a session opens, re-select the current model (no-op) so the agent re-advertises the now-warmer catalog cache — surfaces a late-loading Fable 5 without user action.
   useEffect(() => {
-    if (!activeSessionId) {
+    if (!ownSessionId) {
       return;
     }
     const timers = [3000, 12000].map((ms) =>
       setTimeout(() => {
         const modelId = currentModelIdRef.current;
         if (modelId) {
-          void setSessionModel(activeSessionId, modelId).catch(() => {
+          void setSessionModel(ownSessionId, modelId).catch(() => {
             // best-effort refresh; ignore failures
           });
         }
       }, ms),
     );
     return () => timers.forEach(clearTimeout);
-  }, [activeSessionId]);
+  }, [ownSessionId]);
   const [modes, setModes] = useState<AgentMode[]>(cachedPickers?.modes ?? []);
   const [currentModeId, setCurrentModeId] = useState<string | undefined>(
     cachedPickers?.currentModeId,
   );
-  const [usedTokens, setUsedTokens] = useState(0);
-  const [turnStartedAt, setTurnStartedAt] = useState<number | undefined>();
   const [sessionTitle, setSessionTitle] = useState<string | undefined>();
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | undefined>();
+  // The workspace the NEXT session opens in ('' = general). In a ref too, so bootstrap reads it without taking it as a dependency.
+  const [workspaceId, setWorkspaceId] = useState(lockedWorkspaceId ?? '');
+  const workspaceIdRef = useRef(lockedWorkspaceId ?? '');
+  // Read through a ref: bootstrapResume sits in the subscription effect's deps, which must not tear down on a rebind.
+  const lockedWorkspaceIdRef = useRef(lockedWorkspaceId);
+  lockedWorkspaceIdRef.current = lockedWorkspaceId;
+  // The name is carried, not looked up: it goes into the session's system prompt, and it labels a workspace the board no longer lists.
+  const [workspaceName, setWorkspaceName] = useState(lockedWorkspaceName);
+  const workspaceNameRef = useRef(lockedWorkspaceName);
+
+  // The only writer of the three: bootstrap reads the refs synchronously, so setting the state and forgetting the ref opens the next session on the previous workspace.
+  const setWorkspace = useCallback((id: string, name?: string): void => {
+    workspaceIdRef.current = id;
+    workspaceNameRef.current = name;
+    setWorkspaceId(id);
+    setWorkspaceName(name);
+  }, []);
 
   const hydratePickers = useCallback(
     async (id: SessionId, token: number): Promise<void> => {
@@ -375,17 +443,26 @@ export const useChatLogic = (): ChatPanelLogic => {
       if (bootstrapToken.current !== token || !state) {
         return;
       }
+      // A session the agent doesn't re-advertise (resumed, or one it no longer holds) answers with no
+      // models or modes, and taking that literally empties the toolbar for that session alone. The lists
+      // fall back to the last advertised ones: they are the agent's catalog, the same for all its sessions.
+      // The selected ids don't fall back. They belong to one session, and the refresh above writes
+      // currentModelId back, so a borrowed id would move this session onto another one's model.
+      const cached = useAiAssistantStore.getState().pickers;
       const next = {
-        models: state.models ?? [],
+        models: state.models?.length ? state.models : cached?.models ?? [],
         currentModelId: state.modelId,
-        modes: state.modes ?? [],
+        modes: state.modes?.length ? state.modes : cached?.modes ?? [],
         currentModeId: state.modeId,
       };
       setModels(next.models);
       setCurrentModelId(next.currentModelId);
       setModes(next.modes);
       setCurrentModeId(next.currentModeId);
-      setPickers(next); // cache for the next open, so the pickers render without a gap
+      // Cache for the next open, so the pickers render without a gap. The ids are cached exactly as this
+      // state reported them, unset included: the next panel seeds currentModelId from here, and the
+      // refresh above would write a kept id to whatever session that panel opens.
+      setPickers(next);
     },
     [setPickers],
   );
@@ -394,12 +471,17 @@ export const useChatLogic = (): ChatPanelLogic => {
   const bootstrap = useCallback(
     async (loadId?: SessionId, title?: string): Promise<void> => {
       const token = ++bootstrapToken.current;
-      tokenBaselineRef.current = undefined;
-      setUsedTokens(0);
+      // Pinned here: a switch that lands mid-flight moves the ref, and the failure below belongs to this workspace.
+      const openedFor = workspaceIdRef.current;
       setSessionTitle(title);
       setBootstrapError(undefined);
       try {
-        const id = loadId ?? (await newSession());
+        const id =
+          loadId ??
+          (await newSession(
+            workspaceIdRef.current || undefined,
+            workspaceNameRef.current,
+          ));
         if (bootstrapToken.current !== token) {
           if (!loadId) {
             void closeSession(id); // superseded/unmounted before we adopted the new session
@@ -407,15 +489,23 @@ export const useChatLogic = (): ChatPanelLogic => {
           return;
         }
         // Reopening a not-in-memory session needs a history replay; flag it (in the same tick as the
-        // switch) so the panel shows a loader instead of flashing the empty "new chat" state.
-        const needsReplay = !!loadId && !useChatStore.getState().threads[id];
+        // switch) so the panel shows a loader instead of flashing the empty "new chat" state. An empty
+        // thread counts as none: a persisted session always has messages, so it is a leftover.
+        const needsReplay =
+          !!loadId && !useChatStore.getState().threads[id]?.messages.length;
         setIsLoadingSession(needsReplay);
         sessionIdRef.current = id; // set before load so replayed updates are accepted
-        setCurrentSessionId(id); // keep the reactive display in sync with the ref
+        setOwnSessionId(id);
+        sessionWorkspaceRef.current = workspaceIdRef.current;
+        setCurrentSessionId(id); // the shared pointer the sidebar highlights; this panel's own display follows ownSessionId
         // A fresh session has no sidebar row until its first prompt gives it content; flag it so the
         // side panel can keep "New Session" selected in the meantime.
         setDraftSessionId(loadId ? null : id);
-        setLastSession(id, title); // remember it so navigating away and back reopens this session
+        // Remember it so navigating away and back reopens this session, workspace included.
+        setLastSession(id, title, {
+          id: workspaceIdRef.current,
+          name: workspaceNameRef.current,
+        });
         if (loadId && !needsReplay) {
           // In-memory reopen: the thread is already built (maybe a background turn still streaming) — just display it.
         } else {
@@ -429,6 +519,10 @@ export const useChatLogic = (): ChatPanelLogic => {
         }
         await hydratePickers(id, token);
       } catch (e) {
+        // A remembered session that no longer loads must not be offered again: drop it so the workspace opens clean next time.
+        if (loadId) {
+          forgetWorkspaceSession(openedFor);
+        }
         // Surface it: with no session id the composer stops rendering its send button, so a silent
         // failure is indistinguishable from a brand-new install.
         if (bootstrapToken.current === token) {
@@ -447,18 +541,87 @@ export const useChatLogic = (): ChatPanelLogic => {
       setCurrentSessionId,
       setDraftSessionId,
       setLastSession,
+      forgetWorkspaceSession,
     ],
   );
 
   const reopen = useCallback(
     (session: SessionSummary): void => {
+      const workspace = session.workspaceAppId ?? '';
+      const locked = lockedWorkspaceIdRef.current;
+      if (locked !== undefined && workspace !== locked) {
+        return; // a locked panel shows one app's sessions; anything else would rebind it from outside
+      }
+      // The picker shows the workspace of whatever is on screen, so adopt the reopened session's.
+      setWorkspace(workspace, session.workspaceName);
       void bootstrap(session.id, session.title);
     },
-    [bootstrap],
+    [bootstrap, setWorkspace],
   );
   const newChat = useCallback((): void => {
     void bootstrap();
   }, [bootstrap]);
+
+  // A session's workspace is fixed at creation, so picking another opens a new session; the outgoing one is closed only if it was never used.
+  const switchWorkspace = useCallback(
+    (id: string, name?: string): void => {
+      if (id === workspaceIdRef.current) {
+        return;
+      }
+      setWorkspace(id, name);
+      const current = sessionIdRef.current;
+      const untouched =
+        !useChatStore.getState().threads[current ?? '']?.messages.length;
+      // Coming back to a workspace reopens the chat it was left on, so the user finds the situation they left.
+      const remembered = useChatStore.getState().lastSessionByWorkspace[id];
+      // Close the outgoing session only once its replacement is in place, or a failed bootstrap strands the composer on a dead one.
+      void bootstrap(remembered?.id, remembered?.title).then(() => {
+        if (current && untouched && sessionIdRef.current !== current) {
+          // Its workspace remembered it on creation; closing it here would leave that pointer at a session the agent no longer has.
+          forgetSession(current);
+          void closeSession(current).catch(() => {
+            // best-effort: a session already gone needs no cleanup
+          });
+        }
+      });
+    },
+    [bootstrap, forgetSession, setWorkspace],
+  );
+
+  const selectWorkspace = useCallback(
+    (id: string, name?: string): void => {
+      if (lockedWorkspaceId === undefined) {
+        switchWorkspace(id, name);
+      }
+    },
+    [lockedWorkspaceId, switchWorkspace],
+  );
+
+  // Rebinds the panel when the editor navigates to another app; the host loads the name after the id, so a late one is adopted without opening a session.
+  useEffect(() => {
+    if (lockedWorkspaceId === undefined) {
+      return;
+    }
+    if (lockedWorkspaceId !== workspaceIdRef.current) {
+      // A hidden panel only records the rebind: opening a session would move the shared pointer out from under the visible one.
+      if (isActive) {
+        switchWorkspace(lockedWorkspaceId, lockedWorkspaceName);
+      } else {
+        setWorkspace(lockedWorkspaceId, lockedWorkspaceName);
+      }
+    } else if (
+      lockedWorkspaceName &&
+      lockedWorkspaceName !== workspaceNameRef.current
+    ) {
+      setWorkspace(lockedWorkspaceId, lockedWorkspaceName);
+    }
+  }, [
+    isActive,
+    lockedWorkspaceId,
+    lockedWorkspaceName,
+    switchWorkspace,
+    setWorkspace,
+  ]);
 
   const refreshSessionTitle = useCallback((sessionId: SessionId): void => {
     void listSessions()
@@ -479,19 +642,45 @@ export const useChatLogic = (): ChatPanelLogic => {
   // the first open, after an app restart, or after a sign-out (all leave lastSessionId unset). Keeps the
   // current chat when toggling between Agent and other App Lab pages, without resuming it on a cold open.
   const bootstrapResume = useCallback(async (): Promise<void> => {
-    const { lastSessionId, lastSessionTitle } = useChatStore.getState();
-    if (lastSessionId) {
+    const {
+      lastSessionId,
+      lastSessionTitle,
+      lastSessionWorkspaceId,
+      lastSessionWorkspaceName,
+    } = useChatStore.getState();
+    // A locked panel resumes only what belongs to its own app; anything else starts a fresh session in the lock.
+    const locked = lockedWorkspaceIdRef.current;
+    const resumable =
+      locked === undefined || (lastSessionWorkspaceId ?? '') === locked;
+    if (lastSessionId && resumable) {
+      // Adopt before bootstrapping: this path has no session summary to read the scope from, so a remount would resume a scoped session under the general label.
+      setWorkspace(lastSessionWorkspaceId ?? '', lastSessionWorkspaceName);
       await bootstrap(lastSessionId, lastSessionTitle);
     } else {
       await bootstrap();
     }
-  }, [bootstrap]);
+  }, [bootstrap, setWorkspace]);
 
   // Reopen whatever the failed bootstrap was aiming at. `newChat` is offered alongside it in the view,
   // because a retry can't help when the session itself is gone (a crash takes an unprompted draft with it).
   const retryBootstrap = useCallback((): void => {
     void bootstrapResume();
   }, [bootstrapResume]);
+
+  // Only the driving panel opens a session; taking over re-adopts the one this panel already holds, whose thread is still in the store.
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+    if (
+      sessionIdRef.current &&
+      sessionWorkspaceRef.current === workspaceIdRef.current
+    ) {
+      setCurrentSessionId(sessionIdRef.current);
+      return;
+    }
+    void bootstrapResume();
+  }, [isActive, bootstrapResume, setCurrentSessionId]);
 
   useEffect(() => {
     // Appends agent content to a session's live assistant message (created lazily); each session keeps its own streamingMessageId so background and open turns never share one.
@@ -509,8 +698,11 @@ export const useChatLogic = (): ChatPanelLogic => {
     };
 
     const unsubscribeUpdate = onUpdate((sessionId, update) => {
-      // Content always routes to its own session's thread; session-level signals (model/mode/usage) only matter
-      // for the session on screen — they drive the active pickers/counter and are re-derived on switch.
+      if (!isDriving()) {
+        return; // the other panel owns the stream; taking it too would double every message
+      }
+      // Content and usage route to their own session's thread; the picker signals (model/mode) apply
+      // to the session on screen only, and are re-derived on switch.
       const active = sessionId === sessionIdRef.current;
       switch (update.type) {
         case 'model_change':
@@ -532,15 +724,8 @@ export const useChatLogic = (): ChatPanelLogic => {
           setCurrentModeId(update.modeId);
           return;
         case 'usage':
-          if (!active) {
-            return;
-          }
-          if (tokenBaselineRef.current === undefined) {
-            tokenBaselineRef.current = update.usedTokens;
-          }
-          setUsedTokens(
-            Math.max(0, update.usedTokens - tokenBaselineRef.current),
-          );
+          // To its own session, not just the one on screen: the meters live per thread now.
+          recordUsage(sessionId, update.usedTokens);
           return;
         case 'user_message': {
           const userId = nextId();
@@ -576,6 +761,7 @@ export const useChatLogic = (): ChatPanelLogic => {
             status: update.status,
             output: update.output,
             ...(update.input !== undefined ? { input: update.input } : {}),
+            ...(update.outsideWorkspace ? { outsideWorkspace: true } : {}),
           });
           break;
         case 'checklist':
@@ -593,23 +779,28 @@ export const useChatLogic = (): ChatPanelLogic => {
     });
 
     const unsubscribePermission = onPermission((request) => {
+      if (!isDriving()) {
+        return;
+      }
       // Store the request on its own session's thread; the display reads the current thread's pendingPermission.
       setPendingPermission(request.sessionId, request);
     });
-
-    void bootstrapResume();
 
     return () => {
       unsubscribeUpdate();
       unsubscribePermission();
       bootstrapToken.current += 1; // cancel any in-flight bootstrap
       // Don't close any session on unmount — a turn left running must finish in the background, not be interrupted.
+      // Clear the shared pointers only while they are still this panel's, or closing the docked one blanks the chat the user is looking at.
+      if (useChatStore.getState().currentSessionId === sessionIdRef.current) {
+        setCurrentSessionId(null);
+        setDraftSessionId(null);
+      }
       sessionIdRef.current = null;
-      setCurrentSessionId(null);
-      setDraftSessionId(null);
     };
   }, [
-    bootstrapResume,
+    isDriving,
+    recordUsage,
     addMessage,
     appendText,
     addToolCall,
@@ -626,17 +817,32 @@ export const useChatLogic = (): ChatPanelLogic => {
   ]);
 
   useEffect(() => {
-    if (!sessionRequest) {
-      return;
+    if (!sessionRequest || !isActive) {
+      return; // one request, one panel: the hidden one would open a second session and win the global pointer
     }
 
     if (sessionRequest.type === 'open') {
       reopen(sessionRequest.session);
+    } else if (
+      sessionRequest.workspace &&
+      lockedWorkspaceIdRef.current === undefined
+    ) {
+      switchWorkspace(
+        sessionRequest.workspace.id,
+        sessionRequest.workspace.name,
+      );
     } else {
       newChat();
     }
     clearSessionRequest();
-  }, [sessionRequest, reopen, newChat, clearSessionRequest]);
+  }, [
+    sessionRequest,
+    isActive,
+    reopen,
+    newChat,
+    switchWorkspace,
+    clearSessionRequest,
+  ]);
 
   useEffect(
     () => () => {
@@ -672,21 +878,24 @@ export const useChatLogic = (): ChatPanelLogic => {
       addMessage(sessionId, { id: assistantId, role: 'assistant', parts: [] });
       setStreamingMessageId(sessionId, assistantId);
       setSessionStreaming(sessionId, true); // per-session flag, so a switch doesn't lose track of this turn
-      setTurnStartedAt(Date.now());
-      tokenBaselineRef.current = undefined; // each question counts tokens from 0
-      setUsedTokens(0);
+      startTurnMeters(sessionId); // each question counts from zero, and the clock starts now
 
       let succeeded = false;
       try {
-        await prompt(sessionId, trimmed);
-        succeeded = true;
+        if (isOffline()) {
+          setMessageError(sessionId, assistantId, '', 'network');
+        } else {
+          await prompt(sessionId, trimmed, getEditorContextRef.current?.());
+          succeeded = true;
+        }
       } catch (e) {
         const { message, kind, code } = parseAgentError(e);
         if (isAuthError(message, code)) {
           setSessionExpired(true);
           setAuth({ authenticated: false }); // drop to the connect screen to re-authenticate
         } else {
-          setMessageError(sessionId, assistantId, message, kind);
+          const failure = isNetworkError(message) ? 'network' : kind;
+          setMessageError(sessionId, assistantId, message, failure);
         }
       } finally {
         // The turn ended for THIS session, regardless of which session is on screen now — always clear its flags.
@@ -707,6 +916,7 @@ export const useChatLogic = (): ChatPanelLogic => {
       addMessage,
       setStreamingMessageId,
       setSessionStreaming,
+      startTurnMeters,
       setPendingPermission,
       setMessageError,
       setDraftSessionId,
@@ -860,8 +1070,13 @@ export const useChatLogic = (): ChatPanelLogic => {
   // last place — so there is nothing to dismiss.
   const lastMessage = messages[messages.length - 1];
   const requestError =
-    lastMessage?.status === 'error' && lastMessage.error
-      ? { messageId: lastMessage.id, message: lastMessage.error }
+    lastMessage?.status === 'error' &&
+    (lastMessage.error || lastMessage.errorKind)
+      ? {
+          messageId: lastMessage.id,
+          message: lastMessage.error,
+          kind: lastMessage.errorKind,
+        }
       : undefined;
 
   return {
@@ -887,9 +1102,12 @@ export const useChatLogic = (): ChatPanelLogic => {
     sessionTitle,
     isLoadingSession,
     isNewSession: messages.length === 0 && !isLoadingSession,
+    workspaceId,
+    workspaceName,
+    selectWorkspace,
     reopen,
     newChat,
-    currentSessionId: activeSessionId,
+    currentSessionId: ownSessionId,
     openFile,
     fileError,
     dismissFileError,

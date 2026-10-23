@@ -10,6 +10,7 @@ import (
 	stdruntime "runtime"
 	"strings"
 
+	"app-lab-desktop/internal/agent"
 	"app-lab-desktop/internal/airuntime"
 	"app-lab-desktop/internal/auth"
 	"app-lab-desktop/internal/board"
@@ -119,10 +120,7 @@ func (a *App) Shutdown(ctx context.Context) {
 	if rt != nil {
 		rt.Cancel()
 	}
-	daemon, err := flasher.FlashDaemonService()
-	if err == nil {
-		daemon.DaemonShutDown()
-	}
+	flasher.ShutdownDaemon()
 	a.selectedBoard.CloseTunnels(ctx)
 	a.lspHandler.StopAll()
 }
@@ -158,20 +156,39 @@ func (a *App) selectBoard(serial string, password string) error {
 			}
 			// The agent is bound to one board — its prompt describes it and its mirrors hold that board's files — so
 			// hand the board over before swapping it (flush, stop, drop checkouts). See detachAgentForBoardChange.
-			a.detachAgentForBoardChange()
+			// Re-selecting the current board (a reconnect, or a redundant frontend call) keeps the agent: nothing it knows changes.
+			detached := false
+			if !a.isSelectedBoard(b) {
+				detached = a.detachAgentForBoardChange()
+			}
 			// The connection is changing; drop any watches pointing at the old one.
 			if a.watcher != nil {
 				a.watcher.UnwatchAll()
 			}
-			// The old "changed once" premise is gone (the board is swapped repeatedly now); still open: the previous board's Conn/tunnels aren't closed, and this assignment stays unsynchronised for the non-agent readers (W1).
-			*a.selectedBoard = *b
+			// The old "changed once" premise is gone (the board is swapped repeatedly now); still open: the previous
+			// board's Conn/tunnels aren't closed, and this assignment stays unsynchronised for the non-agent readers (W1).
+			// The agent does survive a same-board re-select now, so it reads the board through boardSnapshot, which
+			// takes boardMu: a board MCP tool mid-turn must not see half of each board's Conn or tunnels.
+			a.setSelectedBoard(b)
 
 			a.lspHandler.OnBoardSelected()
+
+			// Only now: the frontend relaunches the agent on this event, and a relaunch that arrived earlier would
+			// describe the board we just left. Same event a crash-out uses; the reason distinguishes them.
+			if detached {
+				a.emit("acp:restart", agent.RestartInfo{GaveUp: true, Reason: boardChangedReason})
+			}
 
 			return nil
 		}
 	}
 	return fmt.Errorf("failed to select board: board with serial %s not found", serial)
+}
+
+// isSelectedBoard reports whether b is the board already selected, by identity (serial, or address for network boards).
+func (a *App) isSelectedBoard(b *board.Board) bool {
+	id := boardIdentity(b.Info.Serial, b.Info.Address)
+	return id != "" && id == a.selectedBoardID()
 }
 
 //go:embed ArduinoAppLab.desktop

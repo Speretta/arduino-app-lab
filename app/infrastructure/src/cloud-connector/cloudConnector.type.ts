@@ -13,5 +13,6 @@ export type CloudConnectorOrganization = {
   id: string;
   logo?: string;
   name: string;
+  space: string;
   type: string;
 };

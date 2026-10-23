@@ -128,13 +128,31 @@ Open a fresh Git Bash in the repo. direnv should download the pinned engines to
 ```console
 $ which node && node -v
 /c/.../cloud-editor-mono/__engines__/node_bin/node
-v18.15.0
+v26.1.0
+$ which yarn && yarn -v
+/c/.../cloud-editor-mono/__engines__/yarn_bin/yarn
+4.18.0
 ```
 
-A `ln: .../yarn_bin/...: cannot overwrite directory` warning on every load is
-expected and harmless. Git Bash cannot create real symlinks without Developer
-Mode, so `ln -s` copies the directory instead and the next `ln -nsf` refuses to
-clobber it. Yarn still resolves to 3.5.0.
+Git Bash cannot create real symlinks without Developer Mode, so `node_bin` and
+`yarn_bin` are copies of the release folders. Each copy holds an
+`.engine-release` file naming the folder it was copied from, and the script
+replaces the copy when the pinned version changes. Expect one slow load after
+a Node or Yarn bump, while the copy is made. If the old copy cannot be deleted,
+for example because Windows has a file in it locked, the script prints a
+warning and stops, and the next shell tries again. Until then the old copy may
+be partly deleted.
+
+> Changed in [`dev-utils/dev-config/scripts/setup-dev-env.sh`](../dev-utils/dev-config/scripts/setup-dev-env.sh).
+> Before, `ln -nsf` put each new version inside the old copy, so `node_bin`
+> stayed at the Node first installed. Yarn was saved only as `yarn.CMD`, which
+> Git Bash does not find as `yarn`.
+
+`yarn_bin` also holds `yarn.cmd`, which runs Yarn with `node_bin`'s Node, for
+cmd and PowerShell. This setup hooks direnv into Git Bash only, so to use the
+pinned engines there, add `__engines__\yarn_bin` to your user `PATH`, and
+`__engines__\node_bin` too if you want `node` itself. A user `PATH` entry
+applies to every terminal, not only this repo.
 
 ## 3. GitHub package registry token
 
@@ -158,11 +176,11 @@ Then, in the repo:
 mkcert -install
 cd dev-utils/dev-config
 mkcert -cert-file localhost+1.pem -key-file localhost+1-key.pem \
-  local.arduino.cc localhost 127.0.0.1
+  local.arduino.cc local.oniudra.cc localhost 127.0.0.1
 ```
 
 Those exact filenames are what
-[`dev-utils/dev-config/vite.config.shared.js`](../dev-utils/dev-config/vite.config.shared.js)
+[`dev-utils/dev-config/vite.config.shared.js`](../dev-utils/dev-config/vite.config.shared.mjs)
 loads. Both are covered by `.gitignore`.
 
 `mkcert -install` writes to the trust store without prompting for elevation.
@@ -331,6 +349,7 @@ above already kills the whole tree.
 | File | Change |
 | --- | --- |
 | [`dev-utils/dev-config/scripts/setup-dev-env.sh`](../dev-utils/dev-config/scripts/setup-dev-env.sh) | Normalise `PROJECT_ROOT` to a POSIX path so it can be prepended to `PATH` |
+| [`dev-utils/dev-config/scripts/setup-dev-env.sh`](../dev-utils/dev-config/scripts/setup-dev-env.sh) | Replace the `node_bin`/`yarn_bin` copies when the pinned version changes; save Yarn as `yarn` and add `yarn.cmd` |
 | [`.gitattributes`](../.gitattributes) | Mark the vendored Socket.IO bundle `-text` so autocrlf cannot break its checksum |
 
 Everything else is local machine setup.

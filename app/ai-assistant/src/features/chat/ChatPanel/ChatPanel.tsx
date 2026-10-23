@@ -1,14 +1,16 @@
-import { ChevronDown } from '@cloud-editor-mono/images/assets/icons';
+import { ChatAgent, ChevronDown } from '@cloud-editor-mono/images/assets/icons';
 import {
+  type AgentEditorContext,
   ArduinoLoader,
   TextSize,
   useI18n,
   useTooltip,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import clsx from 'clsx';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { messages } from '../../../messages';
+import type { AgentWorkspace } from '../../../services';
 import { getAgent } from '../../../services';
 import { useAiAssistantStore } from '../../../store';
 import {
@@ -18,15 +20,44 @@ import {
   Prompt,
   Text,
   Toast,
+  WorkspaceChip,
 } from '../../../ui';
+import { useIsOffline, useStickToBottom } from '../../../utils';
 import { ChatInput } from '../ChatInput/ChatInput';
+import { ChatInputPicker } from '../ChatInput/ChatInputPicker';
 import { Message } from '../Message/Message';
 import { PendingChoices } from '../PendingChoices/PendingChoices';
 import styles from './chat-panel.module.scss';
 import { useChatLogic } from './ChatPanel.logic';
-import { useStickToBottom } from './useStickToBottom';
 
-export const ChatPanel: React.FC = () => {
+export interface ChatPanelProps {
+  // Suppresses the panel's own toolbar/session-name bar for hosts that render the
+  // session title in their own header instead (see onSessionTitleChange below).
+  hideToolbar?: boolean;
+  onSessionTitleChange?: (title: string | undefined) => void;
+  workspaces?: AgentWorkspace[];
+  // Binds the panel to one app, with no way to leave it; the host names the workspace itself.
+  lockedWorkspaceId?: string;
+  lockedWorkspaceName?: string;
+  // False while the host keeps this panel mounted but hidden, so it yields the stream to the visible one.
+  onScreen?: boolean;
+  // Renders the docked side panel's presentation — compact greeting, tighter padding — at any
+  // width, so widening the panel doesn't turn it into the full-screen Agent Mode view.
+  docked?: boolean;
+  // The editor beside a docked panel, read at each send: the agent gets it, the thread never shows it.
+  getEditorContext?: () => AgentEditorContext;
+}
+
+export const ChatPanel: React.FC<ChatPanelProps> = ({
+  hideToolbar,
+  onSessionTitleChange,
+  workspaces = [],
+  lockedWorkspaceId,
+  lockedWorkspaceName,
+  onScreen = true,
+  docked = false,
+  getEditorContext,
+}) => {
   const { formatMessage } = useI18n();
   const {
     messages: chatMessages,
@@ -58,15 +89,44 @@ export const ChatPanel: React.FC = () => {
     dismissFileError,
     sessionActionError,
     dismissSessionActionError,
-  } = useChatLogic();
+    workspaceId,
+    workspaceName,
+    selectWorkspace,
+  } = useChatLogic(
+    lockedWorkspaceId,
+    lockedWorkspaceName,
+    onScreen,
+    getEditorContext,
+  );
 
   const {
     ref: threadRef,
     atBottom,
-    onScroll: updateAtBottom,
+    atTop,
+    onScroll: updateScrollEdges,
     scrollToBottom,
     pauseAutoScroll,
   } = useStickToBottom();
+
+  const offline = useIsOffline();
+  const justConnected = useAiAssistantStore((s) => s.justConnected);
+  const setJustConnected = useAiAssistantStore((s) => s.setJustConnected);
+  const auth = useAiAssistantStore((s) => s.auth);
+
+  const { props: scrollTooltipProps, renderTooltip: renderScrollTooltip } =
+    useTooltip({
+      content: formatMessage(messages.chatScrollToBottom),
+      timeout: 0,
+      renderDelay: 500,
+    });
+
+  const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false);
+  const [offlineDismissed, setOfflineDismissed] = useState(false);
+
+  const closeScrollTooltip = scrollTooltipProps.onMouseLeave;
+  const connectedAgent = getAgent(
+    auth.authenticated ? auth.agentId : undefined,
+  );
 
   // Handed to the thread's collapsible blocks: expanding one stops the thread following its
   // bottom edge, so the content it reveals isn't pushed back out of view by the turn still
@@ -76,21 +136,23 @@ export const ChatPanel: React.FC = () => {
     [pauseAutoScroll],
   );
 
-  const { props: scrollTooltipProps, renderTooltip: renderScrollTooltip } =
-    useTooltip({
-      content: formatMessage(messages.chatScrollToBottom),
-      timeout: 0,
-      renderDelay: 500,
-    });
-
-  const closeScrollTooltip = scrollTooltipProps.onMouseLeave;
-
-  const justConnected = useAiAssistantStore((s) => s.justConnected);
-  const setJustConnected = useAiAssistantStore((s) => s.setJustConnected);
-  const auth = useAiAssistantStore((s) => s.auth);
-  const connectedAgent = getAgent(
-    auth.authenticated ? auth.agentId : undefined,
+  const workspaceItems = useMemo(
+    () =>
+      workspaces.map((workspace) => ({
+        id: workspace.id,
+        name: workspace.name,
+        icon: workspace.icon,
+        dividerAfter: workspace.id === '',
+      })),
+    [workspaces],
   );
+
+  // An app the board no longer lists still has to read as itself: the first entry would label a scoped session as the general workspace.
+  const selectedWorkspace =
+    workspaceItems.find((workspace) => workspace.id === workspaceId) ??
+    (workspaceId
+      ? { id: workspaceId, name: workspaceName || workspaceId }
+      : workspaceItems[0]);
 
   useEffect(() => {
     if (atBottom) {
@@ -98,23 +160,54 @@ export const ChatPanel: React.FC = () => {
     }
   }, [atBottom, closeScrollTooltip]);
 
+  useEffect(() => {
+    if (!offline) {
+      setOfflineDismissed(false);
+    }
+  }, [offline]);
+
+  useEffect(() => {
+    onSessionTitleChange?.(sessionTitle);
+  }, [sessionTitle, onSessionTitleChange]);
+
   return (
     <div
-      className={clsx(styles['chat'], isNewSession && styles['chat--empty'])}
+      className={clsx(
+        styles['chat'],
+        docked && styles['chat--docked'],
+        isNewSession && styles['chat--empty'],
+      )}
     >
-      <div className={styles['toolbar']}>
-        {sessionTitle && (
-          <Heading className={styles['session-name']}>{sessionTitle}</Heading>
-        )}
-      </div>
+      {!hideToolbar && (
+        <div className={styles['toolbar']}>
+          {sessionTitle && (
+            <>
+              <Heading className={styles['session-name']}>
+                {sessionTitle}
+              </Heading>
+              {selectedWorkspace && (
+                <WorkspaceChip name={selectedWorkspace.name} />
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      <div
+        className={styles['thread-shadow']}
+        style={{ opacity: atTop ? 0 : 1 }}
+        aria-hidden="true"
+        data-testid="chat-thread-shadow"
+      />
 
       {/* Bottom-anchored scroller: messages are its direct children, newest first, so the
           browser keeps the newest one against the bottom edge as content and layout change. */}
       <AutoScrollProvider value={autoScrollControl}>
         <div
           className={styles['thread']}
+          data-testid="chat-thread"
           ref={threadRef}
-          onScroll={(e): void => updateAtBottom(e.currentTarget)}
+          onScroll={(e): void => updateScrollEdges(e.currentTarget)}
         >
           {chatMessages.length === 0 ? (
             isLoadingSession ? (
@@ -129,9 +222,21 @@ export const ChatPanel: React.FC = () => {
               </div>
             ) : (
               <div className={styles['empty-state']}>
-                <Heading className={styles['empty-state-title']}>
-                  {formatMessage(messages.chatEmptyTitle)}
-                </Heading>
+                {docked ? (
+                  <>
+                    <ChatAgent
+                      className={styles['empty-state-icon']}
+                      aria-hidden="true"
+                    />
+                    <Heading className={styles['empty-state-title--compact']}>
+                      {formatMessage(messages.chatEmptyTitleCompact)}
+                    </Heading>
+                  </>
+                ) : (
+                  <Heading className={styles['empty-state-title']}>
+                    {formatMessage(messages.chatEmptyTitle)}
+                  </Heading>
+                )}
               </div>
             )
           ) : (
@@ -197,8 +302,17 @@ export const ChatPanel: React.FC = () => {
                   >
                     {permission.command}
                   </Text>
-                  {permission.reason && <Text>{permission.reason}</Text>}
+                  {permission.outsideWorkspace && (
+                    <span className={styles['permission-outside']}>
+                      {formatMessage(messages.permOutsideWorkspace)}
+                    </span>
+                  )}
                 </div>
+              )}
+              {permission.reason && (
+                <Text className={styles['permission-reason']}>
+                  {permission.reason}
+                </Text>
               )}
             </Prompt>
           </div>
@@ -231,7 +345,11 @@ export const ChatPanel: React.FC = () => {
             <Prompt
               state="error"
               title="Request failed"
-              description={requestError.message}
+              description={
+                requestError.kind === 'network'
+                  ? formatMessage(messages.offlineRequestError)
+                  : requestError.message
+              }
               actions={[
                 {
                   id: 'retry',
@@ -260,6 +378,39 @@ export const ChatPanel: React.FC = () => {
             {renderScrollTooltip()}
           </div>
         )}
+        {/* Only on an empty chat, a board with no apps of its own included: a session's workspace is fixed when
+            it is created, so a started conversation has nothing to pick. From then on the toolbar chip names it. */}
+        {lockedWorkspaceId === undefined && isNewSession && selectedWorkspace && (
+          <div className={styles['workspace-row']}>
+            <div className={styles['workspace-row-inner']}>
+              <Text size={TextSize.XXSmall}>
+                {formatMessage(messages.workspacePickerPrefix)}
+              </Text>
+              <ChatInputPicker
+                items={workspaceItems}
+                selected={selectedWorkspace}
+                align="left"
+                direction="down"
+                label={formatMessage(messages.workspacePicker)}
+                isOpen={workspacePickerOpen}
+                onToggle={(): void => setWorkspacePickerOpen((open) => !open)}
+                onClose={(): void => setWorkspacePickerOpen(false)}
+                onSelect={(id): void => {
+                  selectWorkspace(
+                    id,
+                    workspaceItems.find((w) => w.id === id)?.name,
+                  );
+                  setWorkspacePickerOpen(false);
+                }}
+                classes={{
+                  trigger: styles['workspace-picker-trigger'],
+                  value: styles['workspace-picker-value'],
+                  icon: styles['workspace-picker-icon'],
+                }}
+              />
+            </div>
+          </div>
+        )}
         <ChatInput
           isStreaming={isStreaming}
           hasSession={currentSessionId !== null}
@@ -278,6 +429,15 @@ export const ChatPanel: React.FC = () => {
       </div>
 
       <div className={styles['chat-toast']}>
+        {offline && !offlineDismissed && (
+          <Toast
+            variant="error"
+            onDismiss={(): void => setOfflineDismissed(true)}
+            dismissLabel={formatMessage(messages.dismiss)}
+          >
+            {formatMessage(messages.offlineToast)}
+          </Toast>
+        )}
         {justConnected && connectedAgent && (
           <Toast
             variant="success"

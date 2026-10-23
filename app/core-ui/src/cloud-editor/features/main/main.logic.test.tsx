@@ -15,6 +15,7 @@ import {
 } from '@cloud-editor-mono/infrastructure';
 import {
   ConsoleOutput,
+  defaultPreferences,
   Preferences,
   PreferenceValue,
 } from '@cloud-editor-mono/ui-components';
@@ -546,7 +547,7 @@ describe('call useCoreCommands', () => {
 
 describe('call getPreferenceObservable', async () => {
   const consoleOutputSubject = new BehaviorSubject<PreferenceValue>(
-    Preferences.ConsoleOutput,
+    defaultPreferences[Preferences.ConsoleOutput],
   );
 
   describe('call getPreferenceObservable and a preference is found', async () => {

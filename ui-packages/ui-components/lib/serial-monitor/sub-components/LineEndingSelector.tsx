@@ -5,7 +5,7 @@ import { messages } from '../messages';
 
 type LineEndingSelectorProps = ReturnType<UseSelectLineEnding> & {
   disabled: boolean;
-  classes?: { wrapper?: string; menu?: string };
+  classes?: { wrapper?: string; menu?: string; menuPopover?: string };
 };
 
 const LineEndingSelector: React.FC<LineEndingSelectorProps> = (

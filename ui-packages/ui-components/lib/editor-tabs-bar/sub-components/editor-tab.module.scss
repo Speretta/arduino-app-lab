@@ -40,17 +40,21 @@
   align-items: center;
   box-sizing: border-box;
   white-space: nowrap;
-  color: shared.theme-var(--editor-tab-foreground);
-  background-color: shared.theme-var(--editor-tab-background);
+  color: var(--editor-tab-foreground);
+  background-color: var(--surface-bg-below-2);
   cursor: pointer;
-  border-color: shared.theme-var(--editor-border-color);
+  // Divider between tabs: must differ from the tab background, which --surface-bg-below-2 is.
+  border-color: var(--editor-border-color);
   border-style: solid;
   border-width: 0 1px 1px 0;
   box-sizing: border-box;
 
   &.tab-selected {
-    color: shared.theme-var(--editor-tab-foreground-active);
-    background-color: shared.theme-var(--editor-tab-background-active);
+    color: var(--editor-tab-foreground-active);
+    // The active tab merges into the editor canvas below it, so it tracks the
+    // editor background (per-app: CE restores #2c353a, AL pins #171e21). See
+    // ce-tokens.scss / al-custom-tokens.scss.
+    background-color: var(--editor-background);
     border-width: 0 1px 0 0;
     border-bottom: 1px solid transparent; // To prevent layout shift when switching tabs
   }
@@ -62,7 +66,9 @@
   }
 
   &.rename-tab {
-    grid-template-columns: 1fr;
+    min-width: 160px;
+    // Keep the renaming tab from shrinking in a crowded bar (bar scrolls instead).
+    flex-shrink: 0;
     padding-right: 8px;
   }
 
@@ -77,6 +83,14 @@
       padding-left: 28px;
     }
   }
+}
+
+.tab-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
 }
 
 .tab-icon {
@@ -111,24 +125,14 @@
 
 .tab-close-button {
   display: none;
-  color: shared.theme-var(--editor-tab-foreground);
+  color: var(--editor-tab-foreground);
   border-radius: 4px;
   height: 20px !important;
   width: 20px !important;
 
   &:hover {
-    color: shared.theme-var(--editor-tab-foreground-active);
+    color: var(--editor-tab-foreground-active);
     background: var(--component-bg-flexible, rgba(174, 184, 184, 0.15));
-  }
-
-  &-tooltip {
-    background: var(--feedback-neutral-default, #aeb8b8);
-    border-radius: 3px;
-    border: none;
-    color: #171e21;
-    font-size: 12px;
-    font-weight: 400;
-    padding: 2px 8px;
   }
 }
 
@@ -148,8 +152,11 @@
 .rename-tab-form {
   display: grid;
   grid-auto-flow: column;
-  grid-template-columns: 1fr fit-content(100%);
+  // minmax(0,1fr) lets the input column shrink so it stays inside the tab.
+  grid-template-columns: minmax(0, 1fr) fit-content(100%);
   column-gap: 5px;
+  flex: 1;
+  min-width: 0;
 }
 
 .rename-tab-input {
@@ -159,9 +166,12 @@
   font-weight: 400;
   font-style: normal;
   padding: unset;
-  outline-color: shared.theme-var(--button-secondary-outline-active);
-  background: shared.theme-var(--input-field-background);
-  color: shared.theme-var(--input-field-foreground);
+  // Fill + shrink within the grid cell so the input can't overflow the tab.
+  width: 100%;
+  min-width: 0;
+  outline-color: var(--accent-default-strong);
+  background: var(--component-bg-baseline);
+  color: var(--text-default);
 
   &.error {
     outline-color: #df7365;
@@ -174,6 +184,7 @@
   width: 232px;
   padding: 4px;
   z-index: 1000;
+  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.25); // TODO: Create suitable variable
 }
 
 .tab-menu-item {
@@ -211,13 +222,13 @@
 }
 
 kbd {
-  color: shared.theme-var(--dropdown-item-label2);
+  color: var(--dropdown-item-label2);
 }
 
 .tab-label-invalid {
   position: absolute;
   padding-left: 14px;
-  background-color: shared.theme-var(--editor-background);
+  background-color: var(--editor-background);
   opacity: 0.8;
   color: #7f8c8d;
 

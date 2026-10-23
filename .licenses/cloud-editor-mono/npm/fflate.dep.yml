@@ -1,6 +1,6 @@
 ---
 name: fflate
-version: 0.8.2
+version: 0.8.3
 type: npm
 summary: High performance (de)compression in an 8kB package
 homepage: https://101arrowz.github.io/fflate
@@ -10,7 +10,7 @@ licenses:
   text: |-
     MIT License
 
-    Copyright (c) 2023 Arjun Barrett
+    Copyright (c) 2026 Arjun Barrett
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal

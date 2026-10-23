@@ -44,7 +44,12 @@ error() { echo -e "${RED}[ERROR] $1${NC}"; }
 command -v jq > /dev/null 2>&1 || { error "jq is required"; exit 1; }
 
 # yq comes from the repo's own tool directives, so it needs no separate install.
-yq() { ( cd "$REPO_ROOT" && go tool github.com/mikefarah/yq/v4 "$@" ); }
+# Unset GOOS/GOARCH: this script runs as a step of general:cache-dep-licenses,
+# whose task-level env pins them to linux/amd64 for `licensed`/`go list`. yq is a
+# host tool with nothing to do with the license target platform, and leaving them
+# set makes `go tool` cross-compile a linux binary that cannot exec on the host
+# (exec format error on macOS/arm64).
+yq() { ( cd "$REPO_ROOT" && env -u GOOS -u GOARCH go tool github.com/mikefarah/yq/v4 "$@" ); }
 
 # generate <cache dir> <output file> <heading> <what these are>
 generate() {

@@ -1,4 +1,4 @@
-@use "../../../../../../public/shared.module.scss";
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
 
 .send-box-container {
   padding: 16px;
@@ -28,13 +28,13 @@
 
 .sketch-generation-container {
   min-height: 71px;
-  background-color: #005c5f1a;
+  background-color: #005c5f1a; // TODO: Create suitable variable
   border-radius: 8px 8px 0px 0px;
-  border-top: 1px solid #7fcbcd;
-  border-left: 1px solid #7fcbcd;
-  border-right: 1px solid #7fcbcd;
+  border-top: 1px solid var(--border-accent-strong);
+  border-left: 1px solid var(--border-accent-strong);
+  border-right: 1px solid var(--border-accent-strong);
   padding: 12px 16px;
-  color: #374146;
+  color: var(--text-default);
 
   display: grid;
   grid-template-columns: 1fr min-content;
@@ -49,7 +49,7 @@
 .sketch-generation-button {
   display: grid;
   flex-direction: row-reverse;
-  background-color: #ffffff;
+  background-color: var(--text-on-accent);
   border-radius: 30px;
   padding: 1px 12px;
   width: fit-content;
@@ -59,7 +59,7 @@
     height: 16px;
 
     & > path {
-      fill: #b660eb;
+      fill: #b660eb; // TODO: Create suitable variable
     }
   }
 }
@@ -68,9 +68,9 @@
   cursor: text;
   width: 100%;
   padding: 6px 12px;
-  background-color: #ffffff;
+  background-color: var(--component-bg-baseline);
   column-gap: 8px;
-  border: 1px solid shared.theme-var(--input-field-border);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
   box-sizing: border-box;
   transition: var(--transition);
@@ -93,7 +93,7 @@
 
   textarea:empty:before {
     content: attr(placeholder);
-    color: #7f8c8d;
+    color: var(--text-subtle);
 
     font-size: 0.75rem;
     letter-spacing: 0.01em;
@@ -105,7 +105,7 @@
 
   &.is-loading,
   &.is-sending {
-    background-color: #ecf1f1 !important;
+    background-color: var(--component-bg-below-1) !important;
     textarea:empty:before {
       content: attr(placeholder);
     }
@@ -123,7 +123,7 @@
   }
 
   &:focus-within {
-    border: 1px solid #7fcbcd;
+    border: 1px solid var(--border-accent-strong);
   }
 
   &.is-sketch-generation-box-visible {
@@ -133,8 +133,8 @@
   }
 
   &.is-disabled {
-    background-color: #ecf1f1;
-    color: #7f8c8d;
+    background-color: var(--component-bg-below-1);
+    color: var(--text-subtle);
   }
 }
 
@@ -143,7 +143,7 @@
   outline: none;
   resize: none;
   width: 100%;
-  color: #171e21;
+  color: var(--text-default);
   flex: 1;
   min-height: 20px;
   max-height: 84px;
@@ -162,13 +162,9 @@
     width: 6px;
   }
 
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
   &::-webkit-scrollbar-thumb {
     border: 0;
-    background-color: rgba(127, 140, 141, 0.5);
+    background-color: rgba(127, 140, 141, 0.5); // TODO: Create suitable variable
   }
 }
 
@@ -188,7 +184,7 @@
 
 .quick-action-input-label {
   grid-area: quick-action-input-label;
-  border: 1px solid #c9d2d2;
+  border: 1px solid var(--border-default);
   border-radius: 4px;
   padding: 2px 7px;
   display: grid;
@@ -196,15 +192,15 @@
   align-items: center;
   gap: 4px;
   white-space: nowrap;
-  color: #2c353a;
-  background-color: #37414626;
+  color: var(--text-default);
+  background-color: #37414626; // TODO: Create suitable variable
 
   & > svg {
     width: 16px;
     height: 16px;
 
     & > path {
-      fill: #008184;
+      fill: var(--accent-default);
     }
   }
 
@@ -213,7 +209,7 @@
     height: 12px;
 
     & > path {
-      fill: #5d6a6b;
+      fill: var(--icon-subtle);
     }
   }
 }
@@ -223,7 +219,7 @@
   width: 50px;
   height: 28px;
   border-radius: 32px;
-  background-color: #da5b4a;
+  background-color: #da5b4a; // TODO: Create suitable variable
   display: grid;
   place-items: center;
 
@@ -232,7 +228,7 @@
     height: 18px;
 
     & > path {
-      fill: #fff;
+      fill: var(--icon-on-accent);
     }
   }
 }

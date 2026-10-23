@@ -7,7 +7,7 @@ import {
   mapAssetSources,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useQuery } from '@tanstack/react-query';
-import { useCanGoBack, useNavigate, useRouter } from '@tanstack/react-router';
+import { useNavigate, useRouter } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef } from 'react';
 
 import { UseLearnDetailLogic } from './learnDetail.type';
@@ -37,16 +37,13 @@ async function getLearnResource(resourceId: string): Promise<LearnResource> {
 export const useLearnDetailLogic = function (
   resourceId: string,
 ): UseLearnDetailLogic {
-  const { data: learnResource, isLoading: getLearnResourceLoading } = useQuery(
-    ['learn-resource-', resourceId],
-    () => getLearnResource(resourceId),
-    {
-      enabled: Boolean(resourceId),
-    },
-  );
+  const { data: learnResource, isLoading: getLearnResourceLoading } = useQuery({
+    queryKey: ['learn-resource-', resourceId],
+    queryFn: () => getLearnResource(resourceId),
+    enabled: Boolean(resourceId),
+  });
 
   const router = useRouter();
-  const canGoBack = useCanGoBack();
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   const navigate = useNavigate({ from: `/learn/${resourceId}` });

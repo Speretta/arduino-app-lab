@@ -11,20 +11,23 @@ import { reset } from './reset';
 export type StyledContent = {
   from: number;
   textContent: string;
-  className: string;
+  className?: string;
+  style?: string;
 };
 
 const addStyledContent = StateEffect.define<StyledContent>({
-  map: ({ from, textContent, className }, change) => ({
+  map: ({ from, textContent, className, style }, change) => ({
     from: change.mapPos(from),
     textContent,
     className,
+    style,
   }),
 });
 
-const styledHighlighting = (className: string): Decoration =>
+const styledHighlighting = (className?: string, style?: string): Decoration =>
   Decoration.mark({
     class: className,
+    attributes: style ? { style } : undefined,
   });
 
 export const styledContents = StateField.define<StyledContent[]>({
@@ -40,6 +43,7 @@ export const styledContents = StateField.define<StyledContent[]>({
             from: e.value.from,
             textContent: e.value.textContent,
             className: e.value.className,
+            style: e.value.style,
           },
         ];
       } else if (e.is(reset)) styledContents = [];
@@ -48,9 +52,13 @@ export const styledContents = StateField.define<StyledContent[]>({
   provide: (f) => [
     EditorView.decorations.from(f, (values) =>
       RangeSet.of(
-        values.map(({ from, textContent, className }) =>
-          styledHighlighting(className).range(from, from + textContent.length),
+        values.map(({ from, textContent, className, style }) =>
+          styledHighlighting(className, style).range(
+            from,
+            from + textContent.length,
+          ),
         ),
+        true,
       ),
     ),
   ],
@@ -60,8 +68,11 @@ export function addStyledContentEffect(
   tr: TransactionSpec,
   from: number,
   textContent: string,
-  className: string,
+  className?: string,
+  style?: string,
 ): void {
+  // Mark decorations may not be empty, and an unstyled range is a no-op.
+  if (textContent.length === 0 || (!className && !style)) return;
   if (!tr.effects) {
     tr.effects = [];
   }
@@ -70,6 +81,7 @@ export function addStyledContentEffect(
       from,
       textContent,
       className,
+      style,
     }),
   );
 }

@@ -6,8 +6,8 @@ import { restartForNewCredential } from './restartForNewCredential';
 // Order matters more than the individual calls here, so the doubles record it (see beforeEach).
 const agent = vi.hoisted(() => ({
   calls: [] as string[],
-  start: vi.fn<[string], Promise<void>>(),
-  stop: vi.fn<[], Promise<void>>(),
+  start: vi.fn<(agentId: string) => Promise<void>>(),
+  stop: vi.fn<() => Promise<void>>(),
 }));
 
 vi.mock('../../services', () => ({ start: agent.start, stop: agent.stop }));

@@ -8,6 +8,7 @@ import {
   CompleteExample,
   CompleteExampleFileRef,
   CompleteLibraryDetailsResult,
+  GetLibrariesResult,
   GetUploadInfoPayload,
   RetrieveExampleFileContentsResult,
   RetrieveLibraryFileContentsResult,
@@ -18,7 +19,6 @@ import {
   GetBoards_Response,
   GetFavoriteLibraries_Response,
   GetLibraries_Params,
-  GetLibraries_Response,
   GetLibrary_Params,
   LibrariesItem_Response,
 } from '@cloud-editor-mono/infrastructure';
@@ -29,6 +29,7 @@ import {
 } from '@cloud-editor-mono/web-board-communication';
 import {
   FetchNextPageOptions,
+  InfiniteData,
   InfiniteQueryObserverResult,
 } from '@tanstack/react-query';
 
@@ -150,7 +151,12 @@ export type UseGetLibraries = (
   isFetchingNextPage: boolean;
   fetchNextPage: (
     options?: FetchNextPageOptions | undefined,
-  ) => Promise<InfiniteQueryObserverResult<GetLibraries_Response, unknown>>;
+  ) => Promise<
+    InfiniteQueryObserverResult<
+      InfiniteData<GetLibrariesResult, unknown>,
+      Error
+    >
+  >;
   hasNextPage?: boolean;
   fromParams?: string;
 };

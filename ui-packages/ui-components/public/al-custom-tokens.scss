@@ -1,0 +1,41 @@
+// App Lab-owned design tokens (dark-only) with no colorino (design-system)
+// equivalent. These were authored against token names that never existed in
+// colorino; vendored here with their original literals so rendering is
+// unchanged. App Lab is dark-only and its wrapper carries data-art-theme="dark".
+//
+// This file is AL-owned and imported only into the App Lab bundle (via
+// al-tokens.scss) — it is NOT part of ce-tokens.scss (Cloud-Editor-owned) and
+// is NOT a vendored upstream snapshot like the colorino block in al-tokens.scss.
+//
+// TODO: reconcile each token against the real Figma/colorino token, then either
+// map the call sites to colorino or promote to a shared file if CE needs them.
+[data-art-theme="dark"] {
+  --border-subtle: #1e2628;
+  --divider-subtle: rgba(255, 255, 255, 0.1);
+  --text-disabled: #7f8c8d;
+  --welcome-text-primary: #ecf1f1;
+  --shadow-overlay: rgba(0, 0, 0, 0.25);
+
+  // App Lab pins the editor surface to main's (multi-panel-editor) palette.
+  // ce-tokens.scss (imported just above in al-tokens.scss) restores the Cloud
+  // Editor's own lighter editor colors; App Lab was designed against these
+  // darker values, so re-pin them here to keep App Lab's editor unchanged.
+  // CE and AL render in separate DOM subtrees loading different token files,
+  // so the same var(--editor-*) resolves per-app — no JS style fork needed.
+  --editor-background: #171e21;
+  --editor-background-selection: #aeb8b826;
+  --editor-lines-background: #171e21;
+  --editor-lines-foreground: #5d6a6b;
+
+  // App Lab bands the whole active line; the Cloud Editor's selected-line box on
+  // the line number is turned off here (the number still brightens via
+  // --editor-lines-foreground-active).
+  --editor-active-line-background: #aeb8b80d;
+  --editor-active-line-gutter-background: transparent;
+
+  // Scrollbar thumb at rest and while hovered or dragged, read by the scrollbar rule in
+  // app-lab-desktop's style.css. A surface as light as the thumb or lighter sets both to
+  // --surface-bg-below-2 on its own container.
+  --scrollbar-thumb: var(--border-strong);
+  --scrollbar-thumb-active: var(--icon-subtle);
+}

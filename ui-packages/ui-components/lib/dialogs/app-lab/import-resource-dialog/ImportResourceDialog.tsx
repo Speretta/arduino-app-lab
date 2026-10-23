@@ -1,5 +1,6 @@
 import {
   FileGeneric,
+  InfoIconOutline,
   TriangleSharp,
   UploadLight as Upload,
 } from '@cloud-editor-mono/images/assets/icons';
@@ -19,9 +20,15 @@ import {
   ButtonVariant,
   useI18n,
 } from '../../../components-by-app/app-lab';
+import { ReleaseSummary } from '../../../components-by-app/app-lab/app-release';
+import { Toggle } from '../../../components-by-app/app-lab/essential/toggle';
+import { XXSmall } from '../../../components-by-app/shared';
 import { ErrorBanner } from '../../../error-banner/ErrorBanner';
 import { AppLabDialog } from '../app-lab-dialog/AppLabDialog';
-import { importResourceDialogMessages as messages } from '../messages';
+import {
+  importResourceDialogMessages as messages,
+  preparationRequiredDialogMessages,
+} from '../messages';
 import styles from './import-resource-dialog.module.scss';
 import {
   ImportResourceDialogProps,
@@ -29,6 +36,8 @@ import {
 } from './ImportResourceDialog.type';
 
 export { ImportStatus } from './ImportResourceDialog.type';
+
+const APP_FORMATS = ['.zip', '.ard'];
 
 export const ImportResourceDialog: React.FC<ImportResourceDialogProps> = ({
   logic,
@@ -46,7 +55,16 @@ export const ImportResourceDialog: React.FC<ImportResourceDialogProps> = ({
     onOpenChange,
     startImport,
     type,
+    pendingRelease,
+    enablePreparation = true,
+    setEnablePreparation,
+    confirmReleaseInstall,
+    cancelReleaseInstall,
   } = logic();
+
+  const isInstalling = status === ImportStatus.Installing;
+  // The release stays on screen while it installs, with the button spinning.
+  const isReleaseStep = status === ImportStatus.ReleaseInfo || isInstalling;
 
   const dialogMessages = useMemo(() => {
     if (type === 'app') {
@@ -93,6 +111,32 @@ export const ImportResourceDialog: React.FC<ImportResourceDialogProps> = ({
   }, [dialogMessages.dialogTitle, formatMessage]);
 
   const footer = useMemo((): React.ReactNode => {
+    if (isReleaseStep) {
+      return (
+        <>
+          <Button
+            variant={ButtonVariant.Secondary}
+            size={ButtonSize.Small}
+            disabled={isInstalling}
+            onClick={(): void => cancelReleaseInstall?.()}
+          >
+            {formatMessage(messages.cancelButton)}
+          </Button>
+          <Button
+            variant={ButtonVariant.Primary}
+            size={ButtonSize.Small}
+            loading={isInstalling}
+            disabled={isInstalling}
+            onClick={(): void => confirmReleaseInstall?.()}
+          >
+            {formatMessage(
+              isInstalling ? messages.installingButton : messages.installButton,
+            )}
+          </Button>
+        </>
+      );
+    }
+
     if (status === ImportStatus.UploadFailed) {
       return (
         <Button
@@ -108,7 +152,17 @@ export const ImportResourceDialog: React.FC<ImportResourceDialogProps> = ({
     }
 
     return null;
-  }, [status, formatMessage, dialogMessages, onOpenChange, type]);
+  }, [
+    status,
+    isReleaseStep,
+    isInstalling,
+    formatMessage,
+    dialogMessages,
+    onOpenChange,
+    type,
+    cancelReleaseInstall,
+    confirmReleaseInstall,
+  ]);
 
   useEffect(() => {
     if (!open || status !== ImportStatus.Idle) {
@@ -157,10 +211,12 @@ export const ImportResourceDialog: React.FC<ImportResourceDialogProps> = ({
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      closeable={type !== 'app' || status !== ImportStatus.Uploading}
+      closeable={
+        type !== 'app' || (status !== ImportStatus.Uploading && !isInstalling)
+      }
       footer={footer}
       contentProps={{
-        ...(status === ImportStatus.Uploading
+        ...(status === ImportStatus.Uploading || isInstalling
           ? {
               onEscapeKeyDown: (e): void => e.preventDefault(),
               onPointerDownOutside: (e): void => e.preventDefault(),
@@ -168,7 +224,10 @@ export const ImportResourceDialog: React.FC<ImportResourceDialogProps> = ({
             }
           : null),
       }}
-      classes={{ body: styles['dialog-body'] }}
+      classes={{
+        content: styles['dialog-content'],
+        body: isReleaseStep ? styles['release-body'] : styles['dialog-body'],
+      }}
     >
       <div className={styles['import-dialog']}>
         {status === ImportStatus.Idle && (
@@ -184,57 +243,108 @@ export const ImportResourceDialog: React.FC<ImportResourceDialogProps> = ({
 
         <input ref={fileInputRef} style={{ display: 'none' }} />
 
-        <div
-          className={clsx(styles['upload-area'], {
-            [styles['upload-area--dragging']]: isDragging,
-            [styles['upload-area--status-uploading']]:
-              status !== ImportStatus.Idle,
-          })}
-          data-native-dropzone={open ? true : undefined}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-        >
-          <div
-            className={clsx(styles['upload-content'], {
-              [styles['is-dragging']]: isDragging,
-            })}
-          >
-            <div className={styles['upload-icon-wrapper']}>
-              <Upload className={styles['upload-icon']} />
-            </div>
-            <p className={styles['upload-text']}>
-              {formatMessage(dialogMessages.dragDrop)}
-            </p>
-            <span className={styles['upload-or']}>
-              {formatMessage(messages.or)}
-            </span>
-            <Button
-              variant={ButtonVariant.Secondary}
-              size={ButtonSize.Small}
-              onClick={handleButtonClick}
-              Icon={Upload}
-              iconPosition="right"
-              classes={{ button: styles['white-icon-button'] }}
-            >
-              {formatMessage(messages.importFromComputer)}
-            </Button>
-            <span className={styles['upload-support']}>
-              {formatMessage(dialogMessages.bodyLabel)}
-            </span>
-          </div>
-          {isDragging ? (
-            <div className={styles['upload-content-overlay']}>
-              <div className={styles['upload-icon-wrapper']}>
-                <FileGeneric className={styles['upload-icon']} />
+        {isReleaseStep && pendingRelease ? (
+          <div className={styles['release-step']}>
+            <ReleaseSummary
+              className={styles['release-summary']}
+              release={pendingRelease}
+            />
+            <div className={styles['preparation']}>
+              <div className={styles['preparation-text']}>
+                <XXSmall semibold className={styles['preparation-label']}>
+                  {formatMessage(preparationRequiredDialogMessages.title)}
+                </XXSmall>
+                <XXSmall className={styles['preparation-description']}>
+                  {formatMessage(messages.enablePreparationDescription)}
+                </XXSmall>
               </div>
-              <p className={styles['upload-text']}>
-                {formatMessage(dialogMessages.dragDrop)}
-              </p>
+              <Toggle
+                aria-label={formatMessage(
+                  preparationRequiredDialogMessages.title,
+                )}
+                isSelected={enablePreparation}
+                isDisabled={isInstalling}
+                onChange={(value: boolean): void =>
+                  setEnablePreparation?.(value)
+                }
+              />
             </div>
-          ) : null}
-        </div>
+            <div className={styles['trust-warning']}>
+              <InfoIconOutline className={styles['trust-warning-icon']} />
+              <XXSmall>{formatMessage(messages.trustWarning)}</XXSmall>
+            </div>
+          </div>
+        ) : null}
+
+        {isReleaseStep ? null : (
+          <div
+            className={clsx(styles['upload-area'], {
+              [styles['upload-area--dragging']]: isDragging,
+              [styles['upload-area--status-uploading']]:
+                status !== ImportStatus.Idle,
+            })}
+            data-native-dropzone={open ? true : undefined}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+          >
+            <div
+              className={clsx(styles['upload-content'], {
+                [styles['is-dragging']]: isDragging,
+              })}
+            >
+              <div className={styles['upload-prompt']}>
+                <div className={styles['upload-icon-wrapper']}>
+                  <Upload className={styles['upload-icon']} />
+                </div>
+                <p className={styles['upload-text']}>
+                  {formatMessage(dialogMessages.dragDrop)}
+                </p>
+                <span className={styles['upload-or']}>
+                  {formatMessage(messages.or)}
+                </span>
+                <Button
+                  variant={ButtonVariant.Tertiary}
+                  size={ButtonSize.Small}
+                  onClick={handleButtonClick}
+                  Icon={Upload}
+                  iconPosition="right"
+                >
+                  {formatMessage(messages.importFromComputer)}
+                </Button>
+              </div>
+              {type === 'app' ? (
+                <div className={styles['upload-formats']}>
+                  <span className={styles['upload-support']}>
+                    {formatMessage(messages.supportedFormat)}
+                  </span>
+                  <div className={styles['upload-format-list']}>
+                    {APP_FORMATS.map((format) => (
+                      <span key={format} className={styles['upload-format']}>
+                        {format}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <span className={styles['upload-support']}>
+                  {formatMessage(dialogMessages.bodyLabel)}
+                </span>
+              )}
+            </div>
+            {isDragging ? (
+              <div className={styles['upload-content-overlay']}>
+                <div className={styles['upload-icon-wrapper']}>
+                  <FileGeneric className={styles['upload-icon']} />
+                </div>
+                <p className={styles['upload-text']}>
+                  {formatMessage(dialogMessages.dragDrop)}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        )}
 
         <div
           className={clsx(styles['loading-state'], {

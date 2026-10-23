@@ -23,17 +23,17 @@ import { UseFiles } from './files.type';
 import { useObservable } from './useObservable';
 
 export const OPEN_FILES_KEY = 'arduino:editor:open-files';
-export type OpenFilesStorePaneState = {
+export type OpenFilesStorePanelState = {
   items: string[];
   selected: string | null;
   /**
    * Per-file markdown render mode (true = Preview, false = Write).
-   * Only present for panes that have had at least one md file toggled.
+   * Only present for panels that have had at least one md file toggled.
    */
   markdownByFileId?: Record<string, boolean>;
   /**
    * Per-brick selected sub-tab id (e.g. 'overview', 'examples').
-   * Only present for panes that have had at least one brick tab changed.
+   * Only present for panels that have had at least one brick tab changed.
    */
   brickTabByFileId?: Record<string, string>;
 };
@@ -42,14 +42,14 @@ export type OpenFilesStoreItem = {
   items: string[];
   /** Legacy mirror of panes.A.selected. */
   selected: string | null;
-  /** Per-pane tabs/selection/markdown state. Optional for legacy records. */
+  /** Per-panel tabs/selection/markdown state; saved in IndexedDB, so the key stays `panes`. Optional for legacy records. */
   panes?: {
-    A: OpenFilesStorePaneState;
-    B?: OpenFilesStorePaneState;
+    A: OpenFilesStorePanelState;
+    B?: OpenFilesStorePanelState;
   };
-  /** Whether the editor is currently split (pane B visible). */
+  /** Whether the editor is currently split (panel B visible). */
   isSplit?: boolean;
-  /** Width of the left pane as a percentage (0-100). */
+  /** Width of the left panel as a percentage (0-100). */
   splitProportionLeft?: number;
   /** The file currently opened in preview (single-click) state. */
   previewFileId?: string | null;
@@ -59,13 +59,13 @@ export type OpenFilesStore = { [key: string]: OpenFilesStoreItem };
 /**
  * Shape patched onto an existing OpenFilesStoreItem. Any field set here
  * replaces that field on the stored record; everything else is preserved.
- * Pane sub-fields are merged at the pane level (so a patch to
+ * Panel sub-fields are merged at the panel level (so a patch to
  * `panes.A.markdownByFileId` doesn't clobber `panes.A.items`).
  */
 export type OpenFilesStorePatch = Partial<Omit<OpenFilesStoreItem, 'panes'>> & {
   panes?: {
-    A?: Partial<OpenFilesStorePaneState>;
-    B?: Partial<OpenFilesStorePaneState> | null;
+    A?: Partial<OpenFilesStorePanelState>;
+    B?: Partial<OpenFilesStorePanelState> | null;
   };
 };
 
@@ -74,9 +74,9 @@ export function mergeStoreItem(
   patch: OpenFilesStorePatch,
 ): OpenFilesStoreItem {
   const base: OpenFilesStoreItem = prev ?? { items: [], selected: null };
-  const mergedPanes = ((): OpenFilesStoreItem['panes'] => {
+  const mergedPanels = ((): OpenFilesStoreItem['panes'] => {
     if (!patch.panes) return base.panes;
-    // Pane B explicitly set to null means "clear pane B".
+    // Panel B explicitly set to null means "clear panel B".
     const nextB =
       patch.panes.B === null
         ? undefined
@@ -97,7 +97,7 @@ export function mergeStoreItem(
                 : base.panes?.B?.brickTabByFileId,
           }
         : base.panes?.B;
-    const nextA: OpenFilesStorePaneState = {
+    const nextA: OpenFilesStorePanelState = {
       items: patch.panes.A?.items ?? base.panes?.A?.items ?? base.items,
       selected:
         patch.panes.A?.selected !== undefined
@@ -118,7 +118,7 @@ export function mergeStoreItem(
     items: patch.items ?? base.items,
     selected:
       patch.selected !== undefined ? patch.selected : base.selected ?? null,
-    panes: mergedPanes,
+    panes: mergedPanels,
     isSplit: patch.isSplit !== undefined ? patch.isSplit : base.isSplit,
     splitProportionLeft:
       patch.splitProportionLeft !== undefined
@@ -161,19 +161,19 @@ export const useFiles: UseFiles = function ({
   }, []);
 
   const queryClient = useQueryClient();
-  const { data: openFilesStore } = useQuery(
-    ['get-stored-open-files', storeEntityId],
-    async () => {
+  const { data: openFilesStore } = useQuery({
+    queryKey: ['get-stored-open-files', storeEntityId],
+
+    queryFn: async () => {
       if (!storeEntityId) {
         return null;
       }
       const store = await IDB.get<OpenFilesStore>(OPEN_FILES_KEY);
       return store?.[storeEntityId] || null;
     },
-    {
-      enabled: enableOpenFilesPersistence,
-    },
-  );
+
+    enabled: enableOpenFilesPersistence,
+  });
 
   const unsavedFileIds = useObservable(getUnsavedFilesSubject());
 
@@ -242,6 +242,7 @@ export const useFiles: UseFiles = function ({
         fileFullName: brick.name,
         fileExtension: BRICK_FILE_EXTENSION,
         Icon: <BrickIcon category={brick.category} size="xsmall" />,
+        tags: [],
         isMetadataReadOnly: true,
       })),
     [bricks],
@@ -491,15 +492,17 @@ export const useFiles: UseFiles = function ({
           }),
         };
       });
-      queryClient.invalidateQueries(['get-stored-open-files', storeEntityId]);
+      queryClient.invalidateQueries({
+        queryKey: ['get-stored-open-files', storeEntityId],
+      });
     },
     [storeEntityId, enableOpenFilesPersistence, queryClient, previewFileId],
   );
 
   /**
-   * Patch the split-related fields (pane B state, both panes' markdown maps,
+   * Patch the split-related fields (panel B state, both panels' markdown maps,
    * isSplit, split width) on the per-app store record. Shallow-merges via
-   * `mergeStoreItem` so it never clobbers pane A's `{items, selected}`
+   * `mergeStoreItem` so it never clobbers panel A's `{items, selected}`
    * written by `storeOpenFiles`.
    */
   const storeSplitState = useCallback(
@@ -514,7 +517,9 @@ export const useFiles: UseFiles = function ({
           [storeEntityId]: mergeStoreItem(prevStoreItem, patch),
         };
       });
-      queryClient.invalidateQueries(['get-stored-open-files', storeEntityId]);
+      queryClient.invalidateQueries({
+        queryKey: ['get-stored-open-files', storeEntityId],
+      });
     },
     [storeEntityId, enableOpenFilesPersistence, queryClient],
   );
@@ -695,7 +700,9 @@ export const useFiles: UseFiles = function ({
         };
         return { ...prevValue, [storeEntityId]: storeItem };
       });
-      queryClient.invalidateQueries(['get-stored-open-files', storeEntityId]);
+      queryClient.invalidateQueries({
+        queryKey: ['get-stored-open-files', storeEntityId],
+      });
     },
     [storeEntityId, selectableMainFile, openFilesStore, queryClient],
   );
@@ -718,7 +725,9 @@ export const useFiles: UseFiles = function ({
         delete prevValue?.[storeEntityId];
         return { ...prevValue, [newStoreEntityId]: storeItem };
       });
-      queryClient.invalidateQueries(['get-stored-open-files', storeEntityId]);
+      queryClient.invalidateQueries({
+        queryKey: ['get-stored-open-files', storeEntityId],
+      });
     },
     [openFilesStore, queryClient, storeEntityId],
   );

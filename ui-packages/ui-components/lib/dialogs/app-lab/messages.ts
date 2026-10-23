@@ -3,7 +3,7 @@ import { defineMessages } from 'react-intl';
 export const addAppBrickDialogMessages = defineMessages({
   dialogTitle: {
     id: 'addAppBrick.title',
-    defaultMessage: 'Add App Brick',
+    defaultMessage: 'Add Brick',
     description: 'Title of add app brick dialog',
   },
   successTitle: {
@@ -34,7 +34,7 @@ export const addAppBrickDialogMessages = defineMessages({
   },
   confirmButton: {
     id: 'addAppBrick.confirmButton',
-    defaultMessage: 'Add brick',
+    defaultMessage: 'Add',
     description: 'Text for confirm button in add app brick dialog',
   },
   checkButton: {
@@ -44,7 +44,7 @@ export const addAppBrickDialogMessages = defineMessages({
   },
   createCustomBrickTitle: {
     id: 'customBrickDialog.createCustomBrickTitle',
-    defaultMessage: 'Create custom brick',
+    defaultMessage: 'Create custom Brick',
     description:
       'Text for the title of the button for creating custom brick in add app brick dialog',
   },
@@ -72,7 +72,7 @@ export const addAppBrickDialogMessages = defineMessages({
   },
   brickFolder: {
     id: 'customBrickDialog.brickFolder',
-    defaultMessage: 'brick folder',
+    defaultMessage: 'Brick folder',
     description:
       'Text to refer to the folder that will be created for the new brick',
   },
@@ -83,7 +83,7 @@ export const addAppBrickDialogMessages = defineMessages({
   },
   renameBrickDialogTitle: {
     id: 'customBrickDialog.renameBrickDialogTitle',
-    defaultMessage: 'Rename Brick',
+    defaultMessage: 'Rename',
     description: 'Text for the title of rename brick dialog',
   },
   renameBrickBodyTitle: {
@@ -133,17 +133,12 @@ export const configureAppBrickDialogMessages = defineMessages({
   dialogBodyDescription: {
     id: 'configureAppBricks.bodyDescription',
     defaultMessage:
-      '* Fields marked with an asterisk (*) are mandatory, leaving them empty will prevent the app from running.',
+      '* Fields marked with an asterisk (*) are mandatory, leaving them empty will prevent the App from running.',
     description: 'Message to confirm the deletion of a brick',
-  },
-  dialogBodySubtitle: {
-    id: 'configureAppBrick.bodySubtitle',
-    defaultMessage: 'Compatible AI Models',
-    description: 'Subtitle message shown in the configure app brick dialog',
   },
   deviceIdLabel: {
     id: 'configureAppBrick.deviceIdLabel',
-    defaultMessage: 'Arduino Cloud Device ID',
+    defaultMessage: 'Arduino Cloud device ID',
     description: 'Label for the device ID input field',
   },
   deviceIdDescription: {
@@ -154,12 +149,12 @@ export const configureAppBrickDialogMessages = defineMessages({
   },
   deviceIdLink: {
     id: 'configureAppBrick.deviceIdLink',
-    defaultMessage: 'Setup your Board',
+    defaultMessage: 'Setup your board',
     description: 'Link text for device setup instructions',
   },
   secretLabel: {
     id: 'configureAppBrick.secretLabel',
-    defaultMessage: 'Arduino Cloud Secret',
+    defaultMessage: 'Arduino Cloud secret',
     description: 'Label for the secret input field',
   },
   secretDescription: {
@@ -178,11 +173,6 @@ export const configureAppBrickDialogMessages = defineMessages({
     defaultMessage: 'Save configuration',
     description: 'Text for confirm button in configure app brick dialog',
   },
-  trainNewModelButton: {
-    id: 'brickDetail.trainNewModelButton',
-    defaultMessage: 'Train new AI model',
-    description: 'Label for the button to train a new AI model',
-  },
 });
 
 export const configureAppBricksDialogMessages = defineMessages({
@@ -199,13 +189,8 @@ export const configureAppBricksDialogMessages = defineMessages({
   dialogBodyDescription: {
     id: 'configureAppBricks.bodyDescription',
     defaultMessage:
-      'You can always change these parameters later from Brick Configuration.',
+      'You can always change these parameters later from Brick configuration.',
     description: 'Message to confirm the deletion of a brick',
-  },
-  dialogBodySubtitle: {
-    id: 'configureAppBricks.bodySubtitle',
-    defaultMessage: 'Compatible AI Models',
-    description: 'Subtitle message shown in the configure app brick dialog',
   },
   cancelButton: {
     id: 'configureAppBricks.cancelButton',
@@ -217,17 +202,12 @@ export const configureAppBricksDialogMessages = defineMessages({
     defaultMessage: 'Save and run',
     description: 'Text for confirm button in configure app bricks dialog',
   },
-  trainNewModelButton: {
-    id: 'brickDetail.trainNewModelButton',
-    defaultMessage: 'Train new AI model',
-    description: 'Label for the button to train a new AI model',
-  },
 });
 
 export const deleteAppBrickDialogMessages = defineMessages({
   dialogTitle: {
     id: 'deleteAppBrickDialog.title',
-    defaultMessage: 'Delete brick',
+    defaultMessage: 'Delete Brick',
     description: 'Title shown in the delete brick dialog',
   },
   dialogBodyTitle: {
@@ -266,19 +246,29 @@ export const deleteAppBrickDialogMessages = defineMessages({
 export const swapRunningAppDialogMessages = defineMessages({
   dialogTitle: {
     id: 'swapRunningApp.title',
-    defaultMessage: 'Swap Running App',
+    defaultMessage: 'Swap running App',
     description: 'Title of swap running app dialog',
   },
   dialogBodyTitle: {
     id: 'swapRunningApp.bodyTitle',
-    defaultMessage: 'You’re about to change the app for this run',
-    description: 'Body title of swap running app dialog',
+    defaultMessage:
+      'Stop <running>{runningAppName}</running> and run <new>{newAppName}</new>?',
+    description:
+      'Body title of swap running app dialog; the tags wrap the two App names',
   },
   dialogBodyDescription: {
     id: 'swapRunningApp.bodyDescription',
     defaultMessage:
-      'You’re about to replace the app currently linked to this run with a new one. This may affect how the run behaves. Please make sure you want to proceed',
-    description: 'Body description of swap running app dialog',
+      '<running>{runningAppName}</running> will stop and <new>{newAppName}</new> will start.',
+    description:
+      'Body description of swap running app dialog; the tags wrap the two App names',
+  },
+  defaultAppNote: {
+    id: 'swapRunningApp.defaultAppNote',
+    defaultMessage:
+      '<running>{runningAppName}</running> stays your default App and will run again the next time you power your board.',
+    description:
+      'Added to the swap running app dialog body when the running App is the default App',
   },
   cancelButton: {
     id: 'swapRunningApp.cancelButton',
@@ -287,7 +277,7 @@ export const swapRunningAppDialogMessages = defineMessages({
   },
   confirmButton: {
     id: 'swapRunningApp.confirmButton',
-    defaultMessage: 'Confirm and replace',
+    defaultMessage: 'Stop and run',
     description: 'Text for confirm button in swap running app dialog',
   },
 });
@@ -295,7 +285,7 @@ export const swapRunningAppDialogMessages = defineMessages({
 export const deleteAppDialogMessages = defineMessages({
   dialogTitle: {
     id: 'deleteAppDialog.title',
-    defaultMessage: 'Delete app',
+    defaultMessage: 'Delete App',
     description: 'Title shown in the delete app dialog',
   },
   dialogBodyTitle: {
@@ -323,7 +313,7 @@ export const deleteAppDialogMessages = defineMessages({
 export const createAppDialogMessages = defineMessages({
   dialogTitle: {
     id: 'createAppDialog.title',
-    defaultMessage: 'Create new app',
+    defaultMessage: 'Create new App',
     description: 'Title shown in the create app dialog',
   },
   inputPlaceholder: {
@@ -366,7 +356,7 @@ export const createAppDialogMessages = defineMessages({
   },
   failedCreate: {
     id: 'createAppDialog.failedCreate',
-    defaultMessage: 'Failed to create app. Please try again.',
+    defaultMessage: 'Failed to create App. Please try again.',
     description: 'Notification message shown when app creation fails',
   },
   successDuplicate: {
@@ -377,12 +367,12 @@ export const createAppDialogMessages = defineMessages({
   },
   failedDuplicate: {
     id: 'createAppDialog.failedDuplicate',
-    defaultMessage: 'Failed to duplicate app. Please try again.',
+    defaultMessage: 'Failed to duplicate App. Please try again.',
     description: 'Notification message shown when app duplication fails',
   },
   storageFull: {
     id: 'createAppDialog.storageFull',
-    defaultMessage: 'Unable to duplicate the app. The board storage is full.',
+    defaultMessage: 'Unable to duplicate the App. The board storage is full.',
     description:
       'Error message shown when the board storage is full and an app cannot be created or cloned',
   },
@@ -391,7 +381,7 @@ export const createAppDialogMessages = defineMessages({
 export const renameAppDialogMessages = defineMessages({
   dialogTitle: {
     id: 'renameAppDialog.title',
-    defaultMessage: 'Rename app',
+    defaultMessage: 'Rename App',
     description: 'Title shown in the rename app dialog',
   },
   inputPlaceholder: {
@@ -429,37 +419,8 @@ export const renameAppDialogMessages = defineMessages({
   },
   failedRename: {
     id: 'renameAppDialog.failedRename',
-    defaultMessage: 'Failed to rename app. Please try again.',
+    defaultMessage: 'Failed to rename App. Please try again.',
     description: 'Notification message shown when app rename fails',
-  },
-});
-
-export const setAsDefaultAppDialogMessages = defineMessages({
-  dialogTitle: {
-    id: 'setAsDefaultAppDialog.title',
-    defaultMessage: 'Set as default',
-    description: 'Title shown in the set as default app dialog',
-  },
-  dialogBodyTitle: {
-    id: 'setAsDefaultAppDialog.bodyTitle',
-    defaultMessage: 'Do you want to set this app as the default?',
-    description: 'Message shown in the set as default app dialog',
-  },
-  dialogBodyDescription: {
-    id: 'setAsDefaultAppDialog.bodyDescription',
-    defaultMessage:
-      'It will automatically launch every time the board is powered on.',
-    description: 'Message to confirm the set as default of an app',
-  },
-  cancelButton: {
-    id: 'setAsDefaultAppDialog.cancelButton',
-    defaultMessage: 'Cancel',
-    description: 'Label for the cancel button',
-  },
-  confirmButton: {
-    id: 'setAsDefaultAppDialog.confirmButton',
-    defaultMessage: 'Set as default',
-    description: 'Label for the confirm button',
   },
 });
 
@@ -474,12 +435,125 @@ export const addSketchLibraryDialogMessages = defineMessages({
     defaultMessage: 'Search library',
     description: 'Placeholder for the text input in the library search dialog',
   },
+  noLibrariesFound: {
+    id: 'addSketchLibrary.noLibrariesFound',
+    defaultMessage: 'No libraries found',
+    description:
+      'Shown in the library search dialog when a search has no results',
+  },
+  searchError: {
+    id: 'addSketchLibrary.searchError',
+    defaultMessage:
+      'Libraries could not be loaded. Check that the board is connected to the internet, then try again.',
+    description:
+      'Shown in the library search dialog when the search request fails or gets no reply',
+  },
+  retryButton: {
+    id: 'addSketchLibrary.retry',
+    defaultMessage: 'Try again',
+    description:
+      'Button in the library search dialog that repeats a failed search',
+  },
+});
+
+export const publishAppDialogMessages = defineMessages({
+  dialogTitle: {
+    id: 'publishAppDialog.title',
+    defaultMessage: 'Publish on Project Hub',
+    description: 'Title of the publish app dialog',
+  },
+  dialogBodyTitle: {
+    id: 'publishAppDialog.bodyTitle',
+    defaultMessage: 'Draft now, publish later',
+    description: 'Title in the body of the publish dialog',
+  },
+  dialogBodyDescription: {
+    id: 'publishAppDialog.bodyDescription',
+    defaultMessage:
+      "Sign in or create an Arduino account to get started. Your project will be imported automatically <strong>as a draft</strong>: you'll fill in a few remaining fields and submit it yourself on Project Hub.",
+    description: 'Description of what will be published',
+  },
+  includeDataLabel: {
+    id: 'publishAppDialog.includeDataLabel',
+    defaultMessage: 'Include data associated with the App',
+    description: 'Label for the checkbox to include app data',
+  },
+  includeDataTooltipTitle: {
+    id: 'publishAppDialog.includeDataTooltipTitle',
+    defaultMessage: 'App data',
+    description: 'Title for the tooltip explaining app data inclusion',
+  },
+  includeDataTooltipContent: {
+    id: 'publishAppDialog.includeDataTooltipContent',
+    defaultMessage:
+      'When enabled, any data stored by your App will be included in the export package.',
+    description: 'Content for the tooltip explaining app data inclusion',
+  },
+  confirmButton: {
+    id: 'publishAppDialog.confirmButton',
+    defaultMessage: 'Upload as draft',
+    description: 'Confirm button text to upload the app as a Project Hub draft',
+  },
+});
+
+export const publishAppMessages = defineMessages({
+  operationTitle: {
+    id: 'publishApp.operationTitle',
+    defaultMessage: 'Uploading {appName} on Project Hub',
+    description: 'Title of the banner reporting the upload progress',
+  },
+  operationDescription: {
+    id: 'publishApp.operationDescription',
+    defaultMessage:
+      "We're uploading your project and preparing a draft. This may take a while, your browser will open when it's ready.",
+    description: 'Explanation of what the upload is doing',
+  },
+  phaseExporting: {
+    id: 'publishApp.phaseExporting',
+    defaultMessage: 'Exporting project…',
+    description: 'Progress step while the app package is being built',
+  },
+  phaseUploading: {
+    id: 'publishApp.phaseUploading',
+    defaultMessage: 'Uploading to Project Hub…',
+    description: 'Progress step while the package is being uploaded',
+  },
+  abortAction: {
+    id: 'publishApp.abortAction',
+    defaultMessage: 'Abort upload',
+    description: 'Overflow menu entry that stops the upload to Project Hub',
+  },
+  abortedNotification: {
+    id: 'publishApp.abortedNotification',
+    defaultMessage: 'Draft upload successfully aborted.',
+    description: 'Confirmation shown after the user aborts the upload',
+  },
+  successNotification: {
+    id: 'publishApp.successNotification',
+    defaultMessage: 'Draft created. Taking you to Project Hub.',
+    description: 'Confirmation shown once the draft has been created',
+  },
+  successNotificationAction: {
+    id: 'publishApp.successNotificationAction',
+    defaultMessage: 'OPEN',
+    description: 'Action that opens the newly created Project Hub draft',
+  },
+  errorNotification: {
+    id: 'publishApp.errorNotification',
+    defaultMessage: "Couldn't upload your draft to Project Hub.",
+    description: 'Error shown when the upload to Project Hub fails',
+  },
+  errorNotificationAction: {
+    id: 'publishApp.errorNotificationAction',
+    defaultMessage: 'RETRY',
+    description: 'Action that retries the failed upload',
+  },
 });
 
 export const exportAppDialogMessages = defineMessages({
   dialogTitle: {
     id: 'app-lab.export-app-dialog.title',
-    defaultMessage: 'Export app',
+    defaultMessage: 'Export App',
     description: 'Title of the export app dialog',
   },
   dialogBodyTitle: {
@@ -490,7 +564,7 @@ export const exportAppDialogMessages = defineMessages({
   dialogBodyDescription: {
     id: 'app-lab.export-app-dialog.body-description',
     defaultMessage:
-      'Download a package with your <strong>app code</strong>, <strong>assets</strong>, <strong>configuration</strong>, and <strong>dependencies</strong>. Share it, move it to another board, or upload it to Project Hub.',
+      'Download a package with your <strong>App code</strong>, <strong>assets</strong>, <strong>configuration</strong>, and <strong>dependencies</strong>. Share it, move it to another board, or upload it to Project Hub.',
     description: 'Description of what will be exported',
   },
   includeDataLabel: {
@@ -500,13 +574,13 @@ export const exportAppDialogMessages = defineMessages({
   },
   includeDataTooltipTitle: {
     id: 'app-lab.export-app-dialog.include-data-tooltip-title',
-    defaultMessage: 'App Data',
+    defaultMessage: 'App data',
     description: 'Title for the tooltip explaining app data inclusion',
   },
   includeDataTooltipContent: {
     id: 'app-lab.export-app-dialog.include-data-tooltip-content',
     defaultMessage:
-      'When enabled, any data stored by your app will be included in the export package.',
+      'When enabled, any data stored by your App will be included in the export package.',
     description: 'Content for the tooltip explaining app data inclusion',
   },
   cancelButton: {
@@ -531,30 +605,58 @@ export const exportAppDialogMessages = defineMessages({
   },
   exportFailedDescription: {
     id: 'app-lab.export-app-dialog.export-failed-description',
-    defaultMessage: 'This app is broken or misconfigured.',
+    defaultMessage: 'This App is broken or misconfigured.',
     description: 'Description shown when export fails',
-  },
-  errorLabel: {
-    id: 'app-lab.export-app-dialog.error-label',
-    defaultMessage: 'Error:',
-    description: 'Label for error details',
   },
 });
 
 export const importResourceDialogMessages = defineMessages({
   titleApp: {
     id: 'app-lab.import-resource-dialog.title-app',
-    defaultMessage: 'Import an App',
+    defaultMessage: 'Import or install an App',
     description: 'Title of the import app dialog',
+  },
+  enablePreparationDescription: {
+    id: 'app-lab.import-resource-dialog.enable-preparation-description',
+    defaultMessage:
+      'Will download all the dependencies of the app (containers, bricks, other data) so that the app release is then ready to be quickly launched.',
+    description: 'Explains what enabling preparation does',
+  },
+  trustWarning: {
+    id: 'app-lab.import-resource-dialog.trust-warning',
+    defaultMessage:
+      "'.ard' can run any command on this device, with full access to the system. Only install App Releases from sources you trust.",
+    description:
+      'Warning shown before installing a release, about the access an .ard file has',
+  },
+  installButton: {
+    id: 'app-lab.import-resource-dialog.install-button',
+    defaultMessage: 'Install',
+    description: 'Label of the button that installs the picked release',
+  },
+  cancelButton: {
+    id: 'app-lab.import-resource-dialog.cancel-button',
+    defaultMessage: 'Cancel',
+    description: 'Label of the button that abandons the release install',
+  },
+  installingButton: {
+    id: 'app-lab.import-resource-dialog.installing-button',
+    defaultMessage: 'Installing',
+    description: 'Label of the install button while the release is installed',
+  },
+  supportedFormat: {
+    id: 'app-lab.import-resource-dialog.supported-format',
+    defaultMessage: 'Supported format',
+    description: 'Label above the file types the app import accepts',
   },
   titleFile: {
     id: 'app-lab.import-resource-dialog.title-file',
-    defaultMessage: 'Import a File',
+    defaultMessage: 'Import a file',
     description: 'Title of the import file dialog',
   },
   titleFolder: {
     id: 'app-lab.import-resource-dialog.title-folder',
-    defaultMessage: 'Import a Folder',
+    defaultMessage: 'Import a folder',
     description: 'Title of the import folder dialog',
   },
   uploadTitleApp: {
@@ -564,35 +666,35 @@ export const importResourceDialogMessages = defineMessages({
   },
   uploadTitleFile: {
     id: 'app-lab.import-resource-dialog.upload-title-file',
-    defaultMessage: 'Import files to your app',
+    defaultMessage: 'Import files to your App',
     description: 'Title for the upload section',
   },
   uploadTitleFolder: {
     id: 'app-lab.import-resource-dialog.upload-title-folder',
-    defaultMessage: 'Import folders to your app',
+    defaultMessage: 'Import folders to your App',
     description: 'Title for the upload section',
   },
   uploadDescriptionApp: {
     id: 'app-lab.import-resource-dialog.upload-description-app',
     defaultMessage:
-      'Import an App Lab project. The app will be added to your workspace with its files, Bricks, and libraries.',
+      'Import an App Lab project or install a release. The App will be added to your workspace with its files, Bricks, and libraries.',
     description: 'First line of import description',
   },
   uploadDescriptionFile: {
     id: 'app-lab.import-resource-dialog.upload-description-file',
     defaultMessage:
-      'Upload files from your computer to use in this app. This is useful for assets, documentation, or generated files. A file with the same name already exists. It will be replaced.',
+      'Upload files from your computer to use in this App. This is useful for assets, documentation, or generated files. A file with the same name already exists. It will be replaced.',
     description: 'Description shown in the import file dialog',
   },
   uploadDescriptionFolder: {
     id: 'app-lab.import-resource-dialog.upload-description-folder',
     defaultMessage:
-      'Upload folders from your computer to use in this app. This is useful for assets, documentation, or generated folders. A folder with the same name already exists. It will be replaced.',
+      'Upload folders from your computer to use in this App. This is useful for assets, documentation, or generated folders. A folder with the same name already exists. It will be replaced.',
     description: 'Description shown in the import folder dialog',
   },
   dragDropApp: {
     id: 'app-lab.import-resource-dialog.drag-drop-app',
-    defaultMessage: 'Drag & drop your app here',
+    defaultMessage: 'Drag & drop your App here',
     description: 'Text for drag and drop area',
   },
   dragDropFile: {
@@ -644,7 +746,7 @@ export const importResourceDialogMessages = defineMessages({
   },
   processTakesTime: {
     id: 'app-lab.import-resource-dialog.process-takes-time',
-    defaultMessage: 'just few seconds...',
+    defaultMessage: 'process takes just few seconds...',
     description: 'Text shown during upload process',
   },
   uploadFailedApp: {
@@ -664,12 +766,12 @@ export const importResourceDialogMessages = defineMessages({
   },
   uploadFailedDescriptionApp: {
     id: 'app-lab.import-resource-dialog.upload-failed-description-app',
-    defaultMessage: 'This app is broken or misconfigured.',
+    defaultMessage: 'This App is broken or misconfigured.',
     description: 'Description shown when upload fails for an app',
   },
   uploadFailedStorageFullApp: {
     id: 'app-lab.import-resource-dialog.upload-failed-storage-full-app',
-    defaultMessage: 'Unable to import the app. The board storage is full.',
+    defaultMessage: 'Unable to import the App. The board storage is full.',
     description:
       'Error shown when the board storage is full while importing an app',
   },
@@ -685,11 +787,6 @@ export const importResourceDialogMessages = defineMessages({
       'We couldn’t upload the folder. Check the folder and try again.',
     description: 'Description shown when upload fails for a folder',
   },
-  errorLabel: {
-    id: 'app-lab.import-resource-dialog.error-label',
-    defaultMessage: 'Error:',
-    description: 'Label for error details',
-  },
   goToMyApp: {
     id: 'app-lab.import-resource-dialog.go-to-my-app',
     defaultMessage: 'Go back to Apps',
@@ -700,55 +797,12 @@ export const importResourceDialogMessages = defineMessages({
     defaultMessage: 'Retry',
     description: 'Button text to retry upload after failure',
   },
-
-  titleModel: {
-    id: 'app-lab.import-resource-dialog.title-model',
-    defaultMessage: 'Bring your own model',
-    description: 'Title of the import model dialog',
-  },
-  uploadTitleModel: {
-    id: 'app-lab.import-resource-dialog.upload-title-model',
-    defaultMessage: 'Upload a Model',
-    description: 'Title for the upload section in the import model dialog',
-  },
-  uploadDescriptionModel: {
-    id: 'app-lab.import-resource-dialog.upload-description-model',
-    defaultMessage:
-      'Import a .gguf model file from your computer to use it in your bricks.',
-    description: 'Description shown in the import model dialog',
-  },
-  supportGGUF: {
-    id: 'app-lab.import-resource-dialog.support-gguf',
-    defaultMessage: 'Only .GGUF files are supported',
-    description: 'Text indicating supported file types for model import',
-  },
-  uploadingModel: {
-    id: 'app-lab.import-resource-dialog.uploading-model',
-    defaultMessage: 'Uploading model',
-    description: 'Text shown during model upload',
-  },
-  uploadFailedModel: {
-    id: 'app-lab.import-resource-dialog.upload-failed-model',
-    defaultMessage: 'Upload failed',
-    description: 'Title shown when upload fails for a model',
-  },
-  uploadFailedDescriptionModel: {
-    id: 'app-lab.import-resource-dialog.upload-failed-description-model',
-    defaultMessage:
-      'We couldn’t upload the model. Check the model and try again.',
-    description: 'Description shown when upload fails for a model',
-  },
-  dragDropModel: {
-    id: 'app-lab.import-resource-dialog.drag-drop-model',
-    defaultMessage: 'Drag and drop your model here',
-    description: 'Text shown for drag and drop area for model upload',
-  },
 });
 
 export const skipLoginDialogMessages = defineMessages({
   dialogTitle: {
     id: 'skipLoginDialog.title',
-    defaultMessage: 'Log In',
+    defaultMessage: 'Log in',
     description: 'Title shown in the skip Arduino account dialog',
   },
   dialogBodyTitle: {
@@ -763,7 +817,7 @@ export const skipLoginDialogMessages = defineMessages({
   },
   dialogBodyListItem1: {
     id: 'skipLoginDialog.bodyListItem1',
-    defaultMessage: 'Advanced AI models with custom training capabilities',
+    defaultMessage: 'Advanced AI Models with custom training capabilities',
     description: 'Message to confirm the skip Arduino account dialog',
   },
   dialogBodyListItem2: {
@@ -778,7 +832,7 @@ export const skipLoginDialogMessages = defineMessages({
   },
   dialogBodyListItem4: {
     id: 'skipLoginDialog.bodyListItem4',
-    defaultMessage: 'A growing library of additional apps',
+    defaultMessage: 'A growing library of additional Apps',
     description: 'Message to confirm the skip Arduino account dialog',
   },
   dialogBodyFooter: {
@@ -788,12 +842,12 @@ export const skipLoginDialogMessages = defineMessages({
   },
   skipButton: {
     id: 'skipLoginDialog.skipButton',
-    defaultMessage: 'Skip Log In',
+    defaultMessage: 'Skip log in',
     description: 'Label for the skip button',
   },
   confirmButton: {
     id: 'skipLoginDialog.confirmButton',
-    defaultMessage: 'Log In with Arduino',
+    defaultMessage: 'Log in with Arduino',
     description: 'Label for the confirm button',
   },
 });
@@ -801,7 +855,7 @@ export const skipLoginDialogMessages = defineMessages({
 export const trainNewModelDialogMessages = defineMessages({
   trainModelWelcomeTitle: {
     id: 'appLabBrickDetail.trainNewModel.welcomeTitle',
-    defaultMessage: 'Train your own custom AI models',
+    defaultMessage: 'Train your own custom AI Models',
     description: 'Welcome title for the train new model section',
   },
   trainModelWelcomeDescriptionOne: {
@@ -851,12 +905,12 @@ export const trainNewModelDialogMessages = defineMessages({
   },
   stepTwo: {
     id: 'appLabBrickDetail.trainNewModel.stepTwo',
-    defaultMessage: 'Continue in Edge Impulse using your Arduino Account',
+    defaultMessage: 'Continue in Edge Impulse using your Arduino account',
     description: 'Step two instruction for training new model',
   },
   arduinoSignIn: {
     id: 'appLabBrickDetail.trainNewModel.arduinoSignIn',
-    defaultMessage: 'Arduino Sign in',
+    defaultMessage: 'Arduino sign in',
     description: 'Button text to sign in with Arduino account',
   },
   connectToEdgeImpulse: {
@@ -866,7 +920,7 @@ export const trainNewModelDialogMessages = defineMessages({
   },
   accountConnectedTitle: {
     id: 'appLabBrickDetail.trainNewModel.accountConnectedTitle',
-    defaultMessage: 'Your Arduino Account is now connected to Edge Impulse 🎉',
+    defaultMessage: 'Your Arduino account is now connected to Edge Impulse 🎉',
     description: 'Title shown when the account is successfully connected',
   },
   redirectToEdgeImpulse: {
@@ -883,12 +937,12 @@ export const trainNewModelDialogMessages = defineMessages({
   modelInAppLab: {
     id: 'appLabBrickDetail.trainNewModel.modelInAppLab',
     defaultMessage:
-      'The new AI model will automatically appear in App Lab, ready to install from its corresponding bricks.',
+      'The new AI Model will automatically appear in App Lab, ready to install from its corresponding Bricks.',
     description: 'Instruction shown when the account is successfully connected',
   },
   startToTrainButton: {
     id: 'appLabBrickDetail.trainNewModel.startToTrainButton',
-    defaultMessage: 'Start to Train your AI model',
+    defaultMessage: 'Start to train your AI Model',
     description: 'Button text to start training the new model',
   },
   exitDialog: {
@@ -898,12 +952,12 @@ export const trainNewModelDialogMessages = defineMessages({
   },
   letsStart: {
     id: 'appLabBrickDetail.trainNewModel.letsStart',
-    defaultMessage: `Ok, let's start`,
+    defaultMessage: `OK, let's start`,
     description: 'Button to start train new model',
   },
   learnMore: {
     id: 'appLabBrickDetail.trainNewModel.learnMore',
-    defaultMessage: 'Learn More',
+    defaultMessage: 'Learn more',
     description: 'Button to learn more',
   },
 });
@@ -911,7 +965,7 @@ export const trainNewModelDialogMessages = defineMessages({
 export const networkSettingsDialogMessages = defineMessages({
   dialogTitle: {
     id: 'networkSettingsDialog.title',
-    defaultMessage: 'Network Settings',
+    defaultMessage: 'Network settings',
     description: 'Title of the network settings dialog',
   },
   confirmButton: {
@@ -924,18 +978,13 @@ export const networkSettingsDialogMessages = defineMessages({
 export const deleteTreeItemDialogMessages = defineMessages({
   deleteFileTitle: {
     id: 'deleteTreeItemDialog.deleteFileTitle',
-    defaultMessage: 'Delete File',
+    defaultMessage: 'Delete file',
     description: 'Title shown in the delete file dialog',
   },
   deleteFolderTitle: {
     id: 'deleteTreeItemDialog.deleteFolderTitle',
-    defaultMessage: 'Delete Folder',
+    defaultMessage: 'Delete folder',
     description: 'Title shown in the delete folder dialog',
-  },
-  dialogTitle: {
-    id: 'deleteTreeItemDialog.title',
-    defaultMessage: 'Delete',
-    description: 'Title shown in the delete tree item dialog',
   },
   fileBodyTitle: {
     id: 'deleteTreeItemDialog.fileBodyTitle',
@@ -964,7 +1013,7 @@ export const deleteTreeItemDialogMessages = defineMessages({
   },
   confirmButton: {
     id: 'deleteTreeItemDialog.confirmButton',
-    defaultMessage: 'Yes, Delete',
+    defaultMessage: 'Yes, delete',
     description: 'Label for the confirm button',
   },
 });
@@ -983,7 +1032,7 @@ export const disableNetworkModeDialogMessages = defineMessages({
   dialogBodyDescription: {
     id: 'disableNetworkModeDialog.bodyDescription',
     defaultMessage:
-      'Turning off Remote Access (SSH) will prevent App Lab from connecting to your board over the network.',
+      'Turning off remote access (SSH) will prevent App Lab from connecting to your board over the network.',
     description:
       'Description shown in the disable network mode dialog to explain the consequences of disabling network mode',
   },
@@ -1004,7 +1053,7 @@ export const disableNetworkModeDialogMessages = defineMessages({
 export const offlineWarningDialogMessages = defineMessages({
   dialogTitle: {
     id: 'offlineWarningDialog.title',
-    defaultMessage: 'Network Connection',
+    defaultMessage: 'Network connection',
     description: 'Title of the offline warning dialog',
   },
   dialogBodyTitle: {
@@ -1030,7 +1079,7 @@ export const offlineWarningDialogMessages = defineMessages({
   },
   feature2: {
     id: 'offlineWarningDialog.feature2',
-    defaultMessage: 'AI models Import',
+    defaultMessage: 'AI Models import',
     description: 'Second unavailable feature',
   },
   feature3: {
@@ -1040,17 +1089,17 @@ export const offlineWarningDialogMessages = defineMessages({
   },
   feature4: {
     id: 'offlineWarningDialog.feature4',
-    defaultMessage: 'Apps or Examples that requires internet connection',
+    defaultMessage: 'Apps or examples that require internet connection',
     description: 'Fourth unavailable feature',
   },
   feature5: {
     id: 'offlineWarningDialog.feature5',
-    defaultMessage: 'Open External links (only in SBC mode)',
+    defaultMessage: 'Open external links (only in SBC mode)',
     description: 'Fifth unavailable feature',
   },
   continueButton: {
     id: 'offlineWarningDialog.continueButton',
-    defaultMessage: 'Continue Offline',
+    defaultMessage: 'Continue offline',
     description: 'Button to continue using the app offline',
   },
   networkSettingsButton: {
@@ -1063,17 +1112,17 @@ export const offlineWarningDialogMessages = defineMessages({
 export const duplicateFileDialogMessages = defineMessages({
   fileConflictTitle: {
     id: 'duplicateFileDialog.fileConflictTitle',
-    defaultMessage: 'File Conflict',
+    defaultMessage: 'File conflict',
     description: 'Title shown when a file conflict is detected',
   },
   folderConflictTitle: {
     id: 'duplicateFileDialog.folderConflictTitle',
-    defaultMessage: 'Folder Conflict',
+    defaultMessage: 'Folder conflict',
     description: 'Title shown when a folder conflict is detected',
   },
   nameConflictTitle: {
     id: 'duplicateFileDialog.nameConflictTitle',
-    defaultMessage: 'Name Conflict',
+    defaultMessage: 'Name conflict',
     description:
       'Title shown when a name conflict is detected between file and folder',
   },
@@ -1118,41 +1167,10 @@ export const duplicateFileDialogMessages = defineMessages({
     description:
       'Description shown when trying to move a folder to a location with a file of the same name',
   },
-  sourceLabel: {
-    id: 'duplicateFileDialog.sourceLabel',
-    defaultMessage: 'Source',
-    description: 'Label for the source file path',
-  },
-  targetLabel: {
-    id: 'duplicateFileDialog.targetLabel',
-    defaultMessage: 'Target',
-    description: 'Label for the target file path',
-  },
-  warningMessage: {
-    id: 'duplicateFileDialog.warningMessage',
-    defaultMessage:
-      'Warning: Choosing "Overwrite" will permanently replace the existing {itemType}.',
-    description: 'Warning message about overwriting files',
-  },
-  cancelButton: {
-    id: 'duplicateFileDialog.cancelButton',
-    defaultMessage: 'Cancel',
-    description: 'Label for the cancel button',
-  },
-  skipButton: {
-    id: 'duplicateFileDialog.skipButton',
-    defaultMessage: 'Skip',
-    description: 'Label for the skip button',
-  },
   overwriteButton: {
     id: 'duplicateFileDialog.overwriteButton',
     defaultMessage: 'Overwrite',
     description: 'Label for the overwrite button',
-  },
-  mergeButton: {
-    id: 'duplicateFileDialog.mergeButton',
-    defaultMessage: 'Merge',
-    description: 'Label for the merge button in folder conflict',
   },
   keepBothButton: {
     id: 'duplicateFileDialog.keepBothButton',
@@ -1161,70 +1179,55 @@ export const duplicateFileDialogMessages = defineMessages({
   },
   okGotItButton: {
     id: 'duplicateFileDialog.okGotItButton',
-    defaultMessage: 'Ok, got it',
+    defaultMessage: 'OK, got it',
     description: 'Label for the ok got it button',
   },
 });
 
-export const attachCarrierDialogMessages = defineMessages({
-  dialogTitle: {
-    id: 'attachMediaCarrierDialog.title',
-    defaultMessage: 'Attach carrier board',
-    description: 'Title of the attach carrier board dialog',
+export const boardExtensionsAttachDialogMessages = defineMessages({
+  dialogCarrierTitle: {
+    id: 'boardExtensionsAttachDialog.carrierTitle',
+    defaultMessage: 'Attach carrier',
+    description: 'Title of the attach board extensions dialog',
   },
-  dialogBodyTitle: {
-    id: 'attachMediaCarrierDialog.bodyTitle',
-    defaultMessage: 'Hey, before you continue...',
-    description: 'Message shown in the attach media carrier board dialog',
+  dialogHatTitle: {
+    id: 'boardExtensionsAttachDialog.hatTitle',
+    defaultMessage: 'Attach JHat',
+    description: 'Title of the attach board extensions dialog',
   },
-  dialogBodyDescription1: {
-    id: 'attachMediaCarrierDialog.bodyDescription1',
+  dialogCarrierBodyTitle: {
+    id: 'boardExtensionsAttachDialog.carrierBodyTitle',
+    defaultMessage: 'How to attach a carrier',
+    description: 'Message shown in the attach board extensions dialog',
+  },
+  dialogHatBodyTitle: {
+    id: 'boardExtensionsAttachDialog.hatBodyTitle',
+    defaultMessage: 'How to attach an Hat',
+    description: 'Message shown in the attach board extensions dialog',
+  },
+  dialogCarrierBodyDescription: {
+    id: 'boardExtensionsAttachDialog.carrierBodyDescription',
     defaultMessage:
       'To avoid issues, connect the carrier <bold>while the board is powered off.</bold>',
-    description: 'Description shown in the attach media carrier board dialog',
+    description: 'Description shown in the attach board extensions dialog',
   },
-  dialogBodyDescription2: {
-    id: 'attachMediaCarrierDialog.bodyDescription2',
+  dialogCarrierBodyDescription2: {
+    id: 'boardExtensionsAttachDialog.carrierBodyDescription2',
     defaultMessage:
       'If it’s not connected, unplug the board, attach the carrier, then come back here.',
-    description: 'Description shown in the attach media carrier board dialog',
+    description: 'Description shown in the attach board extensions dialog',
   },
-  rememberButton: {
-    id: 'attachMediaCarrierDialog.rememberButton',
-    defaultMessage: 'Do not show it again',
-    description:
-      'Label for the remember button in the attach media carrier board dialog',
-  },
-  confirmButton: {
-    id: 'attachMediaCarrierDialog.confirmButton',
-    defaultMessage: 'Ok, Got it',
-    description:
-      'Label for the confirm button in the attach media carrier board dialog',
-  },
-});
-
-export const unsupportedCarrierDialogMessages = defineMessages({
-  dialogTitle: {
-    id: 'unsupportedCarrierDialog.title',
-    defaultMessage: 'Attention needed',
-    description: 'Title of the unsupported carrier board dialog',
-  },
-  dialogBodyTitle: {
-    id: 'unsupportedCarrierDialog.bodyTitle',
-    defaultMessage: 'Update required',
-    description: 'Message shown in the unsupported carrier board dialog',
-  },
-  dialogBodyDescription: {
-    id: 'unsupportedCarrierDialog.bodyDescription',
+  dialogHatBodyDescription: {
+    id: 'boardExtensionsAttachDialog.hatBodyDescription',
     defaultMessage:
-      'This system version doesn’t support the Media Carrier. Update your board to continue.',
-    description: 'Description shown in the unsupported carrier board dialog',
+      'To avoid issues, connect the board extensions <bold>while the board is powered off.</bold>',
+    description: 'Description shown in the attach board extensions dialog',
   },
   confirmButton: {
-    id: 'unsupportedCarrierDialog.confirmButton',
-    defaultMessage: 'Update Board',
+    id: 'boardExtensionsAttachDialog.confirmButton',
+    defaultMessage: 'OK, got it',
     description:
-      'Label for the confirm button in the unsupported carrier board dialog',
+      'Label for the confirm button in the attach board extensions dialog',
   },
 });
 
@@ -1237,13 +1240,13 @@ export const aiModelUninstallDialogMessages = defineMessages({
   dialogBodyTitle: {
     id: 'aiModelUninstallDialog.bodyTitle',
     defaultMessage:
-      'This AI model is currently linked to one or more other projects',
+      'This AI Model is currently linked to one or more other projects',
     description: 'Message shown in the AI model uninstall dialog',
   },
   dialogBodyDescription: {
     id: 'aiModelUninstallDialog.bodyDescription',
     defaultMessage:
-      'The AI model will be uninstalled from all linked projects. Proceed anyway?',
+      'The AI Model will be uninstalled from all linked projects. Proceed anyway?',
     description: 'Description shown in the AI model uninstall dialog',
   },
   confirmButton: {
@@ -1254,7 +1257,7 @@ export const aiModelUninstallDialogMessages = defineMessages({
   },
   cancelButton: {
     id: 'aiModelUninstallDialog.cancelButton',
-    defaultMessage: 'Keep the AI model',
+    defaultMessage: 'Keep the AI Model',
     description: 'Label for the cancel button in the AI model uninstall dialog',
   },
 });
@@ -1267,36 +1270,36 @@ export const aiModelRequiredDialogMessages = defineMessages({
   },
   dialogBodyTitleApp: {
     id: 'aiModelRequiredDialog.bodyTitleApp',
-    defaultMessage: 'AI model not available',
+    defaultMessage: 'AI Model not available',
     description: 'Message shown in the AI model required dialog for apps',
   },
   dialogBodyTitleExample: {
     id: 'aiModelRequiredDialog.bodyTitleExample',
-    defaultMessage: 'Download the AI model to run this example',
+    defaultMessage: 'Download the AI Model to run this example',
     description: 'Message shown in the AI model required dialog for examples',
   },
   dialogBodyDescriptionApp: {
     id: 'aiModelRequiredDialog.bodyDescriptionApp',
     defaultMessage:
-      'This App needs the {modelName} AI model. Download it now to run this app or select another one.',
+      'This App needs the {modelName} AI Model. Download it now to run this App or select another one.',
     description: 'Description shown in the AI model required dialog for apps',
   },
   dialogBodyDescriptionExample: {
     id: 'aiModelRequiredDialog.bodyDescriptionExample',
     defaultMessage:
-      'This example needs the {modelName} AI model. Download it now to run this example.',
+      'This example needs the {modelName} AI Model. Download it now to run this example.',
     description:
       'Description shown in the AI model required dialog for examples',
   },
   confirmButtonApp: {
     id: 'aiModelRequiredDialog.confirmButtonApp',
-    defaultMessage: 'Select Model',
+    defaultMessage: 'Select model',
     description:
       'Label for the confirm button in the AI model required dialog for apps',
   },
   confirmButtonExample: {
     id: 'aiModelRequiredDialog.confirmButtonExample',
-    defaultMessage: 'Download Model',
+    defaultMessage: 'Download model',
     description:
       'Label for the confirm button in the AI model required dialog for examples',
   },
@@ -1316,7 +1319,7 @@ export const cloudConnectorDisconnectDialogMessages = defineMessages({
   dialogBodyDescription: {
     id: 'cloudConnectorDisconnectDialog.bodyDescription',
     defaultMessage:
-      "It will stop syncing data with Arduino Cloud, and your apps won't be able to read or write its variables. You can connect it again any time.",
+      "It will stop syncing data with Arduino Cloud, and your Apps won't be able to read or write its variables. You can connect it again any time.",
     description:
       'Description shown in the cloud connector disconnect dialog to reassure users about their work safety',
   },
@@ -1348,7 +1351,7 @@ export const cloudConnectorConnectDialogMessages = defineMessages({
   dialogBodyDescription: {
     id: 'cloudConnectorConnectDialog.bodyDescription',
     defaultMessage:
-      'Your device will be registered with Arduino Cloud and stay connected on its own, even when no app is running. Once set up, <bold>your apps can send and receive data from the Cloud in real time.</bold>',
+      'Your device will be registered with Arduino Cloud and stay connected on its own, even when no App is running. Once set up, <bold>your Apps can send and receive data from the Cloud in real time.</bold>',
     description:
       'Description shown in the cloud connector connect dialog to reassure users about their work safety',
   },
@@ -1405,20 +1408,20 @@ export const cloudConnectorErrorDialogMessages = defineMessages({
   dialogBodyDescription: {
     id: 'cloudConnectorErrorDialog.bodyDescription',
     defaultMessage:
-      'The device signature is invalid- This can happen if the board ws previously used or misconfigured.',
+      'The device signature is invalid. This can happen if the board was previously used or misconfigured.',
     description:
       'Description shown in the cloud connector error dialog to reassure users about their work safety',
   },
   dialogBodyDescription2: {
     id: 'cloudConnectorErrorDialog.bodyDescription2',
     defaultMessage:
-      'Please contact support with the Device ID Above. You may need to reset the board to continue.',
+      'Please contact support with the device ID below. You may need to reset the board to continue.',
     description:
       'Description shown in the cloud connector error dialog to warn users about data loss',
   },
   uhwidLabel: {
     id: 'cloudConnectorErrorDialog.uhwidLabel',
-    defaultMessage: 'Unique Hardware ID',
+    defaultMessage: 'Unique hardware ID',
     description:
       'UHDID label shown in the cloud connector error dialog to warn users about data loss',
   },
@@ -1430,7 +1433,7 @@ export const cloudConnectorErrorDialogMessages = defineMessages({
   },
   confirmButton: {
     id: 'cloudConnectorErrorDialog.confirmButton',
-    defaultMessage: 'Ok, got it',
+    defaultMessage: 'OK, got it',
     description:
       'Label for the confirm button in the cloud connector error dialog',
   },
@@ -1450,7 +1453,7 @@ export const cloudConnectorRequiredDialogMessages = defineMessages({
   dialogBodyDescription: {
     id: 'cloudConnectorRequiredDialog.bodyDescription',
     defaultMessage:
-      'This app uses the Arduino Cloud brick, which needs the device connected to sync data.',
+      'This App uses the Arduino Cloud Brick, which needs the device connected to sync data.',
     description:
       'Description shown in the cloud connector required dialog to reassure users about their work safety',
   },
@@ -1459,5 +1462,251 @@ export const cloudConnectorRequiredDialogMessages = defineMessages({
     defaultMessage: 'Connect device',
     description:
       'Label for the confirm button in the cloud connector required dialog',
+  },
+});
+
+export const addHuggingFaceModelDialogMessages = defineMessages({
+  dialogTitle: {
+    id: 'addHuggingFaceModelDialog.title',
+    defaultMessage: 'Add model',
+    description: 'Title of the add model dialog',
+  },
+  dialogBodyTitle: {
+    id: 'addHuggingFaceModelDialog.bodyTitle',
+    defaultMessage: 'Add a model from Hugging Face',
+    description: 'Body title of the link model dialog',
+  },
+  dialogBodyDescription: {
+    id: 'addHuggingFaceModelDialog.bodyDescription',
+    defaultMessage:
+      "Paste the model URL or model ID. We'll check that it's compatible.",
+    description: 'Body description of the link model dialog',
+  },
+  sourcePlaceholder: {
+    id: 'addHuggingFaceModelDialog.sourcePlaceholder',
+    defaultMessage: 'Hugging Face model URL or ID',
+    description: 'Placeholder for the model source input field',
+  },
+  confirmButton: {
+    id: 'addHuggingFaceModelDialog.confirmButton',
+    defaultMessage: 'Download model',
+    description: 'Label for the button to confirm linking a model by source',
+  },
+  sourceHint: {
+    id: 'addHuggingFaceModelDialog.sourceHint',
+    defaultMessage:
+      'Use the format <mono>owner/model-name</mono>, or paste the full URL of the model page.',
+    description:
+      'Hint below the model source input. <mono> wraps the Hugging Face model ID format',
+  },
+  modelIdHelpToggle: {
+    id: 'addHuggingFaceModelDialog.modelIdHelpToggle',
+    defaultMessage: 'Where do I find the model ID?',
+    description:
+      'Toggle that shows or hides the steps to find a Hugging Face model ID',
+  },
+  modelIdHelpOpenModel: {
+    id: 'addHuggingFaceModelDialog.modelIdHelpOpenModel',
+    defaultMessage:
+      'Go to <link>huggingface.co/models</link> and open the model you want to use.',
+    description:
+      'First step to find a model ID. <link> wraps the link to the Hugging Face models page',
+  },
+  modelIdHelpCopyId: {
+    id: 'addHuggingFaceModelDialog.modelIdHelpCopyId',
+    defaultMessage:
+      'At the top of the page, next to the model name, click the copy icon. This copies the model ID.',
+    description: 'Second step to find a model ID',
+  },
+  modelIdHelpCopyPointer: {
+    id: 'addHuggingFaceModelDialog.modelIdHelpCopyPointer',
+    defaultMessage: '← copy the model ID',
+    description:
+      'Label that points at the copy icon in the example of a Hugging Face model page header',
+  },
+  modelIdHelpUrl: {
+    id: 'addHuggingFaceModelDialog.modelIdHelpUrl',
+    defaultMessage:
+      "You can also paste a model URL from the 'File and Versions' tab of a Hugging Face repo",
+    description: 'Tells the user a model page URL also works.',
+  },
+  verifyingButton: {
+    id: 'addHuggingFaceModelDialog.verifyingButton',
+    defaultMessage: 'Verifying...',
+    description:
+      'Label shown next to the spinner while the model source is being verified',
+  },
+  alreadyDownloading: {
+    id: 'addHuggingFaceModelDialog.alreadyDownloading',
+    defaultMessage: 'This model is already downloading.',
+    description:
+      'Error shown when the pasted source names a model whose download is already running',
+  },
+  alreadyInstalled: {
+    id: 'addHuggingFaceModelDialog.alreadyInstalled',
+    defaultMessage: 'This model is already in your Brick.',
+    description:
+      'Error shown when the pasted source names a model the brick already has installed',
+  },
+  errorGeneric: {
+    id: 'addHuggingFaceModelDialog.errorGeneric',
+    defaultMessage: 'Couldn’t link this model. Try again.',
+    description:
+      'Error shown when the board refuses the model source without saying why',
+  },
+});
+
+export const createReleaseIntroDialogMessages = defineMessages({
+  dialogTitle: {
+    id: 'createReleaseIntroDialog.dialogTitle',
+    defaultMessage: 'App release',
+    description: 'Title shown in the create app release intro dialog',
+  },
+  title: {
+    id: 'createReleaseIntroDialog.title',
+    defaultMessage: 'Create App release',
+    description: 'Heading of the create app release intro dialog',
+  },
+  description: {
+    id: 'createReleaseIntroDialog.description',
+    defaultMessage:
+      'Package your App into a ready-to-run release to deploy or share.',
+    description: 'Explains what creating a release produces',
+  },
+  pointDirectProduction: {
+    id: 'createReleaseIntroDialog.pointDirectProduction',
+    defaultMessage:
+      '<strong>Production ready:</strong> Bricks, models and code stay exactly as in the release you made — ready to run on other boards.',
+    description: 'First use case for an app release',
+  },
+  pointAppLabSharing: {
+    id: 'createReleaseIntroDialog.pointAppLabSharing',
+    defaultMessage:
+      '<strong>App Lab sharing:</strong> Share a run-only copy others can run, then Copy & edit — your original App stays untouched.',
+    description: 'Second use case for an app release',
+  },
+  dontShowAgain: {
+    id: 'createReleaseIntroDialog.dontShowAgain',
+    defaultMessage: 'Don’t show it anymore',
+    description: 'Label of the checkbox that hides the intro dialog for good',
+  },
+  continueButton: {
+    id: 'createReleaseIntroDialog.continueButton',
+    defaultMessage: 'Continue',
+    description: 'Label of the button that opens the release form',
+  },
+});
+
+export const createReleaseDialogMessages = defineMessages({
+  dialogTitle: {
+    id: 'createReleaseDialog.dialogTitle',
+    defaultMessage: 'App release',
+    description: 'Title shown in the create app release dialog',
+  },
+  cancelButton: {
+    id: 'createReleaseDialog.cancelButton',
+    defaultMessage: 'Cancel',
+    description: 'Label of the cancel button',
+  },
+  confirmButton: {
+    id: 'createReleaseDialog.confirmButton',
+    defaultMessage: 'Save and download',
+    description: 'Label of the button that starts the release build',
+  },
+  buildingButton: {
+    id: 'createReleaseDialog.buildingButton',
+    defaultMessage: 'Building…',
+    description:
+      'Label of the confirm button while the release copies the App, when the dialog cannot be dismissed',
+  },
+  optional: {
+    id: 'releaseForm.optional',
+    defaultMessage: '(optional)',
+    description: 'Marks a release form field as not required',
+  },
+  labelInfo: {
+    id: 'releaseForm.labelInfo',
+    defaultMessage:
+      'Add a label made of numbers or letters to identify this release.',
+    description: 'Tooltip explaining the release label',
+  },
+  targetLabel: {
+    id: 'releaseForm.targetLabel',
+    defaultMessage: 'Target',
+    description: 'Label of the board the release is built for',
+  },
+  includeDataInfoRunning: {
+    id: 'releaseForm.includeDataInfoRunning',
+    defaultMessage:
+      'Turned off while the app is running — including data during a run could cause errors.',
+    description:
+      'Tooltip shown when the data toggle is off because the app runs',
+  },
+});
+
+export const preparationRequiredDialogMessages = defineMessages({
+  dialogTitle: {
+    id: 'preparationRequiredDialog.dialogTitle',
+    defaultMessage: 'App release',
+    description: 'Title of the preparation required dialog',
+  },
+  title: {
+    id: 'preparationRequiredDialog.title',
+    defaultMessage: 'Install app dependencies',
+    description:
+      'Heading of the preparation required dialog, and label of the toggle that runs preparation after a release is installed',
+  },
+  description: {
+    id: 'preparationRequiredDialog.description',
+    defaultMessage:
+      'Before you can run the App, you need to complete the preparation step.',
+    description: 'Explains why the release cannot run yet',
+  },
+  networkHint: {
+    id: 'preparationRequiredDialog.networkHint',
+    defaultMessage:
+      'An internet connection is required to complete the preparation.',
+    description: 'Warns that preparation needs the network',
+  },
+  cancelButton: {
+    id: 'preparationRequiredDialog.cancelButton',
+    defaultMessage: 'Cancel',
+    description: 'Label of the button that dismisses the dialog',
+  },
+  startButton: {
+    id: 'preparationRequiredDialog.startButton',
+    defaultMessage: 'Install dependencies',
+    description: 'Label of the button that starts the preparation',
+  },
+});
+
+export const releaseInfoDialogMessages = defineMessages({
+  dialogTitle: {
+    id: 'releaseInfoDialog.dialogTitle',
+    defaultMessage: 'Release info',
+    description: 'Title of the dialog that shows what an installed release is',
+  },
+  closeButton: {
+    id: 'releaseInfoDialog.closeButton',
+    defaultMessage: 'Close',
+    description: 'Label of the button that closes the release info dialog',
+  },
+});
+
+export const buildLogDialogMessages = defineMessages({
+  dialogTitle: {
+    id: 'buildLogDialog.dialogTitle',
+    defaultMessage: 'Build log',
+    description: 'Title of the dialog that shows the log of a failed release',
+  },
+  copyButton: {
+    id: 'buildLogDialog.copyButton',
+    defaultMessage: 'Copy',
+    description: 'Label of the button that copies the build log',
+  },
+  closeButton: {
+    id: 'buildLogDialog.closeButton',
+    defaultMessage: 'Close',
+    description: 'Label of the button that closes the build log dialog',
   },
 });

@@ -13,10 +13,20 @@ import {
   newVersion,
   reloadApp,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
-import { BoardUpdateLog } from '@cloud-editor-mono/infrastructure';
+import {
+  BoardUpdateLog,
+  BoardUpdateProgress,
+} from '@cloud-editor-mono/infrastructure';
 import { UpdaterStatus } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { BoardScopedQuery } from '../../boardScopedQuery';
 import { useIsBoard } from '../../hooks/useIsBoard';
@@ -33,6 +43,7 @@ export type UseUpdater = () => {
   newAppVersion: string | undefined; //This is the arduino app lab (on PC)
   releaseNotes: { content: string; image: string } | undefined;
   boardLogs: string[];
+  boardUpdateProgress: number | undefined; //Completion percentage of the running board update, undefined until the first progress event
   checkForUpdates: (silent?: boolean) => Promise<void>;
   startUpdate: () => void;
   skipUpdate: () => void;
@@ -59,6 +70,7 @@ export const useUpdater: UseUpdater = (): ReturnType<UseUpdater> => {
   const { isConnected } = useContext(NetworkContext);
 
   const [boardLogs, _setBoardLogs] = useState<string[]>([]);
+  const [boardUpdateProgress, setBoardUpdateProgress] = useState<number>();
   const [boardUpdateSucceeded, setBoardUpdateSucceeded] =
     useState<boolean>(false);
   const [appUpdateSucceeded, setAppUpdateSucceeded] = useState<boolean>(false);
@@ -69,9 +81,11 @@ export const useUpdater: UseUpdater = (): ReturnType<UseUpdater> => {
 
   const updateInDevMode = isFFEnabled('UPDATE_IN_DEV_MODE');
 
-  const { data: currentAppVersion } = useQuery(['current-app-version'], () =>
-    getCurrentVersion(),
-  );
+  const { data: currentAppVersion } = useQuery({
+    queryKey: ['current-app-version'],
+
+    queryFn: () => getCurrentVersion(),
+  });
 
   const canStartUpdate =
     !!isConnected &&
@@ -97,52 +111,69 @@ export const useUpdater: UseUpdater = (): ReturnType<UseUpdater> => {
 
   const {
     data: boardUpdates,
+    dataUpdatedAt: boardUpdatesUpdatedAt,
     isFetching: isCheckingForBoardUpdates,
     refetch: checkBoardUpdateQuery,
-  } = useQuery(
-    [BoardScopedQuery.BOARD_UPDATE_CHECK],
-    () => checkBoardUpdate(true),
-    {
-      select: (data) => {
-        if (data.updates && data.updates.length > 0) {
-          return data.updates.map((update) => ({
-            name: update.name || 'Unknown',
-            toVersion: update.to_version || '',
-          }));
-        }
-        // null = no board updates available
-        return null;
-      },
-      onSuccess: (data) => {
-        const newAppVersion = data?.find(
-          (update) => update.name === 'arduino-app-lab',
-        )?.toVersion;
-        if (isBoard && newAppVersion) {
-          checkReleaseNotes(newAppVersion);
-        }
-      },
-      enabled: false,
-      staleTime: Infinity,
-      cacheTime: Infinity,
-      // linear retry for 2 minutes, 2 seconds delay
-      retry: (counter, error) =>
-        (error as Error | undefined)?.message.includes(UPDATE_IN_PROGRESS)
-          ? false
-          : counter < 60,
-      retryDelay: 2000,
+  } = useQuery({
+    queryKey: [BoardScopedQuery.BOARD_UPDATE_CHECK],
+    queryFn: () => checkBoardUpdate(true),
+
+    select: (data) => {
+      if (data.updates && data.updates.length > 0) {
+        return data.updates.map((update) => ({
+          name: update.name || 'Unknown',
+          toVersion: update.to_version || '',
+        }));
+      }
+      // null = no board updates available
+      return null;
     },
-  );
+
+    enabled: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+
+    // linear retry for 2 minutes, 2 seconds delay
+    retry: (counter, error) =>
+      (error as Error | undefined)?.message.includes(UPDATE_IN_PROGRESS)
+        ? false
+        : counter < 60,
+
+    retryDelay: 2000,
+  });
+
+  // Every check has to fetch the notes again, and `dataUpdatedAt` is the only
+  // value a re-check changes: the query never goes stale, so a second check
+  // returning the same updates keeps `boardUpdates` referentially equal.
+  useEffect(() => {
+    if (boardUpdates) {
+      const newAppVersion = boardUpdates?.find(
+        (update) => update.name === 'arduino-app-lab',
+      )?.toVersion;
+      if (isBoard && newAppVersion) {
+        checkReleaseNotes(newAppVersion);
+      }
+    }
+  }, [boardUpdates, boardUpdatesUpdatedAt, isBoard, checkReleaseNotes]);
 
   const {
     data: newAppVersion,
+    dataUpdatedAt: newAppVersionUpdatedAt,
     isFetching: isCheckingForAppUpdates,
     refetch: checkAppUpdateQuery,
-  } = useQuery(['app-update-check'], newVersion, {
-    onSuccess: checkReleaseNotes,
+  } = useQuery({
+    queryKey: ['app-update-check'],
+    queryFn: newVersion,
     enabled: false,
     staleTime: Infinity,
-    cacheTime: Infinity,
+    gcTime: Infinity,
   });
+
+  useEffect(() => {
+    if (newAppVersion) {
+      checkReleaseNotes(newAppVersion);
+    }
+  }, [newAppVersion, newAppVersionUpdatedAt, checkReleaseNotes]);
 
   const pushBoardLog = useCallback((log: string | string[]): void => {
     _setBoardLogs((prev) => prev.concat(log));
@@ -151,6 +182,9 @@ export const useUpdater: UseUpdater = (): ReturnType<UseUpdater> => {
   const startAppUpdate = useCallback(async (): Promise<void> => {
     try {
       _setStatus(UpdaterStatus.UpdatingApp);
+      // The App Lab update doesn't report progress: drop whatever the board
+      // update left behind rather than showing a stale percentage.
+      setBoardUpdateProgress(undefined);
       pushBoardLog('Starting App Lab update...');
 
       await checkAndApplyUpdate();
@@ -197,6 +231,21 @@ export const useUpdater: UseUpdater = (): ReturnType<UseUpdater> => {
     [pushBoardLog],
   );
 
+  const onProgressReceived = useCallback((log: BoardUpdateLog) => {
+    try {
+      const { progress } = JSON.parse(log.data) as BoardUpdateProgress;
+      if (typeof progress !== 'number' || Number.isNaN(progress)) {
+        console.error('Unexpected update progress payload', log);
+        return;
+      }
+      // Follow the stream instead of latching the highest value seen: a bar
+      // going backwards is a backend fault worth surfacing, not hiding.
+      setBoardUpdateProgress(Math.min(100, Math.max(0, Math.round(progress))));
+    } catch {
+      console.error('Error parsing update progress', log);
+    }
+  }, []);
+
   const abortStream = useCallback((): void => {
     if (logsStreamAbortController.current) {
       logsStreamAbortController.current.abort();
@@ -214,6 +263,14 @@ export const useUpdater: UseUpdater = (): ReturnType<UseUpdater> => {
         onmessage: (resp) => {
           console.debug('Board update log', resp);
           const log = resp as BoardUpdateLog;
+
+          if (log.event === 'progress') {
+            // Progress is drawn on the bar, never printed: it would otherwise
+            // reach the log panel as a pretty-printed JSON blob.
+            onProgressReceived(log);
+            return;
+          }
+
           onLogReceived(log);
 
           if (log.event === 'restarting') {
@@ -299,15 +356,20 @@ export const useUpdater: UseUpdater = (): ReturnType<UseUpdater> => {
       },
       logsStreamAbortController.current,
     );
-  }, [abortStream, isBoard, onBoardUpdateDone, onLogReceived, pushBoardLog]);
+  }, [
+    abortStream,
+    isBoard,
+    onBoardUpdateDone,
+    onLogReceived,
+    onProgressReceived,
+    pushBoardLog,
+  ]);
 
-  const { refetch: getMandatoryUpdatesList } = useQuery(
-    ['mandatory-updates-list'],
-    getMandatoryUpdatesListApi,
-    {
-      enabled: false,
-    },
-  );
+  const { refetch: getMandatoryUpdatesList } = useQuery({
+    queryKey: ['mandatory-updates-list'],
+    queryFn: getMandatoryUpdatesListApi,
+    enabled: false,
+  });
 
   const checkMandatoryUpdates = useCallback(
     async (
@@ -437,6 +499,8 @@ export const useUpdater: UseUpdater = (): ReturnType<UseUpdater> => {
 
   const startBoardUpdate = useCallback(async (): Promise<void> => {
     _setStatus(UpdaterStatus.UpdatingBoard);
+    // A retry starts indeterminate again, until the first progress event.
+    setBoardUpdateProgress(undefined);
     pushBoardLog('Starting board update...');
 
     try {
@@ -472,21 +536,42 @@ export const useUpdater: UseUpdater = (): ReturnType<UseUpdater> => {
     _setBoardLogs(logs);
   }, []);
 
-  return {
-    status,
-    boardUpdateSucceeded,
-    appUpdateSucceeded,
-    boardUpdates,
-    currentAppVersion,
-    newAppVersion,
-    releaseNotes,
-    boardLogs,
-    checkForUpdates,
-    startUpdate,
-    canStartUpdate,
-    skipUpdate,
-    bypassSkipUpdate,
-    setStatus,
-    setBoardLogs,
-  };
+  return useMemo(
+    () => ({
+      status,
+      boardUpdateSucceeded,
+      appUpdateSucceeded,
+      boardUpdates,
+      currentAppVersion,
+      newAppVersion,
+      releaseNotes,
+      boardLogs,
+      boardUpdateProgress,
+      checkForUpdates,
+      startUpdate,
+      canStartUpdate,
+      skipUpdate,
+      bypassSkipUpdate,
+      setStatus,
+      setBoardLogs,
+    }),
+    [
+      appUpdateSucceeded,
+      boardLogs,
+      boardUpdateProgress,
+      boardUpdateSucceeded,
+      boardUpdates,
+      bypassSkipUpdate,
+      canStartUpdate,
+      checkForUpdates,
+      currentAppVersion,
+      newAppVersion,
+      releaseNotes,
+      setBoardLogs,
+      setStatus,
+      skipUpdate,
+      startUpdate,
+      status,
+    ],
+  );
 };

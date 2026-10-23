@@ -9,12 +9,16 @@ import { ArduinoLoop } from '@cloud-editor-mono/images/assets/icons';
 import { AppDetailedInfo } from '@cloud-editor-mono/infrastructure';
 import {
   FooterBarLogic,
+  FormatMessage,
+  LinuxCredentialsDialogLogic,
+  SystemResource,
   SystemResources,
   useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useRouter, useRouterState } from '@tanstack/react-router';
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo } from 'react';
+import { MessageDescriptor } from 'react-intl';
 
 import { BoardScopedQuery } from '../../boardScopedQuery';
 import { useAgentModeSeen } from '../../hooks/useAgentModeSeen';
@@ -22,21 +26,56 @@ import { useBoardItem } from '../../hooks/useBoardItem';
 import { UseBoards } from '../../hooks/useBoards';
 import { useIsBoard } from '../../hooks/useIsBoard';
 import { useTerminal } from '../../hooks/useTerminal';
-import { BoardResourcesContext } from '../../providers/board-resources/boardResourcesContext';
 import { useFooterNotifications } from '../../providers/footer-notifications/footerNotificationsContext';
 import { LanguageServerContext } from '../../providers/language-server/languageServerContext';
 import { NetworkContext } from '../../providers/network/networkContext';
 import { RuntimeContext } from '../../providers/runtime/runtimeContext';
 import { useBoardLifecycleStore } from '../../store/boardLifecycle';
+import {
+  bytesToGiB,
+  getUsedPercent,
+  useBoardResourcesStore,
+} from '../../store/boardResources';
+import { useNetworkSettingsDialogStore } from '../../store/networkSettingsDialog';
 import { useAgentModeEntryShineLogic } from './agentModeEntryShine.logic';
 import { useAgentModeTooltipLogic } from './agentModeTooltip.logic';
 import { messages } from './messages';
 
-const bytesToGiB = (bytes: unknown): string =>
-  ((bytes as number) / 1024 / 1024 / 1024).toFixed(2);
+const WARNING_PERCENT = 80;
 
-const getUsedPercent = (used: unknown, total: unknown): number =>
-  ((used as number) / (total as number)) * 100;
+const percentResource = (
+  formatMessage: FormatMessage,
+  message: MessageDescriptor,
+  percentage: number | undefined,
+): SystemResource =>
+  percentage == undefined
+    ? {}
+    : {
+        label: formatMessage(message, { used: percentage.toFixed(0) }),
+        state: percentage > WARNING_PERCENT ? 'warning' : undefined,
+        value: { used: percentage, total: 100 },
+      };
+
+const sizeResource = (
+  formatMessage: FormatMessage,
+  message: MessageDescriptor,
+  value: { used: number; total: number } | undefined,
+  path?: string,
+): SystemResource =>
+  value === undefined
+    ? {}
+    : {
+        label: formatMessage(message, {
+          used: bytesToGiB(value.used),
+          total: bytesToGiB(value.total),
+          path,
+        }),
+        state:
+          getUsedPercent(value.used, value.total) > WARNING_PERCENT
+            ? 'warning'
+            : undefined,
+        value,
+      };
 
 // Temporarily disable footer update notifications in favour of BoardUpdateDialog
 const enableFooterUpdate = false;
@@ -68,7 +107,7 @@ export const createUseFooterBarLogic = function (
       connToBoardError,
     } = boardsProps;
 
-    const linuxCredentialsDialog = {
+    const linuxCredentialsDialog: LinuxCredentialsDialogLogic = () => ({
       open: showBoardConnPswPrompt,
       onOpenChange: (isOpen: boolean): void => {
         if (!isOpen) onConnPswCancel();
@@ -77,18 +116,9 @@ export const createUseFooterBarLogic = function (
       onCancel: onConnPswCancel,
       isLoading: isConnectingToBoard,
       error: connToBoardError,
-    };
+    });
 
     const { onOpenTerminal, terminalError } = useTerminal();
-
-    const [systemResources, setSystemResources] = useState<SystemResources>({
-      root: {},
-      user: {},
-      ram: {},
-      cpu: {},
-      npu: {},
-      network: {},
-    });
 
     const {
       notifications,
@@ -98,7 +128,7 @@ export const createUseFooterBarLogic = function (
     } = useFooterNotifications();
 
     const runtimeContext = useContext(RuntimeContext);
-    const { resources } = useContext(BoardResourcesContext);
+    const resources = useBoardResourcesStore((state) => state.resources);
 
     const boardIsReachable = useBoardLifecycleStore(
       (state) => state.boardIsReachable,
@@ -108,9 +138,11 @@ export const createUseFooterBarLogic = function (
     const { shine: agentModeEntryShine, markEntryClicked } =
       useAgentModeEntryShineLogic(aiAssistantActive);
 
-    const { data: currentVersion } = useQuery(['current-version'], () =>
-      getCurrentVersion(),
-    );
+    const { data: currentVersion } = useQuery({
+      queryKey: ['current-version'],
+
+      queryFn: () => getCurrentVersion(),
+    });
 
     useEffect(() => {
       enableFooterUpdate &&
@@ -133,105 +165,78 @@ export const createUseFooterBarLogic = function (
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    useEffect(() => {
-      if (!resources) {
-        return;
-      }
-
-      setSystemResources((prev) => ({
-        ...prev,
-        cpu: resources.cpuPercentage
-          ? {
-              label: formatMessage(messages.cpu, {
-                used: (resources.cpuPercentage as number).toFixed(0),
-              }),
-              state: resources.cpuPercentage > 80 ? 'warning' : undefined,
-              value: {
-                used: resources.cpuPercentage,
-                total: 100,
-              },
-            }
-          : prev.cpu,
-        npu: resources.npuPercentage
-          ? {
-              label: formatMessage(messages.npu, {
-                used: (resources.npuPercentage as number).toFixed(0),
-              }),
-              state: resources.npuPercentage > 80 ? 'warning' : undefined,
-              value: {
-                used: resources.npuPercentage,
-                total: 100,
-              },
-            }
-          : prev.npu,
-        ...[
-          { key: 'ram', value: resources.ram },
-          { key: 'user', value: resources.homeDisk, path: 'User' },
-          { key: 'root', value: resources.rootDisk, path: 'Root' },
-        ].reduce(
-          (obj, { key, value, path }) => ({
-            ...obj,
-            [key]: value
-              ? {
-                  label: formatMessage(
-                    messages[key === 'ram' ? 'memory' : 'disk'],
-                    {
-                      used: bytesToGiB(value.used),
-                      total: bytesToGiB(value.total),
-                      path,
-                    },
-                  ),
-                  state:
-                    getUsedPercent(value.used, value.total) > 80
-                      ? 'warning'
-                      : undefined,
-                  value,
-                }
-              : prev[key as keyof SystemResources],
-          }),
-          {},
-        ),
-      }));
-    }, [formatMessage, resources]);
-
     const { isConnected } = useContext(NetworkContext);
-    const { data: connectingName } = useQuery(
-      [BoardScopedQuery.CONNECTION_NAME],
-      async () => getConnectionName(),
-      {
-        enabled: boardIsReachable && isConnected,
-      },
+    const { data: connectingName } = useQuery({
+      queryKey: [BoardScopedQuery.CONNECTION_NAME],
+      queryFn: async () => getConnectionName(),
+      enabled: boardIsReachable && isConnected,
+    });
+
+    const { data: boardIP } = useQuery({
+      queryKey: [BoardScopedQuery.IP_ADDRESS],
+      queryFn: async () => getIPAddress(),
+      enabled: boardIsReachable,
+    });
+
+    const setNetworkSettingsDialogOpen = useNetworkSettingsDialogStore(
+      (state) => state.setOpen,
     );
 
-    const { data: boardIP } = useQuery(
-      [BoardScopedQuery.IP_ADDRESS],
-      async () => getIPAddress(),
-      {
-        enabled: boardIsReachable,
-      },
-    );
-
-    useEffect(() => {
-      if (boardIsReachable) {
-        setSystemResources((prev) => {
-          const newItems = { ...prev };
-          newItems.network = {
-            ...newItems.network,
-            label: connectingName ?? undefined,
-            state: isConnected ? 'default' : 'inactive',
-            onClick: (): void => {
-              navigate({
-                to: '/settings',
-                hash: 'network',
-                hashScrollIntoView: { block: 'nearest', inline: 'nearest' },
-                search: { openNetworkDialog: !isConnected },
-              });
-            },
-          };
-          return newItems;
+    const onNetworkClick = useCallback((): void => {
+      if (router.state.location.pathname === '/settings') {
+        setNetworkSettingsDialogOpen(true);
+      } else {
+        navigate({
+          to: '/settings',
+          hash: 'network',
+          hashScrollIntoView: { block: 'nearest', inline: 'nearest' },
+          search: { openNetworkDialog: true },
         });
       }
-    }, [boardIsReachable, isConnected, connectingName, navigate]);
+    }, [navigate, router, setNetworkSettingsDialogOpen]);
+
+    const cpu = useMemo(
+      () =>
+        percentResource(formatMessage, messages.cpu, resources?.cpuPercentage),
+      [formatMessage, resources?.cpuPercentage],
+    );
+
+    const npu = useMemo(
+      () =>
+        percentResource(formatMessage, messages.npu, resources?.npuPercentage),
+      [formatMessage, resources?.npuPercentage],
+    );
+
+    const ram = useMemo(
+      () => sizeResource(formatMessage, messages.memory, resources?.ram),
+      [formatMessage, resources?.ram],
+    );
+
+    const user = useMemo(
+      () =>
+        sizeResource(formatMessage, messages.disk, resources?.homeDisk, 'User'),
+      [formatMessage, resources?.homeDisk],
+    );
+
+    const root = useMemo(
+      () =>
+        sizeResource(formatMessage, messages.disk, resources?.rootDisk, 'Root'),
+      [formatMessage, resources?.rootDisk],
+    );
+
+    const network = useMemo<SystemResource>(
+      () => ({
+        label: boardIsReachable ? connectingName ?? undefined : undefined,
+        state: boardIsReachable && isConnected ? 'default' : 'inactive',
+        onClick: boardIsReachable ? onNetworkClick : undefined,
+      }),
+      [boardIsReachable, connectingName, isConnected, onNetworkClick],
+    );
+
+    const systemResources = useMemo<SystemResources>(
+      () => ({ root, user, ram, cpu, npu, network }),
+      [root, user, ram, cpu, npu, network],
+    );
 
     const onOpenApp = (app: AppDetailedInfo): void => {
       navigate({

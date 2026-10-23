@@ -117,7 +117,9 @@ const FlavourConfigDialog: React.FC<FlavourConfigDialogProps> = (
       top={top}
       left={left}
     >
-      <Small bold>{formatMessage(messages.header)}</Small>
+      <Small bold className={styles.title}>
+        {formatMessage(messages.header)}
+      </Small>
       <div className={styles.body}>{renderDropdownMenus()}</div>
     </FocusedPopover>
   );

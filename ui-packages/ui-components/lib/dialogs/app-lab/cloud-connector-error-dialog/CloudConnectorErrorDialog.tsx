@@ -34,12 +34,7 @@ export const CloudConnectorErrorDialog: React.FC<
       onSubmit={confirmAction}
       footer={
         <>
-          <Button
-            variant={ButtonVariant.Secondary}
-            type="submit"
-            /* eslint-disable-next-line jsx-a11y/no-autofocus */
-            autoFocus
-          >
+          <Button variant={ButtonVariant.Secondary} type="submit" autoFocus>
             {formatMessage(messages.confirmButton)}
           </Button>
           <Button

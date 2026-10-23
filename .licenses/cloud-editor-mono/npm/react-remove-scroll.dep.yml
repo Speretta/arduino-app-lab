@@ -1,9 +1,9 @@
 ---
 name: react-remove-scroll
-version: 2.6.3
+version: 2.7.2
 type: npm
 summary: Disables scroll outside of `children` node.
-homepage: 
+homepage:
 license: mit
 licenses:
 - sources: LICENSE

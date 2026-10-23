@@ -73,9 +73,9 @@ export const RenameAppDialog: React.FC<RenameAppDialogProps> = ({
     return true;
   };
 
-  const { mutateAsync: handleRenameApp, isLoading } = useMutation(
-    ['rename-app'],
-    async () => {
+  const { mutateAsync: handleRenameApp, isPending } = useMutation({
+    mutationKey: ['rename-app'],
+    mutationFn: async () => {
       if (!validateAppName(name)) {
         return;
       }
@@ -97,15 +97,17 @@ export const RenameAppDialog: React.FC<RenameAppDialogProps> = ({
           setErrorMessage(formatMessage(messages.appNameInUse));
           return;
         }
+
         const message =
           error instanceof Error
             ? error.message
             : formatMessage(messages.failedRename);
+
         setErrorMessage(message);
         sendNotification({ message, variant: 'error' });
       }
     },
-  );
+  });
 
   return (
     <>
@@ -125,7 +127,7 @@ export const RenameAppDialog: React.FC<RenameAppDialogProps> = ({
               </Button>
               <Button
                 variant={ButtonVariant.Primary}
-                loading={isLoading}
+                loading={isPending}
                 disabled={name.length === 0}
                 type="submit"
               >
@@ -154,7 +156,6 @@ export const RenameAppDialog: React.FC<RenameAppDialogProps> = ({
               onChange={onAppNameChange}
               error={errorMessage ? new Error(errorMessage) : undefined}
               placeholder={formatMessage(messages.inputPlaceholder)}
-              /* eslint-disable-next-line jsx-a11y/no-autofocus */
               autoFocus
               classes={{
                 input: styles['app-name-input'],

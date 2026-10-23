@@ -76,6 +76,65 @@ func TestKeepNonProbeSessionsFiltersByIDNotTitle(t *testing.T) {
 	}
 }
 
+// App ids repeat across boards, so a session opened on another board must not be listed here: its folder would name an app this board doesn't have.
+func TestSessionsOnBoardKeepsThisBoardAndUnscopedSessions(t *testing.T) {
+	sessions := []agent.SessionSummary{
+		{ID: "here"},      // an app of the connected board
+		{ID: "general"},   // no app, opened on the connected board
+		{ID: "elsewhere"}, // same app id, another board
+		{ID: "legacy"},    // an entry written before board scoping
+		{ID: "unknown"},   // no entry at all (opened before workspaces existed)
+	}
+	workspaces := map[string]sessionWorkspaceEntry{
+		"here":      {AppID: "dXNlcjpibGluaw", BoardID: "board-a"},
+		"general":   {BoardID: "board-a"},
+		"elsewhere": {AppID: "dXNlcjpibGluaw", BoardID: "board-b"},
+		"legacy":    {AppID: "dXNlcjpibGluaw"},
+	}
+
+	kept := sessionsOnBoard(sessions, workspaces, "board-a")
+	if len(kept) != 4 || kept[0].ID != "here" || kept[1].ID != "general" || kept[2].ID != "legacy" || kept[3].ID != "unknown" {
+		t.Fatalf("kept = %+v, want this board's sessions plus the unscoped ones", kept)
+	}
+
+	// No board connected: there is nothing to compare against, and emptying the sidebar would look like a wiped history.
+	if kept := sessionsOnBoard(sessions, workspaces, ""); len(kept) != len(sessions) {
+		t.Fatalf("kept = %+v, want every session", kept)
+	}
+}
+
+// A general session gets an entry at creation to carry its board, so the abandoned ones ("New chat", then away)
+// would pile up in a file the sidebar re-reads on every refresh.
+func TestClosingAGeneralSessionDropsItsWorkspaceEntry(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeSessionWorkspaces(dir, map[string]sessionWorkspaceEntry{
+		"s-general": {BoardID: "board-a"},
+		"s-app":     {AppID: "dXNlcjpibGluaw", Name: "Blink", BoardID: "board-a"},
+		"s-other":   {BoardID: "board-a"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	dropGeneralSessionWorkspace(dir, "s-general")
+	dropGeneralSessionWorkspace(dir, "s-app")
+	dropGeneralSessionWorkspace(dir, "s-gone") // never had an entry
+
+	left, err := readSessionWorkspaces(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := left["s-general"]; ok {
+		t.Error("a closed general session kept its entry")
+	}
+	// It names the app the session is bound to, which a reopen reads back — closing must not throw that away.
+	if ws := left["s-app"]; ws.AppID == "" {
+		t.Errorf("an app-scoped session lost its app: %+v", ws)
+	}
+	if _, ok := left["s-other"]; !ok {
+		t.Error("another general session was swept up")
+	}
+}
+
 // An install deletes and re-extracts <runtime>/node, so nothing may start an agent from that tree, and an uninstall must not block on the install's lock while holding agentMu.
 func TestAgentOperationsAreRefusedDuringARuntimeInstall(t *testing.T) {
 	agentID := string(airuntime.AgentClaude)

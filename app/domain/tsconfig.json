@@ -2,5 +2,8 @@
   "extends": "../../tsconfig.json",
   "exclude": ["dist"],
   "include": ["**/*.ts", "**/*.tsx"],
+  "compilerOptions": {
+    "moduleResolution": "bundler"
+  },
   "references": [{ "path": "./tsconfig.node.json" }]
 }

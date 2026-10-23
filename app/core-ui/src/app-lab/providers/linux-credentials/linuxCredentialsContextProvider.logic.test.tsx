@@ -19,16 +19,9 @@ vi.mock('../../store/boardLifecycle', () => ({
   useBoardLifecycleStore: vi.fn((selector) =>
     selector({
       boardIsReachable: true,
+      selectedConnectedBoard: { fqbn: BOARD_FQBN.UNO_Q },
     }),
   ),
-}));
-
-vi.mock('../../hooks/useBoards', () => ({
-  useBoards: vi.fn(() => ({
-    selectedBoard: {
-      fqbn: BOARD_FQBN.UNO_Q,
-    },
-  })),
 }));
 
 const Wrapper: React.FC<{ children: ReactNode }> = ({ children }) => (

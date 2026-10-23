@@ -27,6 +27,24 @@ import {
   ToolbarItemIds,
 } from './Toolbar.type';
 
+const VerifyIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <div className={styles['toolbar-icon-background']}>
+    <Verify {...props} />
+  </div>
+);
+
+const UploadIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <div className={styles['toolbar-icon-background']}>
+    <Upload {...props} />
+  </div>
+);
+
+const UploadClockIcon = (props: React.SVGProps<SVGSVGElement>): JSX.Element => (
+  <div className={styles['toolbar-icon-background']}>
+    <UploadClock {...props} />
+  </div>
+);
+
 const renderVerifyButton: ToolbarItemDictionary[ToolbarItemIds.VerifyButton] = (
   formatMessage: FormatMessage,
   onClick?: (...args: any) => any, // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -57,7 +75,7 @@ const renderVerifyButton: ToolbarItemDictionary[ToolbarItemIds.VerifyButton] = (
           },
         ),
       }}
-      Icon={busyState === ToolbarBusyState.Verifying ? undefined : Verify}
+      Icon={busyState === ToolbarBusyState.Verifying ? undefined : VerifyIcon}
       label={
         busyState === ToolbarBusyState.Verifying
           ? formatMessage(messages.verifying)
@@ -138,10 +156,10 @@ const renderUploadButton: ToolbarItemDictionary[ToolbarItemIds.UploadButton] = (
 
     const icon =
       commandsState === ToolbarCommandsState.canProgramIot
-        ? UploadClock
+        ? UploadClockIcon
         : busyState === ToolbarBusyState.Uploading
         ? undefined
-        : Upload;
+        : UploadIcon;
     return (
       <div
         key={`${ToolbarItemIds.UploadButton}_container`}

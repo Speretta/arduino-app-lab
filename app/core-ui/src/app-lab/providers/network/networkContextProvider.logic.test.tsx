@@ -34,9 +34,7 @@ vi.mock(
 
     return {
       ...actual,
-      getWiFiStatus: vi.fn(),
-      getEthernetStatus: vi.fn(),
-      getInternetStatus: vi.fn(),
+      getNetworkStatus: vi.fn(),
       getNetworkList: vi.fn(),
       connectToWiFi: vi.fn(),
     };
@@ -68,9 +66,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   boardIsReachableMock = true;
 
-  domainServices.getWiFiStatus.mockResolvedValue('disconnected');
-  domainServices.getEthernetStatus.mockResolvedValue('disconnected');
-  domainServices.getInternetStatus.mockResolvedValue(false);
+  domainServices.getNetworkStatus.mockResolvedValue({
+    wifi: 'disconnected',
+    ethernet: 'disconnected',
+    internet: false,
+  });
   domainServices.getNetworkList.mockResolvedValue([]);
   domainServices.connectToWiFi.mockResolvedValue(undefined);
 });
@@ -108,11 +108,17 @@ describe('useNetwork - connectToWifiNetwork', () => {
   it('calls connectToWiFi and, with the internet reachable, sets isConnected = true', async () => {
     boardIsReachableMock = true;
 
-    domainServices.getWiFiStatus
-      .mockResolvedValueOnce('disconnected')
-      .mockResolvedValue('connected');
-    domainServices.getEthernetStatus.mockResolvedValue('disconnected');
-    domainServices.getInternetStatus.mockResolvedValue(true);
+    domainServices.getNetworkStatus
+      .mockResolvedValueOnce({
+        wifi: 'disconnected',
+        ethernet: 'disconnected',
+        internet: false,
+      })
+      .mockResolvedValue({
+        wifi: 'connected',
+        ethernet: 'disconnected',
+        internet: true,
+      });
 
     const { result } = renderHook(() => useNetwork(), {
       wrapper: createWrapper(),
@@ -147,9 +153,11 @@ describe('useNetwork - connectToWifiNetwork', () => {
   it('If the mutation fails, it exposes connectRequestIsError = true and isConnected = false', async () => {
     boardIsReachableMock = true;
 
-    domainServices.getWiFiStatus.mockResolvedValue('disconnected');
-    domainServices.getEthernetStatus.mockResolvedValue('disconnected');
-    domainServices.getInternetStatus.mockResolvedValue(false);
+    domainServices.getNetworkStatus.mockResolvedValue({
+      wifi: 'disconnected',
+      ethernet: 'disconnected',
+      internet: false,
+    });
 
     const originalConsoleError = console.error;
     console.error = vi.fn();
@@ -201,5 +209,42 @@ describe('useNetwork - selectedNetwork e manualNetworkSetup', () => {
 
     expect(result.current.selectedNetwork).toEqual(network);
     expect(result.current.manualNetworkSetup).toBe(true);
+  });
+});
+
+describe('useNetwork - scan poll limit', () => {
+  const SCAN_POLL_MS = 1500;
+
+  it('stops polling once the scan has run its limit without finding a network', async () => {
+    vi.useFakeTimers();
+    domainServices.getNetworkList.mockResolvedValue([]);
+
+    const { result } = renderHook(() => useNetwork(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      result.current.setScanningIsEnabled(true);
+    });
+
+    // Well past the limit of eight polls.
+    for (let poll = 0; poll < 15; poll++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      });
+    }
+
+    const callsWhenSettled = domainServices.getNetworkList.mock.calls.length;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
+    });
+
+    expect(domainServices.getNetworkList).toHaveBeenCalledTimes(
+      callsWhenSettled,
+    );
+    expect(result.current.isScanning).toBe(false);
+
+    vi.useRealTimers();
   });
 });

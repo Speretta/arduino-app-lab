@@ -1,11 +1,12 @@
 import { getBricks } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import { BrickListItem } from '@cloud-editor-mono/infrastructure';
+import { BrickDetailTabId } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { BoardScopedQuery } from '../../boardScopedQuery';
-import { useBrickDetailLogic } from '../../hooks/useBrickDetail';
+import { makeAppBrickDetailLogic } from '../../hooks/useBrickDetail';
 import { UseBrickListLogic, UseBrickListLogicParams } from './brickList.type';
 
 export const useBrickListLogic = function (
@@ -14,12 +15,14 @@ export const useBrickListLogic = function (
   const { brickId, tab } = params;
 
   const navigate = useNavigate();
-  const [selectedTab, setSelectedTab] = useState<string | undefined>(tab);
-
-  const { data: bricks, isLoading: bricksAreLoading } = useQuery(
-    [BoardScopedQuery.LIST_BRICKS],
-    () => getBricks(),
+  const [selectedTab, setSelectedTab] = useState<BrickDetailTabId | undefined>(
+    tab,
   );
+
+  const { data: bricks, isLoading: bricksAreLoading } = useQuery({
+    queryKey: [BoardScopedQuery.LIST_BRICKS],
+    queryFn: () => getBricks(),
+  });
 
   // The selected brick is derived from the `brickId` search param so that
   // navigating to the page (e.g. from a footer notification) always selects
@@ -55,11 +58,11 @@ export const useBrickListLogic = function (
     }
   }, [tab]);
 
-  const brickDetailLogic = useCallback(useBrickDetailLogic, []);
+  const brickDetailLogic = useMemo(() => makeAppBrickDetailLogic(), []);
 
   return {
     bricks: bricks || [],
-    isLoading: bricksAreLoading,
+    isPending: bricksAreLoading,
     selectedBrick,
     brickDetailLogic,
     setSelectedBrick,

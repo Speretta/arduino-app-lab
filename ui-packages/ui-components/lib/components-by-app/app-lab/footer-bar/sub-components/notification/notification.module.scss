@@ -3,17 +3,10 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    position: relative;
-    padding: 3px;
-    cursor: pointer;
     color: var(--text-subtle, #c9d2d2);
     border: 2px solid transparent;
     box-sizing: border-box;
     border-radius: 4px;
-
-    &:hover:not(.active) {
-        background-color: var(--component-bg-hover, #aeb8b826);
-    }
 
     &.active {
         color: white;

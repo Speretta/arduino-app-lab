@@ -46,6 +46,7 @@ export const BoardUpdateDialog: React.FC<BoardUpdateDialogProps> = ({
     boardUpdateSucceeded,
     appUpdateSucceeded,
     boardLogs,
+    boardUpdateProgress,
     startUpdate,
     reloadApp,
     skipUpdate,
@@ -54,6 +55,8 @@ export const BoardUpdateDialog: React.FC<BoardUpdateDialogProps> = ({
     openArduinoSupport,
     bypassSkipUpdate,
   } = logic();
+
+  const hasProgress = boardUpdateProgress !== undefined;
 
   useEffect(() => {
     setShowDetails(releaseNotes === undefined);
@@ -337,14 +340,32 @@ export const BoardUpdateDialog: React.FC<BoardUpdateDialogProps> = ({
                 UpdaterStatus.UpdatingBoard,
               ].includes(status) && (
                 <>
-                  <div className={styles['infinite-indicator']}>
-                    <div className={styles['indicator']} />
+                  <div
+                    className={clsx(styles['infinite-indicator'], {
+                      [styles['determinate']]: hasProgress,
+                    })}
+                  >
+                    <div
+                      className={styles['indicator']}
+                      style={
+                        hasProgress
+                          ? { width: `${boardUpdateProgress}%` }
+                          : undefined
+                      }
+                    />
                   </div>
                   <div className={styles['progress']}>
                     <div className={styles['spinner-small']} />
                     <XXXSmall>
                       {formatMessage(messages.updateInstalling)}
                     </XXXSmall>
+                    {hasProgress && (
+                      <XXXSmall bold className={styles['percentage']}>
+                        {formatMessage(messages.updateProgress, {
+                          progress: boardUpdateProgress,
+                        })}
+                      </XXXSmall>
+                    )}
                   </div>
                 </>
               )}

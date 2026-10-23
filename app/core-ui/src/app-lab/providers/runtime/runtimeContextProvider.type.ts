@@ -29,7 +29,9 @@ export type RuntimeActions = {
   progress: number; // currently not used
 };
 
-export type ConsoleLogic = {
+// A slice of the runtime context value, read through useContext — not a contract
+// injected into a component, so it is state rather than logic.
+export type ConsoleState = {
   consoleSources: Record<string, ConsoleSources>;
   consoleTabs: Record<string, ConsoleSourceKey[]>;
   activeConsoleTab: Record<string, ConsoleSourceKey | undefined>;
@@ -57,6 +59,6 @@ export type AiModelRequired = {
 export type UseRuntimeLogic = () => {
   appsStatus: AppsStatus;
   runtimeActions: RuntimeActions;
-  consoleLogic: ConsoleLogic;
+  consoleState: ConsoleState;
   aiModelRequired: AiModelRequired;
 };

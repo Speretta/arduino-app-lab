@@ -8,14 +8,9 @@ export const messages = defineMessages({
   },
   titleIdentifyUnknown: {
     id: 'devicesDialog.titleIdUnknow',
-    defaultMessage: 'Unknown Device Found',
+    defaultMessage: 'Unknown device found',
     description:
       'Title shown in the Identify Unknown device association dialog',
-  },
-  noDeviceTitle: {
-    id: 'devicesDialog.noDevicesTitle',
-    defaultMessage: 'Plug your device into your computer',
-    description: 'Title shown when no connected device is found',
   },
   associatedToSketch: {
     id: 'devicesDialog.associatedToSketch',
@@ -55,12 +50,6 @@ export const messages = defineMessages({
     id: 'devicesDialog.identifyDeviceTitle',
     defaultMessage: 'Unknown device, identify its type',
     description: 'Title shown when unrecognized devices are found',
-  },
-  identifyDeviceHelper: {
-    id: 'devicesDialog.identifyDeviceHelper',
-    defaultMessage:
-      'Specify the type of the device you are associating to the sketch.',
-    description: 'Helper text shown when unrecognized devices are found',
   },
   selectedTypeTitle: {
     id: 'devicesDialog.selectedTypeTitle',

@@ -35,10 +35,12 @@ var cspPolicy = strings.Join([]string{
 	//                  (an in-process helper listening on 127.0.0.1:0) would be
 	//                  refused without it.
 	//   login          Auth0 token exchange and refresh. Only the production
-	//                  host: a build pointed at staging is a
-	//                  dev build, and those get no policy at all.
+	//                  host: a build pointed at staging is a dev build, and
+	//                  those get no policy at all.
 	//   studio         Edge Impulse API and its OAuth token endpoint.
 	//   downloads      startup message, release notes, mandatory-update check.
+	//   projecthub-api app publishing, which uploads the exported archive from
+	//                  the webview. Only the production host.
 	//
 	// Note `'self'` is `wails://wails` here (`http://wails.localhost` on
 	// Windows), not an http origin, so it covers only same-origin requests to
@@ -52,5 +54,6 @@ var cspPolicy = strings.Join([]string{
 		"https://login.arduino.cc",
 		"https://studio.edgeimpulse.com",
 		"https://downloads.arduino.cc",
+		"https://projecthub-api.arduino.cc",
 	}, " "),
 }, "; ")

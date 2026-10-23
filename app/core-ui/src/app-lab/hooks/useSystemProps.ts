@@ -5,6 +5,7 @@ import {
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import { SystemPropertyValue } from '@cloud-editor-mono/infrastructure';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { BoardScopedQuery } from '../boardScopedQuery';
@@ -44,9 +45,9 @@ export const useSystemProps: UseSystemProps = () => {
     isError: getPropsError,
     isLoading: getPropsLoading,
     refetch: refetchSystemProps,
-  } = useQuery<Record<string, string | undefined>>(
-    [BoardScopedQuery.SYSTEM_PROPERTIES],
-    async () => {
+  } = useQuery({
+    queryKey: [BoardScopedQuery.SYSTEM_PROPERTIES],
+    queryFn: async () => {
       const storedKeys = await getSystemPropertyKeys();
       const obj = {} as Record<string, SystemPropertyValue>;
       for (const key of Object.values(SystemPropKey)) {
@@ -57,19 +58,25 @@ export const useSystemProps: UseSystemProps = () => {
       }
       return obj;
     },
-    {
-      onError: () => {
-        setError(true);
-      },
-      onSuccess: (data) => {
-        setData(data);
-      },
-      refetchOnWindowFocus: false,
-      enabled: boardIsReachable,
-    },
-  );
+    refetchOnWindowFocus: false,
+    enabled: boardIsReachable,
+  });
 
-  const { mutateAsync, isLoading: upsertPropsLoading } = useMutation({
+  const actualGetPropsLoading = !boardIsReachable || getPropsLoading;
+
+  useEffect(() => {
+    if (systemProps) {
+      setData(systemProps);
+    }
+  }, [systemProps, setData]);
+
+  useEffect(() => {
+    if (getPropsError) {
+      setError(true);
+    }
+  }, [getPropsError, setError]);
+
+  const { mutateAsync, isPending: upsertPropsLoading } = useMutation({
     mutationFn: async (prop: {
       key: SystemPropKey;
       value: SystemPropertyValue;
@@ -86,7 +93,7 @@ export const useSystemProps: UseSystemProps = () => {
     systemProps,
     getPropsError,
     getPropsSuccess,
-    getPropsLoading,
+    getPropsLoading: actualGetPropsLoading,
     upsertPropsLoading,
     upsertProp: mutateAsync,
     refetchSystemProps,

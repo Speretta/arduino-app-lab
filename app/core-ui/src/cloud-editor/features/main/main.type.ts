@@ -19,9 +19,11 @@ import {
   SketchData,
 } from '@cloud-editor-mono/infrastructure';
 import {
+  AddFileHandler,
   ConsolePanelLogic,
   ConsolePanelStatus,
   DeleteFileDialogLogic,
+  DeleteFileHandler,
   DeleteLibraryDialogLogic,
   DeleteSecretDialogLogic,
   DeleteSketchDialogLogic,
@@ -38,9 +40,12 @@ import {
   IotDevicesGroups,
   IsUploading,
   LibraryMenuHandlerDictionary,
+  MakeUniqueFileName,
+  OnBeforeFileAction,
   OnboardingLogic,
   ReadOnlyBarLogic,
   RenameDialogLogic,
+  RenameFileHandler,
   SelectableFileData,
   SetDetectedBoardAndPort,
   SetDetectedUnknownBoard,
@@ -48,15 +53,8 @@ import {
   ShareSketchDialogLogic,
   ShareToClassroomDialogLogic,
   ToolbarLogic,
-} from '@cloud-editor-mono/ui-components';
-import {
-  AddFileHandler,
-  DeleteFileHandler,
-  MakeUniqueFileName,
-  OnBeforeFileAction,
-  RenameFileHandler,
   ValidateFileName,
-} from '@cloud-editor-mono/ui-components/lib/editor-tabs-bar';
+} from '@cloud-editor-mono/ui-components';
 import { Key } from 'react';
 
 import { UseFiles } from '../../../common/hooks/files.type';
@@ -295,7 +293,6 @@ export type UseSketchParams = () => {
   exampleID?: string;
   createExampleParam?: boolean;
   createSketchParam?: boolean;
-  bypassOptIn?: boolean; // ** to bypass auto opt-in-out redirect in staging
   bypassIotRedirect?: boolean; // ** to bypass auto redirect for iot sketches in staging
   viewMode?: string;
   scope?: FileLineScope;

@@ -4,7 +4,7 @@ import "testing"
 
 // The disallow list must reach the adapter via session _meta (claudeCode.options.disallowedTools) — the shape the adapter actually reads.
 func TestClaudeSessionMetaDisallowsMutatingTools(t *testing.T) {
-	cc, ok := claudeSessionMeta(nil, "")["claudeCode"].(map[string]any)
+	cc, ok := claudeSessionMeta(nil, "", SessionWorkspace{})["claudeCode"].(map[string]any)
 	if !ok {
 		t.Fatal("meta missing claudeCode")
 	}

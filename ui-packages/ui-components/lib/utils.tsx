@@ -86,3 +86,14 @@ export const formatBytes = (
 
   return `${parseFloat(value.toFixed(decimals))} ${sizes[i - 1]}`;
 };
+
+// "2026-07-17 15:40", the format of the design.
+export const formatReleaseDate = (date: Date): string => {
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return [
+    [date.getFullYear(), pad(date.getMonth() + 1), pad(date.getDate())].join(
+      '-',
+    ),
+    [pad(date.getHours()), pad(date.getMinutes())].join(':'),
+  ].join(' ');
+};

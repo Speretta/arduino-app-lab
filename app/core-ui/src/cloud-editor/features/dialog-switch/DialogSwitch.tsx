@@ -1,3 +1,4 @@
+import { useTheme } from '@bcmi-labs/art-ui';
 import { Config } from '@cloud-editor-mono/common';
 import {
   DeleteFileDialog,
@@ -23,10 +24,9 @@ import {
   ShareToClassroomDialog,
   ShareToClassroomDialogLogic,
 } from '@cloud-editor-mono/ui-components';
-import { Key, useCallback, useContext } from 'react';
+import { Key, useCallback } from 'react';
 
 import { useDialog } from '../../../common/providers/dialog/dialogProvider.logic';
-import { ThemeContext } from '../../../common/providers/theme/themeContext';
 import {
   DeviceAssociationPrompts,
   DialogId,
@@ -50,7 +50,9 @@ interface DialogSwitchProps {
 const DialogSwitch: React.FC<DialogSwitchProps> = (
   props: DialogSwitchProps,
 ) => {
-  const { theme } = useContext(ThemeContext);
+  const { themeName } = useTheme();
+  const theme = `${themeName}-theme`;
+
   const { dialogInfo, reactModalProps, setIsOpen } = useDialog<DialogInfo>();
 
   const {

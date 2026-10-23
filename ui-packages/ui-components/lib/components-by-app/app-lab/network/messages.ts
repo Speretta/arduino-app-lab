@@ -3,7 +3,7 @@ import { defineMessages } from 'react-intl';
 export const networkMessages = defineMessages({
   networkName: {
     id: 'appLabSettings.network.networkName',
-    defaultMessage: 'Network Name',
+    defaultMessage: 'Network name',
     description: 'Label for the Wi-Fi network name input field',
   },
   networkPassword: {
@@ -36,18 +36,8 @@ export const networkMessages = defineMessages({
   },
   changeNetwork: {
     id: 'appLabSettings.network.changeNetwork',
-    defaultMessage: 'Change Network',
+    defaultMessage: 'Change network',
     description: 'Button label to change the Wi-Fi network',
-  },
-  connectToNetwork: {
-    id: 'appLabSettings.network.connectToNetwork',
-    defaultMessage: 'Connect',
-    description: 'Button label to connect to a selected Wi-Fi network',
-  },
-  connectingToNetwork: {
-    id: 'appLabSettings.network.connectingToNetwork',
-    defaultMessage: 'Connecting...',
-    description: 'Message displayed while connecting to a Wi-Fi network',
   },
   noAvailableNetworks: {
     id: 'appLabSettings.network.noAvailableNetworks',
@@ -56,7 +46,7 @@ export const networkMessages = defineMessages({
   },
   scanningForNetworks: {
     id: 'appLabSettings.network.scanningForNetworks',
-    defaultMessage: 'Scanning Networks...',
+    defaultMessage: 'Scanning networks...',
     description: 'Message displayed while scanning for Wi-Fi networks',
   },
   chooseNetwork: {
@@ -84,21 +74,6 @@ export const networkMessages = defineMessages({
     id: 'appLabSettings.network.setupManualNetwork',
     defaultMessage: 'Setup manually',
     description: 'Title for the manual network setup section',
-  },
-  wpa2: {
-    id: 'appLabSettings.network.wpa2',
-    defaultMessage: 'WPA2',
-    description: 'Label for WPA2 security type in Wi-Fi settings',
-  },
-  wep: {
-    id: 'appLabSettings.network.wep',
-    defaultMessage: 'WEP',
-    description: 'Label for WEP security type in Wi-Fi settings',
-  },
-  none: {
-    id: 'appLabSettings.network.none',
-    defaultMessage: 'None',
-    description: 'Label for no security type in Wi-Fi settings',
   },
 });
 
@@ -136,13 +111,13 @@ export const skipNetworkMessages = defineMessages({
   },
   descriptionListItem3: {
     id: 'appLabSettings.network.skipDescriptionListItem3',
-    defaultMessage: 'Seamless connection to your Arduino Account',
+    defaultMessage: 'Seamless connection to your Arduino account',
     description:
       'Third item in the list of benefits for connecting to Wi-Fi in the skip Wi-Fi connection confirmation dialog',
   },
   descriptionListItem4: {
     id: 'appLabSettings.network.skipDescriptionListItem4',
-    defaultMessage: 'Enabling Remote Development capabilities',
+    defaultMessage: 'Enabling remote development capabilities',
     description:
       'Fourth item in the list of benefits for connecting to Wi-Fi in the skip Wi-Fi connection confirmation dialog',
   },

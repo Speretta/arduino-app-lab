@@ -2,6 +2,7 @@ import {
   ErrorData,
   EventSourceHandlers,
   MessageData,
+  SERVER_CLOSED_ERROR_CODE,
   StreamEvent,
   StreamEventType,
 } from '@cloud-editor-mono/infrastructure';
@@ -86,6 +87,9 @@ export const useAppSSE = <T extends AppSSE | AppSSEWithId>({
 
   const onmessage: EventSourceHandlers['onmessage'] = useCallback(
     (event: EventSourceMessage) => {
+      // The daemon sends `event: heartbeat` with no data
+      if (!event.data) return;
+
       let normalizedEvent: StreamEvent;
       try {
         const parsedData = JSON.parse(event.data);
@@ -112,7 +116,7 @@ export const useAppSSE = <T extends AppSSE | AppSSEWithId>({
       }
 
       if (normalizedEvent.event === StreamEventType.Error) {
-        if (normalizedEvent.data.code === 'SERVER_CLOSED') {
+        if (normalizedEvent.data.code === SERVER_CLOSED_ERROR_CODE) {
           setServerClosed(true);
           return;
         }

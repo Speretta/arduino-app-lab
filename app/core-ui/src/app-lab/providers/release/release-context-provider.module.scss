@@ -1,0 +1,16 @@
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
+
+// The cards sit where a single Banner sits, one above the other.
+.stack {
+  position: fixed;
+  bottom: 70px;
+  right: 24px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  z-index: shared.$zIndex3;
+}
+
+.stacked {
+  position: static !important;
+}

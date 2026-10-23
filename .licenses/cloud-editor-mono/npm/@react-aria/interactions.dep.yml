@@ -1,9 +1,9 @@
 ---
 name: "@react-aria/interactions"
-version: 3.23.0
+version: 3.28.1
 type: npm
 summary: Spectrum UI components in React
-homepage: 
+homepage:
 license: apache-2.0
 licenses:
 - sources: LICENSE

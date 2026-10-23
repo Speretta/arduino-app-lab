@@ -1,4 +1,3 @@
-import { isFFEnabled } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import {
   AgentModeTooltipLogic,
   AgentModeTooltipVariant,
@@ -24,12 +23,6 @@ export const useAgentModeTooltipLogic = (
   useEffect(() => {
     let active = true;
     setVariant(undefined);
-
-    // The mode toggle these tooltips point at only exists behind the flag: never spend a
-    // one-shot hint on a footer that does not show it.
-    if (!isFFEnabled('AI_ASSISTANT')) {
-      return;
-    }
 
     const nextVariant = aiAssistantActive
       ? AgentModeTooltipVariant.BackToIde

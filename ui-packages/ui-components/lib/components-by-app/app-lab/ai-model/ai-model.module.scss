@@ -57,23 +57,31 @@
   }
 
   &.disabled {
-    .radio {
-      border-color: var(--border-default, #434f54);
-    }
-    .radio:after {
-      background: var(--icon-inverted-subtle, #5d6a6b);
-    }
+    $off-color: var(--text-inverted-subtle, #5d6a6b);
+
     .ai-model-container {
-      .ai-model-name {
-        color: var(--text-inverted-subtle, #5d6a6b);
+      .radio {
+        border-color: var(--border-default, #434f54);
       }
-    }
-    .ai-model-description {
-      color: var(--text-inverted-subtle, #5d6a6b);
-    }
-    .ai-model-in-use,
-    .ai-impulse-in-use {
-      opacity: 0.5;
+      .radio:after {
+        background: var(--icon-inverted-subtle, #5d6a6b);
+      }
+      .ai-model-name,
+      .ai-model-description,
+      .ai-model-tag {
+        color: $off-color;
+      }
+      .ai-model-tags .model-card-button {
+        color: $off-color;
+
+        svg path {
+          fill: $off-color;
+        }
+      }
+      .ai-model-in-use,
+      .ai-impulse-in-use {
+        opacity: 0.5;
+      }
     }
   }
 
@@ -120,6 +128,22 @@
       overflow: hidden;
       text-overflow: ellipsis;
       color: var(--text-subtle, #c9d2d2);
+    }
+
+    .ai-model-details-skeleton {
+      display: flex;
+      flex-direction: row;
+      gap: 8px;
+      height: 16px;
+      margin-top: 4px;
+
+      &-description {
+        flex: 0 0 54%;
+      }
+
+      &-tags {
+        flex: 0 0 26%;
+      }
     }
 
     .ai-model-tags {
@@ -192,9 +216,6 @@
     svg {
       width: 14px;
       height: 14px;
-      path {
-        fill: var(--text-accent, #25c2c7);
-      }
     }
     .ai-model-download-progress-bar {
       position: absolute;
@@ -209,11 +230,6 @@
   .uninstall-progress {
     @extend .download-progress;
     color: var(--feedback-error-default, #ff8878);
-    svg {
-      path {
-        fill: var(--feedback-error-default, #ff8878);
-      }
-    }
 
     .ai-model-uninstall-progress-bar {
       @extend .ai-model-download-progress-bar;
@@ -310,7 +326,7 @@
   }
 }
 
-.model_size_mb .ai-model-tag-label svg {
+.size .ai-model-tag-label svg {
   width: 12px;
   height: 12px;
 }
@@ -418,7 +434,7 @@
 
     &:hover,
     &[aria-expanded="true"] {
-      border-color: var(--border-selected, #c8e9ea);
+      border-color: var(--tealscale-pastel-turquoise, #c8e9ea);
       background: transparent !important;
     }
     svg {

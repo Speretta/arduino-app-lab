@@ -1,8 +1,4 @@
-import {
-  AIModel,
-  EIImpulse,
-  EIProject,
-} from '@cloud-editor-mono/infrastructure';
+import { EIImpulse } from '@cloud-editor-mono/infrastructure';
 
 export const isCompatibleEICategory = (
   brickType: string,
@@ -54,12 +50,4 @@ export const isCompatibleEICategory = (
     default:
       return false;
   }
-};
-
-export const mapProjectToModel = (project: EIProject): AIModel => {
-  return {
-    ...project,
-    id: project.id.toString(),
-    impulses: project.impulses?.map((i) => ({ ...i, id: i.id.toString() })),
-  };
 };

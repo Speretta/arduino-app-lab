@@ -83,7 +83,7 @@ mgr := agent.NewManager(ag, agent.NewSDKConn, agent.ManagerConfig{
 
 mgr.Start(ctx)                    // spawn → connect → initialize
 sid, _ := mgr.NewSession(ctx, cwd)
-mgr.Prompt(ctx, sid, "hello")     // blocks until the turn ends; updates stream via OnUpdate
+mgr.Prompt(ctx, sid, "hello", nil) // blocks until the turn ends; updates stream via OnUpdate
 mgr.Cancel(ctx, sid)
 mgr.Stop()                        // closes the connection and tears down the tree
 ```
@@ -95,6 +95,9 @@ mgr.Stop()                        // closes the connection and tears down the tr
   expose the agent's advertised login methods (the ACP RPC); `mgr.GetSessionState(sid)`
   reports the turn status, model and pending permission so the UI can rehydrate after a
   webview reload; `mgr.SetModel(ctx, sid, modelID)` is the optional model knob.
+- **Editor context:** `Prompt` takes the file in view in the editor beside the chat
+  (`*EditorContext`, nil without one) and sends the agent, ahead of the text, only what it has not
+  seen of it yet (`editorcontext.go`); the replay drops that block.
 - **Domain types** (`Update`, `ToolCall`, `PermissionRequest`, `PermissionOutcome`,
   `SessionState`, `AuthMethod`, `SessionID`) carry JSON tags matching the frontend
   contract, so the Wails binding is a mechanical map.

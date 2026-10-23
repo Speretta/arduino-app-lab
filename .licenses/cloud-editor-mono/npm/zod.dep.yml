@@ -1,6 +1,6 @@
 ---
 name: zod
-version: 3.24.2
+version: 3.25.76
 type: npm
 summary: TypeScript-first schema declaration and validation library with static type
   inference
@@ -11,7 +11,7 @@ licenses:
   text: |
     MIT License
 
-    Copyright (c) 2020 Colin McDonnell
+    Copyright (c) 2025 Colin McDonnell
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal

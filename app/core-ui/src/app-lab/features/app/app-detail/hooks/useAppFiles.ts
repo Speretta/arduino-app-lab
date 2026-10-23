@@ -1,15 +1,16 @@
 import {
   CodeReloadCause,
-  getAppFiles,
+  statAppPath,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import {
   FileNode,
   TreeNode,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
-import { QueryKey, useQuery } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 import { BoardScopedQuery } from '../../../../boardScopedQuery';
+import { ListFailure, useAppFileTree } from './useAppFileTree';
 import { useFileContents } from './useFileContents';
 
 export const MAIN_SKETCH_PATH = 'sketch/sketch.ino';
@@ -18,21 +19,35 @@ export const SKETCH_YAML_PATH = 'sketch/sketch.yaml';
 export const README_PATH = 'README.md';
 export const MAIN_PYTHON_PATH = 'python/main.py';
 
+const DEFAULT_FILE_CANDIDATES = [
+  README_PATH,
+  MAIN_PYTHON_PATH,
+  MAIN_SKETCH_PATH,
+  APP_YAML_PATH,
+];
+
 type UseAppFilesParams = {
   appId: string;
   appPath?: string;
+  onListError?: (relDir: string, error: unknown) => void;
 };
 
 type UseAppFilesReturn = {
-  defaultFile?: FileNode;
-  filesList?: FileNode[];
-  filesListIsLoading: boolean;
-  filesListIsLoaded: boolean;
+  defaultFilePath?: string | null;
   fileTree?: TreeNode[];
-  filesListKey: QueryKey;
+  appDirListed: boolean;
+  appDirFailed: boolean;
+  listFailure?: ListFailure;
+  expandDir: (relDir: string) => void;
+  collapseDir: (relDir: string) => void;
+  revealPath: (path: string) => void;
+  findFileNode: (path: string) => FileNode | undefined;
+  invalidateDirs: (paths?: string[]) => void;
+  unlistDir: (folder: string) => void;
+  relistDir: (folder: string) => void;
+  renameDir: (from: string, to: string) => void;
   refetchAppYaml: () => Promise<unknown>;
   refetchSketchYaml: () => Promise<unknown>;
-  refetchAppFiles: () => Promise<unknown>;
   fetchFile: (path: string) => Promise<void>;
   refreshFileContents: (
     ids: string[],
@@ -43,44 +58,41 @@ type UseAppFilesReturn = {
 export function useAppFiles({
   appId,
   appPath,
+  onListError,
 }: UseAppFilesParams): UseAppFilesReturn {
   const {
-    data: { filesList, fileTree } = {},
-    isLoading: filesListIsLoading,
-    isSuccess: filesListIsLoaded,
-    refetch: refetchAppFiles,
-  } = useQuery(
-    [BoardScopedQuery.APP_FILES, appId],
-    async () => {
-      if (appPath) {
-        return getAppFiles(appPath);
-      }
+    fileTree,
+    rootFailed: appDirFailed,
+    listFailure,
+    expandDir,
+    collapseDir,
+    revealPath,
+    findFileNode,
+    invalidateDirs,
+    unlistDir,
+    relistDir,
+    renameDir,
+  } = useAppFileTree({ appId, appPath, onListError });
+
+  const { data: defaultFilePath } = useQuery({
+    queryKey: [BoardScopedQuery.APP_DEFAULT_FILE, appId],
+    queryFn: async () => {
+      // The root listing already answers for the candidates that live at the
+      // root; only the nested ones need a stat, and those go out together.
+      const rootFiles = new Set(
+        fileTree?.filter((node) => node.type === 'file').map((n) => n.path),
+      );
+      const exists = await Promise.all(
+        DEFAULT_FILE_CANDIDATES.map(async (candidate) =>
+          candidate.includes('/')
+            ? !!(await statAppPath(`${appPath}/${candidate}`))
+            : rootFiles.has(candidate),
+        ),
+      );
+      return DEFAULT_FILE_CANDIDATES.find((_, index) => exists[index]) ?? null;
     },
-    {
-      enabled: !!appPath,
-    },
-  );
-
-  const defaultFile = useMemo(() => {
-    const priorityFiles = [
-      README_PATH,
-      MAIN_PYTHON_PATH,
-      MAIN_SKETCH_PATH,
-      APP_YAML_PATH,
-    ];
-
-    for (const filePath of priorityFiles) {
-      const foundNode = filesList?.find((file) => file.path === filePath);
-      if (foundNode) {
-        return foundNode;
-      }
-    }
-  }, [filesList]);
-
-  const filesListKey = useMemo<QueryKey>(
-    () => [BoardScopedQuery.APP_FILES, appId],
-    [appId],
-  );
+    enabled: !!appPath && !!fileTree,
+  });
 
   const { fetchFile, refreshFileContents } = useFileContents({ appPath });
 
@@ -93,15 +105,21 @@ export function useAppFiles({
   }, [refreshFileContents]);
 
   return {
-    defaultFile,
-    filesList,
-    filesListIsLoading,
-    filesListIsLoaded,
+    defaultFilePath,
     fileTree,
-    filesListKey,
+    appDirListed: !!fileTree,
+    appDirFailed,
+    listFailure,
+    expandDir,
+    collapseDir,
+    revealPath,
+    findFileNode,
+    invalidateDirs,
+    unlistDir,
+    relistDir,
+    renameDir,
     refetchAppYaml,
     refetchSketchYaml,
-    refetchAppFiles,
     fetchFile,
     refreshFileContents,
   };

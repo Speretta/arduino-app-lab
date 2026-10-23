@@ -1,3 +1,5 @@
+@use "../../../../public/shared.module.scss";
+
 .reference-container {
   overflow: hidden;
   display: flex;
@@ -27,7 +29,7 @@
   font-size: 12px;
   display: flex;
   align-items: center;
-  color: #374146;
+  color: var(--text-default);
   text-transform: capitalize;
   svg {
     transform: rotate(180deg);
@@ -37,7 +39,7 @@
     border: none;
     padding: 0;
     cursor: pointer;
-    color: #008184;
+    color: var(--text-link);
     text-transform: capitalize;
   }
 }
@@ -60,7 +62,7 @@
 .reference-search-view-category {
   > h3 {
     font-size: 16px;
-    color: #374146;
+    color: var(--text-default);
     text-transform: capitalize;
     margin: 0;
   }
@@ -71,26 +73,26 @@
 .reference-search-view-subcategory {
   h4 {
     font-size: 12px;
-    color: #4E5B61;
+    color: var(--text-subtle);
     margin: 15px 0 0;
   }
 }
 .reference-search-view-hits {
-    list-style: none;
-    padding: 0;
-    margin-block: 6px 0;
-    > li:not(:first-of-type) {
-      margin-top: 5px;
-    }
+  list-style: none;
+  padding: 0;
+  margin-block: 6px 0;
+  > li:not(:first-of-type) {
+    margin-top: 5px;
+  }
   button {
     display: block;
     background: none;
     border: none;
     padding: 0;
     cursor: pointer;
-    color: #008184;
+    color: var(--text-link);
     b {
-      color: #006D70;
+      color: var(--text-link);
     }
   }
 }
@@ -100,10 +102,11 @@
     font-size: 12px;
     margin-bottom: 16px;
     margin-top: 0;
+    color: var(--text-default);
   }
   h4 {
     font-size: 12px;
-    color: #4e5b61;
+    color: var(--text-default);
     margin: 0;
     text-transform: capitalize;
     margin: 16px 0 8px;
@@ -123,9 +126,9 @@
     border: none;
     padding: 0;
     cursor: pointer;
-    color: #008184;
+    color: var(--text-link);
     b {
-      color: #006D70;
+      color: var(--text-link);
     }
     &:hover {
       text-decoration: underline;

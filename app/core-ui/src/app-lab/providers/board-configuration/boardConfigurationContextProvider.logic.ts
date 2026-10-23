@@ -7,7 +7,7 @@ import {
   setKeyboardLayout as apiSetKeyboardLayout,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useReducer, useState } from 'react';
+import { useCallback, useMemo, useReducer, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { BoardScopedQuery } from '../../boardScopedQuery';
@@ -15,6 +15,9 @@ import { useBoardLifecycleStore } from '../../store/boardLifecycle';
 import { BoardConfigurationContextValue } from './boardConfigurationContext';
 
 const { generateName } = createNamesGenerator();
+
+const EMPTY_KEYBOARD_LAYOUTS: BoardConfigurationContextValue['keyboardLayouts'] =
+  [];
 
 interface SetBoardConfigurationState {
   boardNameIsError: boolean;
@@ -85,7 +88,9 @@ export function useBoardConfiguration(): BoardConfigurationContextValue {
     data: boardName,
     isError: getBoardNameIsError,
     isSuccess: boardNameChecked,
-  } = useQuery([BoardScopedQuery.GET_BOARD_NAME], getBoardName, {
+  } = useQuery({
+    queryKey: [BoardScopedQuery.GET_BOARD_NAME],
+    queryFn: getBoardName,
     enabled: boardIsReachable,
   });
 
@@ -93,75 +98,22 @@ export function useBoardConfiguration(): BoardConfigurationContextValue {
     data: keyboardLayout,
     isError: getKeyboardLayoutIsError,
     isSuccess: keyboardLayoutChecked,
-  } = useQuery([BoardScopedQuery.GET_KEYBOARD_LAYOUT], getKeyboardLayout, {
+  } = useQuery({
+    queryKey: [BoardScopedQuery.GET_KEYBOARD_LAYOUT],
+    queryFn: getKeyboardLayout,
     enabled: boardIsReachable,
   });
 
-  const { data: keyboardLayouts } = useQuery(
-    [BoardScopedQuery.LIST_KEYBOARD_LAYOUTS],
-    listKeyboardLayouts,
-    {
-      enabled: boardIsReachable,
-    },
-  );
+  const { data: keyboardLayouts } = useQuery({
+    queryKey: [BoardScopedQuery.LIST_KEYBOARD_LAYOUTS],
+    queryFn: listKeyboardLayouts,
+    enabled: boardIsReachable,
+  });
 
   const [errorState, dispatch] = useReducer(
     setBoardConfigurationReducer,
     setBoardConfigurationInitialState,
   );
-
-  const {
-    mutate: setBoardName,
-    isLoading: setBoardNameIsLoading,
-    isSuccess: setBoardNameIsSuccess,
-  } = useMutation({
-    mutationFn: apiSetBoardName,
-    onSuccess: (_, boardName) => {
-      queryClient.setQueryData([BoardScopedQuery.GET_BOARD_NAME], boardName);
-      dispatch({ type: 'RESET_ERROR' });
-      if (selectedConnectedBoard) {
-        useBoardLifecycleStore.setState({
-          selectedConnectedBoard: {
-            ...selectedConnectedBoard,
-            name: boardName,
-          },
-        });
-      }
-
-      queryClient.invalidateQueries(['boards']);
-    },
-    onError: (error) => {
-      console.error('Failed to set board name', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to set board name';
-      dispatch({ type: 'SET_BOARD_NAME_ERROR', payload: errorMessage });
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries([BoardScopedQuery.GET_BOARD_NAME]);
-    },
-  });
-
-  const {
-    mutate: setKeyboardLayout,
-    isLoading: setKeyboardLayoutIsLoading,
-    isSuccess: setKeyboardLayoutIsSuccess,
-  } = useMutation({
-    mutationFn: apiSetKeyboardLayout,
-    onSuccess: (_, keyboardLayout) => {
-      queryClient.setQueryData(
-        [BoardScopedQuery.GET_KEYBOARD_LAYOUT],
-        keyboardLayout,
-      );
-      dispatch({ type: 'RESET_ERROR' });
-    },
-    onError: (error) => {
-      console.error('Failed to set keyboard layout', error);
-      dispatch({ type: 'SET_KEYBOARD_LAYOUT_ERROR' });
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries([BoardScopedQuery.GET_KEYBOARD_LAYOUT]);
-    },
-  });
 
   const checkBoardName = useCallback(
     (boardName: string | undefined): boolean => {
@@ -175,6 +127,72 @@ export function useBoardConfiguration(): BoardConfigurationContextValue {
     [],
   );
 
+  const {
+    mutate: setBoardName,
+    isPending: setBoardNameIsLoading,
+    isSuccess: setBoardNameIsSuccess,
+  } = useMutation({
+    mutationFn: (variables: string) => {
+      if (!checkBoardName(variables)) {
+        throw new Error(
+          'Board name can only contain letters, numbers, and hyphens.',
+        );
+      }
+      return apiSetBoardName(variables);
+    },
+    onSuccess: (_, boardName) => {
+      queryClient.setQueryData([BoardScopedQuery.GET_BOARD_NAME], boardName);
+      dispatch({ type: 'RESET_ERROR' });
+      if (selectedConnectedBoard) {
+        useBoardLifecycleStore.setState({
+          selectedConnectedBoard: {
+            ...selectedConnectedBoard,
+            name: boardName,
+          },
+        });
+      }
+
+      queryClient.invalidateQueries({
+        queryKey: ['boards'],
+      });
+    },
+    onError: (error) => {
+      console.error('Failed to set board name', error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to set board name';
+      dispatch({ type: 'SET_BOARD_NAME_ERROR', payload: errorMessage });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: [BoardScopedQuery.GET_BOARD_NAME],
+      });
+    },
+  });
+
+  const {
+    mutate: setKeyboardLayout,
+    isPending: setKeyboardLayoutIsLoading,
+    isSuccess: setKeyboardLayoutIsSuccess,
+  } = useMutation({
+    mutationFn: (variables: string) => apiSetKeyboardLayout(variables),
+    onSuccess: (_, keyboardLayout) => {
+      queryClient.setQueryData(
+        [BoardScopedQuery.GET_KEYBOARD_LAYOUT],
+        keyboardLayout,
+      );
+      dispatch({ type: 'RESET_ERROR' });
+    },
+    onError: (error) => {
+      console.error('Failed to set keyboard layout', error);
+      dispatch({ type: 'SET_KEYBOARD_LAYOUT_ERROR' });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: [BoardScopedQuery.GET_KEYBOARD_LAYOUT],
+      });
+    },
+  });
+
   const handleSetBoardConfiguration = useCallback(
     (name: string, layout: string) => {
       const boardNameIsSet = checkBoardName(name);
@@ -186,7 +204,7 @@ export function useBoardConfiguration(): BoardConfigurationContextValue {
       if (!boardNameIsSet) {
         dispatch({
           type: 'SET_BOARD_NAME_ERROR',
-          payload: 'Please choose a name different from the default one.',
+          payload: 'Board name can only contain letters, numbers, and hyphens.',
         });
       }
       if (layout.length === 0) {
@@ -203,33 +221,55 @@ export function useBoardConfiguration(): BoardConfigurationContextValue {
     setSkipped(true);
   }, []);
 
-  return {
-    hasBoardConfigurationError:
-      getBoardNameIsError ||
-      getKeyboardLayoutIsError ||
-      errorState.keyboardLayoutIsError ||
-      errorState.boardNameIsError,
-    checkBoardName,
-    boardConfigurationChecked: boardNameChecked && keyboardLayoutChecked,
-    boardConfigurationIsSet:
-      skipped || (checkBoardName(boardName) && keyboardLayout !== undefined),
-    keyboardLayout,
-    keyboardLayouts: keyboardLayouts ?? [],
-    keyboardLayoutErrorMsg: errorState.keyboardLayoutErrorMsg,
-    setBoardConfiguration: handleSetBoardConfiguration,
-    skipBoardConfiguration: handleSkipBoardConfiguration,
-    setBoardConfigurationIsLoading:
-      setBoardNameIsLoading || setKeyboardLayoutIsLoading,
-    setBoardConfigurationIsSuccess:
-      setBoardNameIsSuccess && setKeyboardLayoutIsSuccess,
-    setKeyboardLayoutIsSuccess,
-    setKeyboardLayoutIsError: errorState.keyboardLayoutIsError,
-    boardName,
-    proposeName: generateName,
-    setBoardName,
-    setKeyboardLayout,
-    setBoardNameIsSuccess,
-    setBoardNameIsError: errorState.boardNameIsError,
-    boardNameErrorMsg: errorState.boardNameErrorMsg,
-  };
+  return useMemo(
+    () => ({
+      hasBoardConfigurationError:
+        getBoardNameIsError ||
+        getKeyboardLayoutIsError ||
+        errorState.keyboardLayoutIsError ||
+        errorState.boardNameIsError,
+      checkBoardName,
+      boardConfigurationChecked: boardNameChecked && keyboardLayoutChecked,
+      boardConfigurationIsSet:
+        skipped || (checkBoardName(boardName) && keyboardLayout !== undefined),
+      keyboardLayout,
+      keyboardLayouts: keyboardLayouts ?? EMPTY_KEYBOARD_LAYOUTS,
+      keyboardLayoutErrorMsg: errorState.keyboardLayoutErrorMsg,
+      setBoardConfiguration: handleSetBoardConfiguration,
+      skipBoardConfiguration: handleSkipBoardConfiguration,
+      setBoardConfigurationIsLoading:
+        setBoardNameIsLoading || setKeyboardLayoutIsLoading,
+      setBoardConfigurationIsSuccess:
+        setBoardNameIsSuccess && setKeyboardLayoutIsSuccess,
+      setKeyboardLayoutIsSuccess,
+      setKeyboardLayoutIsError: errorState.keyboardLayoutIsError,
+      boardName,
+      proposeName: generateName,
+      setBoardName,
+      setKeyboardLayout,
+      setBoardNameIsSuccess,
+      setBoardNameIsError: errorState.boardNameIsError,
+      boardNameErrorMsg: errorState.boardNameErrorMsg,
+    }),
+    [
+      boardName,
+      boardNameChecked,
+      checkBoardName,
+      errorState,
+      getBoardNameIsError,
+      getKeyboardLayoutIsError,
+      handleSetBoardConfiguration,
+      handleSkipBoardConfiguration,
+      keyboardLayout,
+      keyboardLayoutChecked,
+      keyboardLayouts,
+      setBoardName,
+      setBoardNameIsLoading,
+      setBoardNameIsSuccess,
+      setKeyboardLayout,
+      setKeyboardLayoutIsLoading,
+      setKeyboardLayoutIsSuccess,
+      skipped,
+    ],
+  );
 }

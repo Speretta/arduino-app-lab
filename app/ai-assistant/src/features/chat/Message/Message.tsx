@@ -28,6 +28,7 @@ import {
   useElapsedSeconds,
   useTypewriter,
   visibleParts,
+  withoutTransportError,
 } from './Message.logic';
 import styles from './message.module.scss';
 
@@ -59,7 +60,11 @@ export const Message: React.FC<MessageProps> = ({
 
   // Ordered render blocks — narration, activity, plans and choices in the order the agent
   // produced them, so nothing written before/between tools is dropped or flashes away.
-  const parts = visibleParts(message.parts);
+  const parts = visibleParts(
+    message.errorKind === 'network'
+      ? withoutTransportError(message.parts)
+      : message.parts,
+  );
   const segments = messageSegments(parts);
   const lastSegment = segments[segments.length - 1];
   const tailKind = lastSegment?.kind;
@@ -184,7 +189,12 @@ export const Message: React.FC<MessageProps> = ({
             <Timeline
               key={`activity-${i}`}
               summary={activityHeader(segment.parts)}
-              items={timelineItems(segment.parts, done, liveTail)}
+              items={timelineItems(
+                segment.parts,
+                done,
+                liveTail,
+                formatMessage(messages.permOutsideWorkspace),
+              )}
             />
           );
         }

@@ -7,10 +7,10 @@
  */
 
 import { EditorState } from '@codemirror/state';
-import { EditorView, getDialog } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { LSP_RENAME_PANEL_CLASS, openLspRenamePanel } from './lsp-rename-panel';
+import { isRenamePanelOpen, openLspRenamePanel } from './lsp-rename-panel';
 
 const HINT = 'Enter to rename';
 
@@ -58,9 +58,6 @@ const panelInput = (view: EditorView): HTMLInputElement =>
 const panelMessage = (view: EditorView): HTMLElement =>
   view.dom.querySelector('.cm-lsp-rename-message') as HTMLElement;
 
-const isPanelOpen = (view: EditorView): boolean =>
-  getDialog(view, LSP_RENAME_PANEL_CLASS) !== null;
-
 const type = (input: HTMLInputElement, value: string): void => {
   input.value = value;
   input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -100,7 +97,7 @@ describe('openLspRenamePanel', () => {
     await settle();
 
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(isPanelOpen(view)).toBe(true);
+    expect(isRenamePanelOpen(view)).toBe(true);
     expect(panelMessage(view).textContent).toBe('not a valid name');
     expect(panelMessage(view).classList).toContain(
       'cm-lsp-rename-message-error',
@@ -128,7 +125,7 @@ describe('openLspRenamePanel', () => {
     await settle();
 
     expect(onSubmit).toHaveBeenCalledWith('total');
-    expect(isPanelOpen(view)).toBe(false);
+    expect(isRenamePanelOpen(view)).toBe(false);
   });
 
   it('submits the trimmed name and closes', async () => {
@@ -142,7 +139,7 @@ describe('openLspRenamePanel', () => {
     await settle();
 
     expect(onSubmit).toHaveBeenCalledWith('total');
-    expect(isPanelOpen(view)).toBe(false);
+    expect(isRenamePanelOpen(view)).toBe(false);
   });
 
   it('closes without renaming on Escape', async () => {
@@ -156,7 +153,7 @@ describe('openLspRenamePanel', () => {
     await settle();
 
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(isPanelOpen(view)).toBe(false);
+    expect(isRenamePanelOpen(view)).toBe(false);
   });
 
   it('restarts an open panel from the symbol now under the cursor', () => {

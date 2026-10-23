@@ -17,6 +17,12 @@ type SvgComponent = FunctionComponent<
 const iconColors: Record<string, string> = colorsData.colors;
 const DEFAULT_FILL = '#6d8086';
 
+// Custom (brand) icons that should keep a specific brand color instead of the
+// neutral DEFAULT_FILL used for monochrome pack icons.
+const customIconColors: Record<string, string> = {
+  app_lab_ino: '#008184', // Arduino brand teal
+};
+
 function resolveKey(fileName?: string): IconKey {
   if (!fileName) return defaultFile;
   const normalized = fileName.toLowerCase();
@@ -35,7 +41,7 @@ export function resolveFileIconComponent(fileName?: string): SvgComponent {
 
 function resolveFill(fileName?: string): string {
   const key = resolveKey(fileName);
-  if (key in customIcons) return DEFAULT_FILL;
+  if (key in customIcons) return customIconColors[key] ?? DEFAULT_FILL;
   return iconColors[key] ?? DEFAULT_FILL;
 }
 

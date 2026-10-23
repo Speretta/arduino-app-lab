@@ -1,16 +1,23 @@
 import { AppLabInfo } from '@cloud-editor-mono/images/assets/icons';
-import { appLabBoardPreparation } from '@cloud-editor-mono/images/assets/images/images-by-app/app-lab';
 import {
   useI18n,
   useTooltip,
   XSmall,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+import { ReactNode } from 'react';
 
 import styles from '../../flasher.module.scss';
 import { messages } from '../../messages';
 import stepStyles from './flasher-preparation.module.scss';
 
-export const FlasherPreparation: React.FC = () => {
+interface FlashPreparationProps {
+  // Where the boot-mode jumper goes on the board being flashed.
+  image: ReactNode;
+}
+
+export const FlasherPreparation: React.FC<FlashPreparationProps> = ({
+  image,
+}: FlashPreparationProps) => {
   const { formatMessage } = useI18n();
 
   const { props: tooltipProps, renderTooltip } = useTooltip({
@@ -22,9 +29,7 @@ export const FlasherPreparation: React.FC = () => {
     <div className={styles['step-container']}>
       <div className={styles['step-card']}>
         <div>
-          <div className={stepStyles['instruction-image']}>
-            {appLabBoardPreparation}
-          </div>
+          <div className={stepStyles['instruction-image']}>{image}</div>
           <XSmall>{formatMessage(messages.preparationStepDescription)}</XSmall>
           <ol className={stepStyles['instruction-list']}>
             <li className={stepStyles['instruction-list-item']}>

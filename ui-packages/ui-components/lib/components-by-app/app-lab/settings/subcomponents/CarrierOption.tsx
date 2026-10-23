@@ -1,22 +1,22 @@
 import {
+  ChevronDown,
   MediaCamera,
   MediaDisplay,
-  Sort,
 } from '@cloud-editor-mono/images/assets/icons';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { DropdownMenuButton } from '../../../../essential/dropdown-menu';
 import { useI18n, XXSmall } from '../../../shared';
 import { Info } from '../../settings-section/subcomponents/Info';
 import { Row } from '../../settings-section/subcomponents/Row';
-import { CarrierDevice, CarriersStatus } from '../../setup';
-import { carrierMessages } from '../messages';
+import { boardExtensionsMessages } from '../messages';
 import styles from '../settings.module.scss';
+import { HwListDevice, HwStatus } from '../settings.type';
 
-export interface DeviceHeaderProps {
+export interface CarrierOptionProps {
   carrierName: string;
-  device: CarrierDevice;
-  status: CarriersStatus;
+  device: HwListDevice;
+  status: HwStatus;
   onChange: (carrierName: string, device: string, option: string) => void;
 }
 
@@ -25,8 +25,13 @@ export const CarrierOption = ({
   device,
   status,
   onChange,
-}: DeviceHeaderProps): JSX.Element => {
+}: CarrierOptionProps): JSX.Element => {
   const { formatMessage } = useI18n();
+
+  const name = useMemo(() => {
+    // Adds a space before trailing digits, e.g. "camera0" -> "camera 0".
+    return device.name.replace(/([a-zA-Z])(\d)/, '$1 $2');
+  }, [device.name]);
 
   const icon = useMemo(() => {
     switch (device.deviceType) {
@@ -39,12 +44,24 @@ export const CarrierOption = ({
     }
   }, [device.deviceType]);
 
-  const value = useMemo(
-    () =>
-      status.carriers
-        .find((carrier) => carrier.carrierName === carrierName)
-        ?.next.find((media) => media.device === device.name)?.option,
-    [carrierName, status.carriers, device.name],
+  const value = useMemo(() => {
+    return (
+      status.mounts
+        .find((carrier) => carrier.name === carrierName)
+        ?.nextDevices.find((deviceItem) => deviceItem.device === device.name)
+        ?.option ?? 'none'
+    );
+  }, [status.mounts, device.name, carrierName]);
+
+  const renderLabel = useCallback(
+    (option: string) => {
+      return option === 'none'
+        ? formatMessage(boardExtensionsMessages.carrierTypeNoOption, {
+            type: device.deviceType,
+          })
+        : option;
+    },
+    [device.deviceType, formatMessage],
   );
 
   return (
@@ -53,7 +70,7 @@ export const CarrierOption = ({
       label={
         <div className={styles['carrier-label']}>
           {icon}
-          <XXSmall>{device.name}</XXSmall>
+          <XXSmall>{name}</XXSmall>
         </div>
       }
     >
@@ -61,19 +78,22 @@ export const CarrierOption = ({
         sections={[
           {
             name: 'Actions',
-            items: device.availableDevices.map((option) => ({
+            items: device.options.map((option) => ({
               id: option,
-              label: option,
+              label: renderLabel(option),
             })),
           },
         ]}
         buttonChildren={
           <>
-            {value}
-            <Sort />
+            {renderLabel(value)}
+            <ChevronDown />
           </>
         }
+        // react-aria computes the position against the viewport, which only
+        // matches where the popover is placed when it is portaled.
         useStaticPosition={false}
+        usePortal
         onAction={(key): void =>
           onChange(carrierName, device.name, key as string)
         }
@@ -86,7 +106,7 @@ export const CarrierOption = ({
         }}
       />
       {device.deviceType === 'display' && value !== 'none' && (
-        <Info>{formatMessage(carrierMessages.carrierTooltip)}</Info>
+        <Info>{formatMessage(boardExtensionsMessages.carrierTooltip)}</Info>
       )}
     </Row>
   );

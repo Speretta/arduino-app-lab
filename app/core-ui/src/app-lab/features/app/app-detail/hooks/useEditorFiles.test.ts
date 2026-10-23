@@ -18,45 +18,45 @@ const h = vi.hoisted(() => ({
   idbGet: vi.fn(async () => undefined),
   idbUpdate: vi.fn(async () => undefined),
   invalidateQueries: vi.fn(),
+  storedOpenFiles: { value: null as unknown },
 }));
 
-vi.mock('idb-keyval', () => ({
+vi.mock('../../../../services/persistentStore', () => ({
   get: h.idbGet,
   update: h.idbUpdate,
 }));
 
 vi.mock('@tanstack/react-query', () => ({
-  useQuery: () => ({ data: null }),
+  useQuery: () => ({ data: h.storedOpenFiles.value }),
   useQueryClient: () => ({ invalidateQueries: h.invalidateQueries }),
 }));
 
 vi.mock('../../../../../common/hooks/useObservable', () => ({
   useObservable: () => undefined,
+  useObservableRef: () => ({ current: undefined }),
 }));
 
 // The real catalogue pulls in image assets/JSX; the hook only needs id -> meta.
+// `ghost.py` is withheld to stand in for an id the catalogue has no entry for —
+// a brick that was deleted while its tab was open.
 vi.mock('./useEditorFileMeta', () => ({
-  useEditorFileMeta: (filesList: { path: string }[] | undefined) =>
+  useEditorFileMeta: (filePaths: string[] | undefined) =>
     new Map(
-      (filesList ?? []).map((f) => [
-        f.path,
-        { fileId: f.path, fileName: f.path, fileFullName: f.path, tags: [] },
-      ]),
+      (filePaths ?? [])
+        .filter((path) => path !== 'ghost.py')
+        .map((path) => [
+          path,
+          { fileId: path, fileName: path, fileFullName: path, tags: [] },
+        ]),
     ),
 }));
-
-const filesList = ['A.py', 'B.py', 'C.py', 'D.py', 'Z.py'].map((path) => ({
-  path,
-  name: path,
-  extension: '.py',
-})) as never;
 
 function setup() {
   return renderHook(() =>
     useEditorFiles({
       storeEntityId: undefined,
-      defaultFileId: undefined,
-      filesList,
+      defaultFilePath: null,
+      appDirListed: true,
       appBricks: undefined,
       getUnsavedFilesSubject: () => undefined,
     } as never),
@@ -66,6 +66,7 @@ function setup() {
 describe('useEditorFiles preview replacement + close', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    h.storedOpenFiles.value = null;
   });
 
   it('keeps the committed tab when the preview tab is closed after two jumps', () => {
@@ -109,10 +110,8 @@ describe('useEditorFiles preview replacement + close', () => {
     expect(result.current.previewFileId).toBeUndefined();
   });
 
-  // Replays the logged session: the persisted tab list still named `main.py`
-  // after the project's files moved under `sketch/`, so that id resolved to no
-  // meta — it renders no tab but still occupies a slot in `openFileIds`.
-  // `ghost.py` stands in for it here (absent from `filesList`).
+  // Replays the logged session: an open tab whose id the meta catalogue has no
+  // entry for renders no tab but still occupies a slot in `openFileIds`.
   it('never selects an id that renders no tab', () => {
     const { result } = setup();
 
@@ -192,5 +191,27 @@ describe('useEditorFiles preview replacement + close', () => {
     // into the slot of a tab that is still open.
     act(() => result.current.selectFile({ fileId: 'B.py' }));
     expect(result.current.openFileIds).toEqual(['A.py', 'B.py']);
+  });
+});
+
+describe('useEditorFiles tab-meta catalogue', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.storedOpenFiles.value = null;
+  });
+
+  // Panel B's stored tabs are resolved through this catalogue by the split-view
+  // hydration, and they are not open in panel A.
+  it('covers stored panel B tabs, not just the open ones', () => {
+    h.storedOpenFiles.value = {
+      items: ['A.py'],
+      panes: { A: { items: ['A.py'] }, B: { items: ['deep/panel-b.py'] } },
+    };
+
+    const { result } = setup();
+
+    expect(result.current.editorFiles.map((f) => f.fileId)).toContain(
+      'deep/panel-b.py',
+    );
   });
 });

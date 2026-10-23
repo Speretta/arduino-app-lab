@@ -1,17 +1,15 @@
-import { setCSSVariable } from '@cloud-editor-mono/common';
+import type { Key } from '@react-types/shared';
 import clsx from 'clsx';
-import { Key, memo, ReactElement, useLayoutEffect, useRef } from 'react';
+import { ComponentProps, memo, ReactElement, useRef } from 'react';
 import { useButton, useMenuTrigger } from 'react-aria';
 import { MessageDescriptor } from 'react-intl';
 import { Item, Section, useMenuTriggerState } from 'react-stately';
-import { useWindowSize } from 'react-use';
 
 import DropdownMenu from '../../essential/dropdown-menu/DropdownMenu';
 import DropdownMenuPopover from '../../essential/dropdown-menu/DropdownMenuPopover';
 import { useI18n } from '../../i18n/useI18n';
 import { XXSmall } from '../../typography';
 import styles from './dropdown-menu.module.scss';
-import styleVars from './dropdown-menu-variables.module.scss';
 import {
   DropdownMenuItemType,
   DropdownMenuSectionType,
@@ -52,6 +50,7 @@ export interface DropdownMenuButtonProps<
    * not clipped or covered by ancestors. Requires `useStaticPosition={false}`.
    */
   usePortal?: boolean;
+  placement?: ComponentProps<typeof DropdownMenuPopover>['placement'];
 }
 
 export function DropdownMenuButton<T, L extends MessageDescriptor | string>(
@@ -69,6 +68,7 @@ export function DropdownMenuButton<T, L extends MessageDescriptor | string>(
     classes,
     useStaticPosition,
     usePortal,
+    placement,
     isOpened,
     disabled,
   } = props;
@@ -86,22 +86,6 @@ export function DropdownMenuButton<T, L extends MessageDescriptor | string>(
     { isDisabled: disabled, ...menuTriggerProps },
     buttonRef,
   );
-
-  const { width: windowWidth } = useWindowSize();
-
-  useLayoutEffect(() => {
-    const buttonX = buttonRef.current?.getBoundingClientRect().x;
-    if (state.isOpen && typeof buttonX === 'number') {
-      const dropdownMenuWidth = Number(styleVars.dropdownMenuWidth);
-
-      const dropdownMenuOrientation =
-        windowWidth - buttonX > dropdownMenuWidth ? 0 : 1; // 0: right, 1: left
-      setCSSVariable(
-        styleVars.dropdownMenuOrientation,
-        `${dropdownMenuOrientation}`,
-      );
-    }
-  }, [state.isOpen, windowWidth]);
 
   return (
     <div
@@ -140,6 +124,7 @@ export function DropdownMenuButton<T, L extends MessageDescriptor | string>(
           }}
           useStaticPosition={useStaticPosition}
           usePortal={usePortal}
+          placement={placement}
         >
           <DropdownMenu
             {...menuProps}

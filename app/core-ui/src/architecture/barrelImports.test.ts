@@ -65,7 +65,10 @@ describe('ui-components barrel imports', () => {
         'every export (device images included) into any app that bundles a ' +
         'single component.',
     ).toEqual([]);
-  });
+    // for some reason, on my mac this test takes more then 5secs, so i decided
+    // to increase the timeout a bit. if your computer is faster, this should
+    // not affect your experience
+  }, 10_000);
 
   it('App Lab code never imports the ui-components top-level barrel', () => {
     const offenders = findBarrelImports(
@@ -79,4 +82,20 @@ describe('ui-components barrel imports', () => {
         'their board images, bloating the App Lab bundle.',
     ).toEqual([]);
   });
+
+  // app/domain and app/infrastructure are App Lab-reachable, so a barrel import
+  // here reaches the App Lab bundle just as directly as one in app-lab/ does.
+  it.each(['domain', 'infrastructure'])(
+    'app/%s never imports the ui-components top-level barrel',
+    (layer) => {
+      const offenders = findBarrelImports(join(REPO_ROOT, 'app', layer, 'src'));
+      expect(
+        offenders,
+        `app/${layer} is reachable from App Lab, so it must use deep imports ` +
+          "such as '@cloud-editor-mono/ui-components/lib/serial-monitor/" +
+          "SerialMonitor.type': the top-level barrel re-exports " +
+          'cloud-editor-only components and their board images.',
+      ).toEqual([]);
+    },
+  );
 });

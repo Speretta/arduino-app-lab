@@ -1,11 +1,11 @@
 import {
   IconAccountSettingsNormal,
   IconMediaLibraryBooksNormal,
-  IconNavigationDashboardNormal,
 } from '@arduino/react-icons';
 import {
   ArrowDown,
   Brick,
+  NavigationGroupOutline,
   NavigationTable,
   UserProfileOutline,
 } from '@cloud-editor-mono/images/assets/icons';
@@ -40,7 +40,7 @@ export const Back: React.FC<BackProps> = (props: BackProps) => {
         tabIndex={0}
       >
         <ArrowDown className={styles['back-button']} title="Back" />
-        <XSmall className={styles['item-label']}>{label}</XSmall>
+        <XSmall>{label}</XSmall>
       </div>
     </BreadcrumbItem>
   );
@@ -58,7 +58,7 @@ const getBackIcon = (
   if (typeof pathItem === 'string') {
     if (pathItem === 'my-apps') {
       return (
-        <IconNavigationDashboardNormal
+        <NavigationGroupOutline
           className={styles['back-app-button']}
           title="My Apps"
         />
@@ -102,12 +102,10 @@ const getSectionIcon = (
   }
 
   const sectionIconMap: Record<string, React.ReactNode> = {
-    'my-apps': (
-      <IconNavigationDashboardNormal className={styles['section-icon']} />
-    ),
+    'my-apps': <NavigationGroupOutline className={styles['section-icon']} />,
     examples: <NavigationTable className={styles['section-icon']} />,
     inspirations: <NavigationTable className={styles['section-icon']} />,
-    learn: <IconMediaLibraryBooksNormal className={styles['section-icon']} />,
+    learn: <IconMediaLibraryBooksNormal className={styles['learn-icon']} />,
     bricks: <Brick className={styles['section-icon']} />,
     settings: <IconAccountSettingsNormal className={styles['section-icon']} />,
     account: <UserProfileOutline className={styles['section-icon']} />,
@@ -137,11 +135,7 @@ const TopBar: React.FC<TopBarProps> = (props: TopBarProps) => {
           const isCurrentItem = index === pathItems.length - 1;
           return (
             <Fragment key={index}>
-              <div
-                className={clsx(styles['wrapper'], {
-                  [styles['wrapper-active']]: isCurrentItem,
-                })}
-              >
+              <div className={styles['wrapper']}>
                 {typeof item === 'string' ? (
                   <BreadcrumbItem
                     className={clsx(
@@ -150,25 +144,27 @@ const TopBar: React.FC<TopBarProps> = (props: TopBarProps) => {
                     )}
                   >
                     <Link
-                      className={clsx(styles['label'])}
-                      to={`/${pathItems
-                        .slice(0, index + 1)
-                        .reduce<string[]>(
-                          (acc, it) =>
-                            typeof it === 'string' ? [...acc, it] : acc,
-                          [],
-                        )
-                        .join('/')}`}
+                      className={styles['label']}
+                      to={
+                        `/${pathItems
+                          .slice(0, index + 1)
+                          .reduce<string[]>(
+                            (acc, it) =>
+                              typeof it === 'string' ? [...acc, it] : acc,
+                            [],
+                          )
+                          .join('/')}` as React.ComponentProps<
+                          typeof Link
+                        >['to']
+                      }
                       disabled={isCurrentItem}
                     >
                       {showBackIcon && BackIcon}
                       {showSectionIcon && SectionIcon}
                       {index === 0 && currentItem ? (
-                        <XSmall className={styles['item-label']}>
-                          {formatMessage(currentItem.label)}
-                        </XSmall>
+                        <XSmall>{formatMessage(currentItem.label)}</XSmall>
                       ) : (
-                        <XSmall className={styles['item-label']}>{item}</XSmall>
+                        <XSmall>{item}</XSmall>
                       )}
                     </Link>
                   </BreadcrumbItem>

@@ -1,24 +1,36 @@
 /**
- * End-to-end tests for `lspRename` and `lspFormat` over a fake backend: the
- * real transport, client, workspace and rename panel, with the language server
- * replaced by hand-written responses.
+ * End-to-end tests for `lspRename`, `lspFormat` and `lspFindAllReferences` over
+ * a fake backend: the real transport, client, workspace and rename panel, with
+ * the language server replaced by hand-written responses.
  *
- * These are the two commands that write to the document, and they share a
- * failure mode: silence. A name the server won't take is answered with an empty
- * edit, and so is a document the formatter cannot parse, so nothing happens and
- * nothing is reported. These tests pin both ends of each — the edits are really
- * applied, and a request that comes back empty says why.
+ * All three share a failure mode: silence. A name the server won't take is
+ * answered with an empty edit, and so is a document the formatter cannot parse;
+ * a references result that cannot be resolved throws where nothing was
+ * listening. Nothing happens and nothing is reported. These tests pin both ends
+ * of each — the work really lands, and a request that comes back empty or
+ * broken says why.
  */
 
 import { setDiagnostics } from '@codemirror/lint';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, Mock, vi } from 'vitest';
 
 import { FormatMessage } from '../../../../i18n/useI18n';
+import { ViewInstances, viewInstances } from '../../../codeMirrorViewInstances';
 import { getLspFeedbackTooltipExtension } from '../lsp-extensions/extensions/lsp-feedback-tooltip-extension';
-import { LspMessage, LspRequestMessage, LspWorkspaceEdit } from '../lsp-types';
-import { lspFormat, lspRename } from './lsp-client-commands';
+import { LspReferencesResult } from '../lsp-references/lsp-references-types';
+import {
+  LspLocation,
+  LspMessage,
+  LspRequestMessage,
+  LspWorkspaceEdit,
+} from '../lsp-types';
+import {
+  lspFindAllReferences,
+  lspFormat,
+  lspRename,
+} from './lsp-client-commands';
 import { createLspClientTransport } from './lsp-client-transport';
 import { CustomLspClient } from './lsp-client-types';
 import { LspClientWorkspace } from './lsp-client-workspace';
@@ -47,11 +59,14 @@ const formatMessage: FormatMessage = (descriptor, values) =>
 
 interface Backend {
   view: EditorView;
+  client: CustomLspClient;
   /** Messages the client sent to the server, in order. */
   sent: LspRequestMessage[];
   /** Deliver a server message to the client. */
   receive: (message: LspMessage) => void;
   requestsFor: (method: string) => LspRequestMessage[];
+  /** Store writes the workspace made for files with no view, in order. */
+  writes: [string, string][];
   destroy: () => void;
 }
 
@@ -67,15 +82,35 @@ const startBackend = async ({
   // Overridable so a test can use a Windows-shaped workspace, where the two
   // ends spell the same uri differently.
   workspaceUri = WORKSPACE_URI,
-}: { workspaceUri?: string } = {}): Promise<Backend> => {
+  // Content the workspace can read for files no view holds, by uri. Absent by
+  // default, which is the consumer that wires up no disk reader at all.
+  disk,
+}: {
+  workspaceUri?: string;
+  disk?: Record<string, string>;
+} = {}): Promise<Backend> => {
   const sent: LspRequestMessage[] = [];
+  const writes: [string, string][] = [];
   let receive: (message: LspMessage) => void = () => undefined;
   const fileUri = `${workspaceUri}/main.py`;
 
   const client = new CustomLspClient({
     rootUri: workspaceUri,
     workspace: (c): LspClientWorkspace =>
-      new LspClientWorkspace(c, 'python', workspaceUri, () => undefined),
+      new LspClientWorkspace(
+        c,
+        'python',
+        workspaceUri,
+        () => undefined,
+        disk && (async (uri) => disk[uri] ?? Promise.reject(new Error(uri))),
+        undefined,
+        disk &&
+          ((fileId, value) => {
+            writes.push([fileId, value]);
+            return true;
+          }),
+        disk && (async (fileId) => disk[`${workspaceUri}/${fileId}`]),
+      ),
   });
 
   const { transport, transportDestroy } = createLspClientTransport({
@@ -93,6 +128,8 @@ const startBackend = async ({
   });
 
   client.connect(transport);
+  // Sends leave the transport one at a time, so `initialize` is not out yet.
+  await flush();
 
   const requestsFor = (method: string): LspRequestMessage[] =>
     sent.filter((message) => message.method === method);
@@ -108,6 +145,7 @@ const startBackend = async ({
         renameProvider: true,
         documentFormattingProvider: true,
         documentRangeFormattingProvider: true,
+        referencesProvider: true,
       },
     },
   });
@@ -129,9 +167,11 @@ const startBackend = async ({
 
   const backend: Backend = {
     view,
+    client,
     sent,
     receive: (message) => receive(message),
     requestsFor,
+    writes,
     destroy: () => {
       view.destroy();
       transportDestroy();
@@ -181,6 +221,107 @@ const renameEdit = (uri: string = FILE_URI): LspWorkspaceEdit => ({
       },
     ],
   },
+});
+
+describe('transport', () => {
+  const notification = (method: string): string =>
+    JSON.stringify({ jsonrpc: '2.0', method, params: {} });
+
+  const startTransport = (
+    sendLspMessage: (lspId: string, message: LspMessage) => Promise<void>,
+  ): ReturnType<typeof createLspClientTransport> =>
+    createLspClientTransport({
+      lspId: 'python',
+      rootUri: WORKSPACE_URI,
+      sendLspMessage,
+      subscribeLspMessages: () => () => undefined,
+      client: new CustomLspClient({ rootUri: WORKSPACE_URI }),
+    });
+
+  it('starts a send only once the previous one was delivered', async () => {
+    const started: string[] = [];
+    let deliverFirst: () => void = () => undefined;
+    const { transport, transportDestroy } = startTransport(
+      async (_lspId, message) => {
+        started.push((message as LspRequestMessage).method);
+        if (started.length === 1) {
+          await new Promise<void>((resolve) => {
+            deliverFirst = resolve;
+          });
+        }
+      },
+    );
+
+    transport.send(notification('textDocument/didClose'));
+    transport.send(notification('textDocument/didOpen'));
+    await flush();
+    expect(started).toEqual(['textDocument/didClose']);
+
+    deliverFirst();
+    await flush();
+    expect(started).toEqual(['textDocument/didClose', 'textDocument/didOpen']);
+    transportDestroy();
+  });
+
+  it('keeps sending after a send fails', async () => {
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const started: string[] = [];
+    const { transport, transportDestroy } = startTransport(
+      async (_lspId, message) => {
+        started.push((message as LspRequestMessage).method);
+        if (started.length === 1) {
+          throw new Error('LSP python is not active');
+        }
+      },
+    );
+
+    transport.send(notification('textDocument/didChange'));
+    transport.send(notification('textDocument/didSave'));
+    await flush();
+
+    expect(started).toEqual(['textDocument/didChange', 'textDocument/didSave']);
+    transportDestroy();
+    error.mockRestore();
+  });
+});
+
+/**
+ * What the servers index. Nothing else tells them the workspace exists, and
+ * without it they resolve only the documents this client has opened — which is
+ * the set of files the user happens to have clicked on.
+ */
+describe('initialize', () => {
+  it('declares the workspace root as a folder the server may read', async () => {
+    const { requestsFor } = await startBackend();
+
+    const [initialize] = requestsFor('initialize');
+    expect(initialize.params).toMatchObject({
+      rootUri: WORKSPACE_URI,
+      rootPath: WORKSPACE_URI,
+      workspaceFolders: [{ uri: WORKSPACE_URI, name: 'ws' }],
+      capabilities: { workspace: { workspaceFolders: true } },
+    });
+  });
+
+  it('answers the folders request the capability invites', async () => {
+    const { receive, sent } = await startBackend();
+
+    receive({
+      jsonrpc: '2.0',
+      id: 77,
+      method: 'workspace/workspaceFolders',
+      params: undefined,
+    });
+    await flush();
+
+    expect(sent.find((message) => message.id === 77)).toEqual({
+      jsonrpc: '2.0',
+      id: 77,
+      result: [{ uri: WORKSPACE_URI, name: 'ws' }],
+    });
+  });
 });
 
 describe('lspRename', () => {
@@ -294,6 +435,70 @@ describe('lspRename', () => {
     expect(feedbackText(view)).toBeUndefined();
   });
 
+  /**
+   * The common shape of a cross-file rename: the servers index the whole
+   * workspace from disk, so they report references in files this client never
+   * opened and has no mapping for. Those documents have to be picked up from
+   * disk on the spot — skipping them renames a symbol in the open file only and
+   * leaves the rest of the app calling a name that no longer exists.
+   */
+  it('applies an edit to a file the user never opened', async () => {
+    const OTHER = 'other.py';
+    const OTHER_URI = `${WORKSPACE_URI}/${OTHER}`;
+    const { view, receive, requestsFor, writes } = await startBackend({
+      disk: { [OTHER_URI]: DOC },
+    });
+
+    submitRename(view, 'total');
+    await flush();
+    const [request] = requestsFor('textDocument/rename');
+
+    receive({
+      jsonrpc: '2.0',
+      id: request.id,
+      result: {
+        changes: {
+          ...renameEdit().changes,
+          ...renameEdit(OTHER_URI).changes,
+        },
+      },
+    });
+    await flush();
+
+    expect(view.state.doc.toString()).toBe('total = 1\nprint(total)');
+    expect(feedbackText(view)).toMatch(/^Renamed in this file and/);
+    // Written through the store rather than opened in a panel: a rename must not
+    // spawn a tab per file it touches.
+    expect(writes).toEqual([[OTHER, 'total = 1\nprint(total)']]);
+  });
+
+  // The Arduino LS on Windows lists some edits of a rename twice for one file.
+  it('applies an edit the server lists twice only once', async () => {
+    const OTHER = 'other.py';
+    const OTHER_URI = `${WORKSPACE_URI}/${OTHER}`;
+    const { view, receive, requestsFor, writes } = await startBackend({
+      disk: { [OTHER_URI]: DOC },
+    });
+
+    submitRename(view, 'total');
+    await flush();
+    const [request] = requestsFor('textDocument/rename');
+
+    const twice = (uri: string): LspWorkspaceEdit['changes'] => {
+      const edits = renameEdit(uri).changes?.[uri] ?? [];
+      return { [uri]: [...edits, ...edits] };
+    };
+    receive({
+      jsonrpc: '2.0',
+      id: request.id,
+      result: { changes: { ...twice(FILE_URI), ...twice(OTHER_URI) } },
+    });
+    await flush();
+
+    expect(view.state.doc.toString()).toBe('total = 1\nprint(total)');
+    expect(writes).toEqual([[OTHER, 'total = 1\nprint(total)']]);
+  });
+
   it('reports instead of throwing when an edit names a file it cannot map', async () => {
     const { view, receive, requestsFor } = await startBackend();
     const logged = vi
@@ -304,8 +509,9 @@ describe('lspRename', () => {
     await flush();
     const [request] = requestsFor('textDocument/rename');
 
-    // A file the workspace never opened has no entry in the mapping, so its
-    // positions cannot be mapped. Losing it must not lose the request.
+    // A file the workspace never opened has no entry in the mapping, and this
+    // consumer wires up no disk reader to pick one up with. Losing it must not
+    // lose the request.
     receive({
       jsonrpc: '2.0',
       id: request.id,
@@ -635,11 +841,164 @@ describe('lspFormat', () => {
       jsonrpc: '2.0',
       id: 97,
       method: 'window/showMessageRequest',
-      params: { type: 1, message: 'Cannot open file:///tmp/x.ino', actions: [] },
+      params: {
+        type: 1,
+        message: 'Cannot open file:///tmp/x.ino',
+        actions: [],
+      },
     });
     receive({ jsonrpc: '2.0', id: request.id, result: null });
     await flush();
 
     expect(feedbackText(view)).toBe('Cannot open file:///tmp/x.ino');
+  });
+});
+
+/**
+ * `lspFindAllReferences` hands its result to a React panel rather than writing
+ * to the document, so its failure mode is the same silence the two commands
+ * above have: the request succeeds, resolving the locations into rows throws,
+ * and the user sees no panel and no reason. The `catch` covering the request is
+ * answered by the transport; this one has to speak for itself.
+ */
+describe('lspFindAllReferences', () => {
+  const referenceAt = (
+    line: number,
+    from: number,
+    to: number,
+  ): LspLocation => ({
+    uri: FILE_URI,
+    range: { start: { line, character: from }, end: { line, character: to } },
+  });
+
+  /** Run the command and answer its request with `result`. */
+  const search = async (
+    backend: Backend,
+    result: LspLocation[] | null,
+  ): Promise<Mock<(result: LspReferencesResult) => void>> => {
+    const showLspReferences = vi.fn();
+
+    lspFindAllReferences(backend.view, formatMessage, showLspReferences);
+    await flush();
+
+    const [request] = backend.requestsFor('textDocument/references');
+    backend.receive({ jsonrpc: '2.0', id: request.id, result });
+    await flush();
+
+    return showLspReferences;
+  };
+
+  afterEach(() => {
+    viewInstances[ViewInstances.Editor2].instance = null;
+  });
+
+  it('hands the resolved rows to the panel', async () => {
+    const backend = await startBackend();
+
+    const showLspReferences = await search(backend, [
+      referenceAt(0, 0, 5),
+      referenceAt(1, 6, 11),
+    ]);
+
+    expect(showLspReferences).toHaveBeenCalledTimes(1);
+    const [result] = showLspReferences.mock.calls[0];
+    expect(result.symbol).toBe('value');
+    expect(result.totalCount).toBe(2);
+    expect(result.groups[0].rows.map((row) => row.lineNumber)).toEqual([1, 2]);
+  });
+
+  /**
+   * The panel has to travel with the result: by the time the panel closes there
+   * is nothing left in the DOM to recover it from, and a search started from
+   * the context menu never leaves a focused panel behind at all.
+   */
+  it('carries the panel the search was run from', async () => {
+    const backend = await startBackend();
+    viewInstances[ViewInstances.Editor2].instance = backend.view;
+
+    const showLspReferences = await search(backend, [referenceAt(0, 0, 5)]);
+
+    const [result] = showLspReferences.mock.calls[0];
+    expect(result.originViewInstanceId).toBe(ViewInstances.Editor2);
+  });
+
+  it('falls back to the left panel for a view that is not a registered panel', async () => {
+    const backend = await startBackend();
+
+    const showLspReferences = await search(backend, [referenceAt(0, 0, 5)]);
+
+    const [result] = showLspReferences.mock.calls[0];
+    expect(result.originViewInstanceId).toBe(ViewInstances.Editor);
+  });
+
+  it('reports a search the server answered with nothing', async () => {
+    const backend = await startBackend();
+
+    const showLspReferences = await search(backend, []);
+
+    expect(showLspReferences).not.toHaveBeenCalled();
+    expect(feedbackText(backend.view)).toBe('No references found');
+  });
+
+  /**
+   * A refused search is indistinguishable from an empty one by the time it gets
+   * here — the transport strips the JSON-RPC error before it can reject the
+   * request — so the server's own account of it is the only thing that tells
+   * the two apart, and reporting "No references found" over the top of it is a
+   * plain lie about a symbol that may well have references.
+   */
+  it('prefers the reason the server gave for refusing the search', async () => {
+    const backend = await startBackend();
+    const showLspReferences = vi.fn();
+
+    lspFindAllReferences(backend.view, formatMessage, showLspReferences);
+    await flush();
+
+    const [request] = backend.requestsFor('textDocument/references');
+    backend.receive({
+      jsonrpc: '2.0',
+      id: request.id,
+      error: { code: -32602, message: 'No symbol under the cursor' },
+    } as unknown as LspMessage);
+    await flush();
+
+    expect(showLspReferences).not.toHaveBeenCalled();
+    expect(feedbackText(backend.view)).toBe('No symbol under the cursor');
+  });
+
+  /**
+   * The window message route, which is how Basedpyright explains a refusal it
+   * then answers with an empty result rather than an error.
+   */
+  it('prefers a reason sent as a window message', async () => {
+    const backend = await startBackend();
+    const showLspReferences = vi.fn();
+
+    lspFindAllReferences(backend.view, formatMessage, showLspReferences);
+    await flush();
+
+    backend.receive({
+      jsonrpc: '2.0',
+      id: 98,
+      method: 'window/showMessageRequest',
+      params: { type: 1, message: 'Indexing not finished', actions: [] },
+    });
+    const [request] = backend.requestsFor('textDocument/references');
+    backend.receive({ jsonrpc: '2.0', id: request.id, result: [] });
+    await flush();
+
+    expect(feedbackText(backend.view)).toBe('Indexing not finished');
+  });
+
+  it('reports a result it could not resolve, rather than doing nothing', async () => {
+    const backend = await startBackend();
+    vi.spyOn(backend.client.workspace, 'requestFile').mockRejectedValue(
+      new Error('workspace gone'),
+    );
+
+    const showLspReferences = await search(backend, [referenceAt(0, 0, 5)]);
+
+    expect(showLspReferences).not.toHaveBeenCalled();
+    expect(feedbackText(backend.view)).toBe('Could not list references');
   });
 });

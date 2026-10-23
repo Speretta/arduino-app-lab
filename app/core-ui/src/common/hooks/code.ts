@@ -38,7 +38,7 @@ import {
   UseCreateSketchFromExisting,
 } from './queries/create.type';
 import { refreshCustomLibraries } from './queries/createUtils';
-import { useObservable } from './useObservable';
+import { useObservable, useObservableRef } from './useObservable';
 
 const FILES_WITH_CODE = new Set(['h', 'hpp', 'c', 'cpp']);
 
@@ -101,7 +101,8 @@ export const useCodeChange: UseCodeChange = function (
     retrieveSketches,
     exampleInoData,
   );
-  const unsavedFileIds = useObservable(getUnsavedFilesSubject());
+  // Only `saveAllFiles` reads the set.
+  const unsavedFileIdsRef = useObservableRef(getUnsavedFilesSubject());
 
   const saveCode = useCallback(
     async (
@@ -186,10 +187,8 @@ export const useCodeChange: UseCodeChange = function (
 
     if (isExampleSketchRoute) return;
 
-    if (unsavedFileIds) {
-      unsavedFileIds.forEach(saveFile);
-    }
-  }, [isReadOnly, isExampleSketchRoute, unsavedFileIds, saveFile]);
+    unsavedFileIdsRef.current?.forEach(saveFile);
+  }, [isReadOnly, isExampleSketchRoute, unsavedFileIdsRef, saveFile]);
 
   const {
     formatCode,

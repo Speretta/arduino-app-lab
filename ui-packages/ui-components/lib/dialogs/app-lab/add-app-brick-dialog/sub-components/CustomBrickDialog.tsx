@@ -1,5 +1,5 @@
 import { InfoIconOutline } from '@cloud-editor-mono/images/assets/icons';
-import { BrickInstance } from '@cloud-editor-mono/infrastructure';
+import { AppBrickListItem } from '@cloud-editor-mono/infrastructure';
 import { useEffect, useMemo, useState } from 'react';
 
 import {
@@ -17,7 +17,7 @@ import styles from './custom-brick-dialog.module.scss';
 const MAX_LENGTH = 80;
 
 export type CustomBrickDialogLogic = () => {
-  brick?: BrickInstance | null;
+  brick?: AppBrickListItem | null;
   open: boolean;
   confirmAction: (name: string, brickId?: string) => Promise<boolean>;
   onOpenChange: (open: boolean) => void;
@@ -137,7 +137,6 @@ export const CustomBrickDialog: React.FC<CustomBrickDialogProps> = ({
               ? messages.customBrickRenameInputLabel
               : messages.customBrickInputLabel,
           )}
-          /* eslint-disable-next-line jsx-a11y/no-autofocus */
           autoFocus
         />
       ) : null}

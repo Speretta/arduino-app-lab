@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arduino/arduino-app-cli/pkg/board/remote"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"app-lab-desktop/internal/board"
@@ -23,6 +24,13 @@ type boardAccess struct{ app *App }
 // appAgentStartedEvent tells the FE to auto-open an agent-started app's web UI once it's running.
 const appAgentStartedEvent = "app:agent-started"
 
+// ForgetWorkspaceApp drops a deleted app's workspace grants (see App.ForgetWorkspaceApp).
+func (b boardAccess) ForgetWorkspaceApp(appID string) { b.app.ForgetWorkspaceApp(appID) }
+
+func (b boardAccess) RebindWorkspaceApp(oldID, newID, newName string) {
+	b.app.RebindWorkspaceApp(oldID, newID, newName)
+}
+
 // RequestOpenAppUI emits the event so the UI opens/forwards the app's web UI once it's running (same as a manual run).
 func (b boardAccess) RequestOpenAppUI(appID string) {
 	runtime.EventsEmit(b.app.ctx(), appAgentStartedEvent, appID)
@@ -30,8 +38,56 @@ func (b boardAccess) RequestOpenAppUI(appID string) {
 
 // FlushMirrorEdits pushes pending mirror edits to the board now (before apps_start/apps_clone/board_exec),
 // returning the apps whose sync failed so the caller can refuse to act on stale board code.
-func (b boardAccess) FlushMirrorEdits() (failed, conflicts map[string]error) {
+func (b boardAccess) FlushMirrorEdits() (failed, conflicts, withheld map[string]error) {
 	return b.app.syncCheckouts(time.Time{}, true)
+}
+
+// agentWifiConnectEvent tells the FE to open its Wi-Fi dialog on an SSID the agent proposed.
+const agentWifiConnectEvent = "wifi:agent-connect"
+
+// ListWiFiNetworks scans for networks over the board connection (same scan the Wi-Fi dialog uses).
+func (b boardAccess) ListWiFiNetworks(context.Context) ([]string, error) {
+	sb := b.app.boardSnapshot()
+	if !sb.HasConn() { // the scan runs over the connection
+		return nil, fmt.Errorf("no board connected")
+	}
+	return wifi.ListSSIDs(b.app.ctx(), sb.Conn) // the snapshot's conn, so the check and the scan are one board
+}
+
+// RequestWiFiConnect hands the join to App Lab's own Wi-Fi dialog: a passphrase reaching the agent would travel through the model's context, the session history and the permission prompt in clear text.
+func (b boardAccess) RequestWiFiConnect(ssid string) {
+	runtime.EventsEmit(b.app.ctx(), agentWifiConnectEvent, ssid)
+}
+
+// agentModelImportEvent tells the FE to open its model picker on the brick the agent named.
+const agentModelImportEvent = "models:agent-import"
+
+// RequestImportCustomModel hands the import to App Lab's own picker: the Edge Impulse project key would otherwise travel through the model's context, the session history and the permission prompt in clear text.
+func (b boardAccess) RequestImportCustomModel(appID, brickID string) {
+	runtime.EventsEmit(b.app.ctx(), agentModelImportEvent, appID, brickID)
+}
+
+// DisconnectWiFi drops the board's Wi-Fi, unless App Lab is talking to the board over that very network.
+func (b boardAccess) DisconnectWiFi(context.Context) error {
+	sb := b.app.boardSnapshot()
+	if !sb.HasConn() {
+		return fmt.Errorf("no board connected")
+	}
+	// Dropping Wi-Fi on a board we reach over IP cuts App Lab off mid-call, with only a physical reconnect left; USB and on-board (SBC) links don't depend on it.
+	if sb.IsNetwork() {
+		return fmt.Errorf("this board is connected over the network (%s), so disconnecting its Wi-Fi would also cut App Lab's own connection to it — refused. Tell the user to switch to a USB connection first if they really want this", sb.Info.Address)
+	}
+	return wifi.Disconnect(b.app.ctx(), sb.Conn) // the snapshot's conn, so the check and the drop are one board
+}
+
+// PendingGhostEdits lists mirror dirs holding agent edits that match no board app (stranded), for tool-result warnings.
+func (b boardAccess) PendingGhostEdits() []string {
+	return b.app.pendingGhostEdits()
+}
+
+// PendingSyncIssues lists per-app warnings for syncs that failed or conflicted, so the agent learns its edits did not land.
+func (b boardAccess) PendingSyncIssues() []string {
+	return b.app.pendingSyncWarnings()
 }
 
 // OrchestratorBaseURL returns the connected board's orchestrator URL via the existing App Lab resolver.
@@ -41,7 +97,7 @@ func (b boardAccess) OrchestratorBaseURL(context.Context) (string, error) {
 
 // SelectedBoard reports the currently selected board from cached detection info (no board I/O). Presence follows the connection, never the serial — network boards report none, so gating on one called a connected board disconnected.
 func (b boardAccess) SelectedBoard(context.Context) (boardmcp.BoardStatus, error) {
-	sb := b.app.selectedBoard
+	sb := b.app.boardSnapshot()
 	if !sb.HasConn() {
 		return boardmcp.BoardStatus{Connected: false}, nil
 	}
@@ -54,7 +110,7 @@ func (b boardAccess) SelectedBoard(context.Context) (boardmcp.BoardStatus, error
 
 // SystemName returns the selected board's configured device name; guards the no-board case (unlike App.GetBoardName, which assumes a board).
 func (b boardAccess) SystemName(ctx context.Context) (string, error) {
-	sb := b.app.selectedBoard
+	sb := b.app.boardSnapshot()
 	if !sb.HasConn() { // reads the name over the connection
 		return "", fmt.Errorf("no board connected")
 	}
@@ -72,7 +128,7 @@ func (b boardAccess) ListBoards(ctx context.Context) ([]boardmcp.BoardSummary, e
 	}
 	// Match on identity, not serial: a network board has none, and comparing two empty serials would flag nothing or every network board.
 	selID := ""
-	if sb := b.app.selectedBoard; sb.HasConn() {
+	if sb := b.app.boardSnapshot(); sb.HasConn() {
 		selID = boardIdentity(sb.Info.Serial, sb.Info.Address)
 	}
 	out := make([]boardmcp.BoardSummary, 0, len(boards))
@@ -91,7 +147,7 @@ func (b boardAccess) ListBoards(ctx context.Context) ([]boardmcp.BoardSummary, e
 }
 
 // CheckoutApp mirrors the app's files from the board into a local working copy the agent can edit natively.
-func (b boardAccess) CheckoutApp(_ context.Context, appID string) (string, error) {
+func (b boardAccess) CheckoutApp(_ context.Context, appID string) (path string, parked []string, readOnly bool, err error) {
 	return b.app.checkoutApp(appID)
 }
 
@@ -105,15 +161,20 @@ const (
 // Exec runs a shell command on the board over the shared connection (never the host — §2 decision 6), flushing pending
 // mirror edits first so the command runs against the latest files. Backs the board_exec escape hatch (§2.8).
 func (b boardAccess) Exec(ctx context.Context, command, cwd string) (string, error) {
-	sb := b.app.selectedBoard
+	sb := b.app.boardSnapshot()
 	if !sb.HasConn() { // the command runs over the connection
 		return "", fmt.Errorf("no board connected")
 	}
 	// Force-push pending mirror edits so the command sees the latest code; on failure still run, but tell the agent.
 	syncWarn := ""
-	if failed, _ := b.app.syncCheckouts(time.Time{}, true); len(failed) > 0 {
-		syncWarn = "warning: some agent edits could not be synced to the board (" + flushFailureSummary(failed) + "); the command may see stale files.\n\n"
+	failed, _, withheld := b.app.syncCheckouts(time.Time{}, true)
+	if len(failed) > 0 {
+		syncWarn = "warning: some agent edits could not be synced to the board; the command may see stale files.\n\n"
 	}
+	if len(withheld) > 0 {
+		syncWarn += "warning: edits to a built-in example were withheld (" + flushFailureSummary(withheld) + "); the board still holds the shipped files.\n\n"
+	}
+	syncWarn += boardmcp.SyncIssueWarning(b.PendingSyncIssues()) + boardmcp.GhostEditWarning(b.PendingGhostEdits())
 	full := command
 	if c := strings.TrimSpace(cwd); c != "" {
 		full = "cd '" + strings.ReplaceAll(c, "'", `'\''`) + "' && " + command
@@ -154,6 +215,39 @@ func execOnBoard(ctx context.Context, sb *board.Board, command string) ([]byte, 
 	}
 }
 
+// boardSnapshot copies the selected board under boardMu, for the readers that run on the agent's goroutines.
+// The agent keeps running across a same-board re-select, so it reads Conn and tunnels while selectBoard
+// overwrites the whole struct; Conn is an interface and tunnels a slice, so an unsynchronised read can see
+// half of each board. The copy is taken once and used for the whole call.
+func (a *App) boardSnapshot() *board.Board {
+	a.boardMu.RLock()
+	defer a.boardMu.RUnlock()
+	if a.selectedBoard == nil {
+		return board.Noop()
+	}
+	sb := *a.selectedBoard
+	return &sb
+}
+
+// boardConn reads the selected board's connection under boardMu. Every board I/O goes through it: the agent
+// runs across a same-board re-select, so reading the field directly races setSelectedBoard's write.
+func (a *App) boardConn() remote.RemoteConn {
+	a.boardMu.RLock()
+	defer a.boardMu.RUnlock()
+	if a.selectedBoard == nil {
+		return nil
+	}
+	return a.selectedBoard.Conn
+}
+
+// setSelectedBoard installs the board selectBoard just connected. Paired with boardSnapshot: the agent's copy
+// and this write take the same lock.
+func (a *App) setSelectedBoard(b *board.Board) {
+	a.boardMu.Lock()
+	defer a.boardMu.Unlock()
+	*a.selectedBoard = *b
+}
+
 // boardIdentity keys a board by serial, or by address for network boards that report none.
 func boardIdentity(serial, address string) string {
 	if serial != "" {
@@ -173,23 +267,24 @@ func flushFailureSummary(failed map[string]error) string {
 
 // NetworkStatus queries the board's Wi-Fi state, active connection and internet reachability over the shared board connection (bounded so a wedged link can't hang the tool).
 func (b boardAccess) NetworkStatus(ctx context.Context) (boardmcp.NetworkStatus, error) {
-	sb := b.app.selectedBoard
+	sb := b.app.boardSnapshot()
 	if !sb.HasConn() { // queried over the connection
 		return boardmcp.NetworkStatus{Connected: false}, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	status, err := wifi.GetWiFiStatus(ctx, sb.Conn)
+	status, err := network.GetNetworkStatus(ctx, sb.Conn)
 	if err != nil {
-		return boardmcp.NetworkStatus{}, fmt.Errorf("wifi status: %w", err)
+		return boardmcp.NetworkStatus{}, fmt.Errorf("network status: %w", err)
 	}
-	out := boardmcp.NetworkStatus{Connected: true, Wifi: string(status)}
+	out := boardmcp.NetworkStatus{
+		Connected: true,
+		Wifi:      string(status.WiFi),
+		Internet:  status.Internet,
+	}
 	if name, err := network.GetConnectionName(ctx, sb.Conn); err == nil && name != nil {
 		out.ConnectionName = *name
-	}
-	if online, err := network.GetInternetStatus(ctx, sb.Conn); err == nil {
-		out.Internet = online
 	}
 	return out, nil
 }

@@ -58,6 +58,7 @@ const makeProps = (overrides: Partial<ReloadProps> = {}): ReloadProps => ({
   currentSection: 'my-apps',
   apps: [],
   lastAppInfoLoaded: true,
+  breadcrumbId: undefined,
   ...overrides,
 });
 
@@ -78,7 +79,27 @@ describe('useReloadApp', () => {
       renderHook(() => useReloadApp(makeProps()));
 
       await waitFor(() => {
-        expect(saveAppId).toHaveBeenCalledWith('app-1', 'my-apps');
+        expect(saveAppId).toHaveBeenCalledWith('app-1', 'my-apps', undefined);
+      });
+      expect(resetAppId).not.toHaveBeenCalled();
+    });
+
+    it('saves the breadcrumbId when opening an app from Inspirations', async () => {
+      renderHook(() =>
+        useReloadApp(
+          makeProps({
+            currentSection: 'examples',
+            breadcrumbId: 'inspirations',
+          }),
+        ),
+      );
+
+      await waitFor(() => {
+        expect(saveAppId).toHaveBeenCalledWith(
+          'app-1',
+          'examples',
+          'inspirations',
+        );
       });
       expect(resetAppId).not.toHaveBeenCalled();
     });
@@ -137,6 +158,58 @@ describe('useReloadApp', () => {
         expect(navigate).toHaveBeenCalledWith({
           to: '/my-apps/$appId',
           params: { appId: 'app-2' },
+        });
+      });
+    });
+
+    it('navigates to the saved Inspirations app with breadcrumbId', async () => {
+      pathname = '/examples';
+      renderHook(() =>
+        useReloadApp(
+          withLastApp({
+            boardsProps: makeBoardsProps({
+              lastAppInfo: {
+                appId: 'app-2',
+                section: 'examples',
+                breadcrumbId: 'inspirations',
+              },
+            }),
+            apps: [{ id: 'app-2' }],
+          }),
+        ),
+      );
+
+      await waitFor(() => {
+        expect(navigate).toHaveBeenCalledWith({
+          to: '/examples/$appId',
+          params: { appId: 'app-2' },
+          search: { from: 'inspirations' },
+        });
+      });
+    });
+
+    it('drops an unknown saved breadcrumbId', async () => {
+      pathname = '/examples';
+      renderHook(() =>
+        useReloadApp(
+          withLastApp({
+            boardsProps: makeBoardsProps({
+              lastAppInfo: {
+                appId: 'app-2',
+                section: 'examples',
+                breadcrumbId: 'unknown',
+              },
+            }),
+            apps: [{ id: 'app-2' }],
+          }),
+        ),
+      );
+
+      await waitFor(() => {
+        expect(navigate).toHaveBeenCalledWith({
+          to: '/examples/$appId',
+          params: { appId: 'app-2' },
+          search: undefined,
         });
       });
     });

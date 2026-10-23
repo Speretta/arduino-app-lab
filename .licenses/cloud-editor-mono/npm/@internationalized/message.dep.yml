@@ -1,9 +1,9 @@
 ---
 name: "@internationalized/message"
-version: 3.1.6
+version: 3.1.10
 type: npm
 summary: Internationalized message formatting and locale negotiation
-homepage: 
+homepage:
 license: apache-2.0
 licenses:
 - sources: LICENSE

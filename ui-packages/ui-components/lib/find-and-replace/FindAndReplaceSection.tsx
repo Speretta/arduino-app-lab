@@ -1,7 +1,4 @@
-import {
-  ChevronRightNoPad,
-  CloseX,
-} from '@cloud-editor-mono/images/assets/icons';
+import { ChevronDown, CloseX } from '@cloud-editor-mono/images/assets/icons';
 import { closeSearchPanel as cmCloseSearchPanel } from '@codemirror/search';
 import clsx from 'clsx';
 import React, { useState } from 'react';
@@ -54,7 +51,7 @@ const FindAndReplaceSection: React.FC<FindAndReplaceProps> = (
             [styles['active']]: isReplacing,
           }),
         }}
-        Icon={ChevronRightNoPad}
+        Icon={ChevronDown}
       />
       <div>
         <FindSection

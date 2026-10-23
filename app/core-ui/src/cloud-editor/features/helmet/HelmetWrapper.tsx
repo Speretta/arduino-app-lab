@@ -1,10 +1,9 @@
+import { useTheme } from '@bcmi-labs/art-ui';
 import ArduinoTabLogo from '@cloud-editor-mono/images/public/arduino-tab-logo.svg';
 import ArduinoTabLogoWhite from '@cloud-editor-mono/images/public/arduino-tab-logo-white.svg';
 import { useI18n } from '@cloud-editor-mono/ui-components';
-import { useContext } from 'react';
 import { Helmet } from 'react-helmet-async';
 
-import { ThemeContext } from '../../../common/providers/theme/themeContext';
 import { messages } from './messages';
 
 interface HelmetWrapperProps {
@@ -15,7 +14,7 @@ const HelmetWrapper: React.FC<HelmetWrapperProps> = (
   props: HelmetWrapperProps,
 ) => {
   const { tabTitle } = props;
-  const { isDarkModeOs } = useContext(ThemeContext);
+  const { themeName } = useTheme();
 
   const { formatMessage } = useI18n();
 
@@ -29,7 +28,7 @@ const HelmetWrapper: React.FC<HelmetWrapperProps> = (
       <link
         rel="icon"
         type="image/svg+xml"
-        href={isDarkModeOs ? ArduinoTabLogoWhite : ArduinoTabLogo}
+        href={themeName === 'light' ? ArduinoTabLogoWhite : ArduinoTabLogo}
       />
     </Helmet>
   );

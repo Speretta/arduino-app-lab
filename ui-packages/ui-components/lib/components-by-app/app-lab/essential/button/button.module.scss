@@ -1,4 +1,6 @@
 @use "@cloud-editor-mono/arduino-sass";
+@use "../../../../../public/shared.module.scss";
+@use "../../../../typography/typography.module.scss" as typography;
 
 .button {
     cursor: pointer;
@@ -9,6 +11,20 @@
     border: 2px solid transparent;
     transition: all 0.1s;
     padding: 0;
+    font-family: typography.$open-sans-font-family;
+    font-weight: 600;
+
+    &.disable-interactive {
+        &:hover,
+        &:focus,
+        &:active {
+            transition: none !important;
+            animation: none !important;
+            border: 2px solid transparent !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }
+    }
 
     & > svg {
         width: 14px;
@@ -19,7 +35,7 @@
             $bg-color: var(--component-bg-accent, #25c2c7);
             $color: var(--text-inverted, #171e21);
             $hover-bg-color: var(--component-bg-accent-strong, #7fcbcd);
-            $focus-color: var(--border-selected, #c8e9ea);
+            $focus-color: var(--tealscale-pastel-turquoise, #c8e9ea);
 
             color: $color;
             svg path {
@@ -53,7 +69,7 @@
                 ),
                 var(--component-bg-selected, rgba(37, 194, 199, 0.2));
 
-            $focus-color: var(--border-selected, #c8e9ea);
+            $focus-color: var(--tealscale-pastel-turquoise, #c8e9ea);
 
             color: $color;
             svg path {
@@ -84,7 +100,7 @@
         &.tertiary {
             $color: var(--text-accent, #25c2c7);
             $hover-bg-color: var(--component-bg-hover, rgba(37, 194, 199, 0.08));
-            $focus-color: var(--border-selected, #c8e9ea);
+            $focus-color: var(--tealscale-pastel-turquoise, #c8e9ea);
 
             color: $color;
             svg path {
@@ -150,7 +166,7 @@
                     var(--component-bg-flexible, rgba(174, 184, 184, 0.15)) 0%,
                     var(--component-bg-flexible, rgba(174, 184, 184, 0.15)) 100%
                 ),
-                rgba(255, 136, 120, 0.15);
+                var(--feedback-error-flexible);
             $focus-color: var(--feedback-error-default, #ff8878);
 
             color: $color;
@@ -305,23 +321,32 @@
         }
     }
 
-    &.x-small,
-    &.xx-small {
-        border-radius: 8px;
-        padding: 0 12px;
-        height: 28px;
-    }
-
-    &.small {
-        padding: 7px 16px;
-        border-radius: 10px;
-        height: 36px;
-    }
-
     &.large {
         border-radius: 12px;
         padding: 13px 16px;
         height: 48px;
+        font-size: 14px;
+    }
+
+    &.small {
+        padding: 8px 16px;
+        border-radius: 10px;
+        height: 36px;
+        font-size: 14px;
+    }
+
+    &.x-small {
+        border-radius: 8px;
+        padding: 0 12px;
+        height: 28px;
+        font-size: 12px;
+    }
+
+    &.xx-small {
+        border-radius: 4px;
+        padding: 0 6px;
+        height: 20px;
+        font-size: 10px;
     }
 }
 

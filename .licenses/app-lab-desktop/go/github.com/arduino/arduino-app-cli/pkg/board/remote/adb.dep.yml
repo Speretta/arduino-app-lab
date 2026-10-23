@@ -1,12 +1,12 @@
 ---
 name: github.com/arduino/arduino-app-cli/pkg/board/remote/adb
-version: v0.11.0-rc.1.0.20260521084642-af3d137da04a
+version: v0.14.0-rc.6.0.20261012142739-0a31d48fc50e
 type: go
 summary:
 homepage: https://pkg.go.dev/github.com/arduino/arduino-app-cli/pkg/board/remote/adb
 license: gpl-3.0
 licenses:
-- sources: arduino-app-cli@v0.11.0-rc.1.0.20260521084642-af3d137da04a/LICENSE
+- sources: arduino-app-cli@v0.14.0-rc.6.0.20261012142739-0a31d48fc50e/LICENSE
   text: |2
                         GNU GENERAL PUBLIC LICENSE
                            Version 3, 29 June 2007
@@ -682,7 +682,7 @@ licenses:
     the library.  If this is what you want to do, use the GNU Lesser General
     Public License instead of this License.  But first, please read
     <https://www.gnu.org/licenses/why-not-lgpl.html>.
-- sources: arduino-app-cli@v0.11.0-rc.1.0.20260521084642-af3d137da04a/README.md
+- sources: arduino-app-cli@v0.14.0-rc.6.0.20261012142739-0a31d48fc50e/README.md
   text: |-
     GPL-3.0-or-later
 

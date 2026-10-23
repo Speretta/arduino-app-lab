@@ -1,7 +1,7 @@
 @use "../../../../../public/shared.module.scss";
 
 .device {
-    background-color: shared.theme-var(--associate-dialog-card-picture-background);
+    background-color: var(--associate-dialog-card-picture-background);
     display: flex;
     flex-direction: column;
     align-items: center;

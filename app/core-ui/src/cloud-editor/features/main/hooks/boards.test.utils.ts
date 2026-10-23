@@ -74,12 +74,34 @@ export const mockIotESP32Online = {
   isAssociated: false,
 };
 
+// A stable-serial board (MKR WiFi 1010) whose IoT metadata has NO serial number
+// (e.g. board migrated via BLE, so iot-api can't return a serial). Used to verify
+// the FQBN fallback still matches its USB port and enables upload.
+export const mockIotMkr1010OnlineNoSerial = {
+  id: 'mock-device-mkr-iot',
+  isIot: true,
+  originalName: 'Arduino MKR WiFi 1010',
+  name: 'Dave - Arduino MKR WiFi 1010',
+  portName: IotPortName.Online,
+  fqbn: 'arduino:samd:mkrwifi1010',
+  portBoardId: createIotPortBoardID(IotPortName.Online, 'mock-device-mkr-iot'),
+  serialNumber: '',
+  architecture: 'samd',
+  isUnknownBoard: false,
+  isAssociated: false,
+  otaCompatible: true,
+};
+
 export const iotDevicesGroupsWithOneOnline: IotDevicesGroups = {
   online: [mockIotUnoOnline],
   offline: [],
 };
 export const iotDevicesGroupsWithESP32Online: IotDevicesGroups = {
   online: [mockIotESP32Online],
+  offline: [],
+};
+export const iotDevicesGroupsWithMkr1010OnlineNoSerial: IotDevicesGroups = {
+  online: [mockIotMkr1010OnlineNoSerial],
   offline: [],
 };
 export const iotDevicesGroupsWithOneOffline: IotDevicesGroups = {
@@ -165,112 +187,96 @@ export function removeESP32MappedPort(): void {
   test_RemoveMappedPort(mockESP32.id);
 }
 
+// An ESP32 IoT device with no serial number in iot-api, and its USB port as
+// production sees it: the boards API does not know ESP32 USB chips, so the port
+// is an unknown board with no fqbn.
+const mockIotESP32NoSerial = {
+  id: 'mock-device-esp32-no-serial-iot',
+  isIot: true,
+  originalName: 'ESP32 Dev Module',
+  name: 'Dave - ESP32 Dev Module',
+  fqbn: 'esp32:esp32:esp32',
+  serialNumber: '',
+  architecture: 'esp32',
+  isUnknownBoard: false,
+  isAssociated: false,
+  otaCompatible: true,
+};
+export const mockIotESP32OnlineNoSerial = {
+  ...mockIotESP32NoSerial,
+  portName: IotPortName.Online,
+  portBoardId: createIotPortBoardID(
+    IotPortName.Online,
+    mockIotESP32NoSerial.id,
+  ),
+};
+export const mockIotESP32OfflineNoSerial = {
+  ...mockIotESP32NoSerial,
+  portName: IotPortName.Offline,
+  portBoardId: createIotPortBoardID(
+    IotPortName.Offline,
+    mockIotESP32NoSerial.id,
+  ),
+};
+export const iotDevicesGroupsWithESP32OnlineNoSerial: IotDevicesGroups = {
+  online: [mockIotESP32OnlineNoSerial],
+  offline: [],
+};
+export const iotDevicesGroupsWithESP32OfflineNoSerial: IotDevicesGroups = {
+  online: [],
+  offline: [mockIotESP32OfflineNoSerial],
+};
+export const iotDevicesGroupsWithMkr1010OfflineNoSerial: IotDevicesGroups = {
+  online: [],
+  offline: [
+    {
+      ...mockIotMkr1010OnlineNoSerial,
+      portName: IotPortName.Offline,
+      portBoardId: createIotPortBoardID(
+        IotPortName.Offline,
+        mockIotMkr1010OnlineNoSerial.id,
+      ),
+    },
+  ],
+};
+
+export const mockUnknownESP32Port = {
+  id: 'mock-device-unknown-esp32',
+  name: 'Unknown',
+  portName: '/dev/cu.usbserial-0001',
+  portBoardId: createPortBoardID('/dev/cu.usbserial-0001', '0xea60', '0x10c4'),
+  isOpen: true,
+  serialNumber: '0001',
+  productId: '0xea60',
+  vendorId: '0x10c4',
+  isUnknownBoard: true,
+};
+export function addUnknownESP32MappedPort(): void {
+  test_AddMappedPort(mockUnknownESP32Port);
+}
+
 export const fqbnQueryData: {
   [key: string]: ArduinoBuilderBoardv3Full_BuilderApi;
 } = {
   'arduino:samd:mkrwifi1010': {
     architecture: 'samd',
     fqbn: 'arduino:samd:mkrwifi1010',
-    href: '/v3/boards/arduino:samd:mkrwifi1010',
-    id: 'mkrwifi1010',
     name: 'Arduino MKR WiFi 1010',
-    package: 'arduino',
-    plan: 'create-free',
+    board_id: 'mkrwifi1010',
+    vendor: 'arduino',
   },
   'arduino:avr:uno': {
     architecture: 'avr',
     fqbn: 'arduino:avr:uno',
-    href: '/v3/boards/arduino:avr:uno',
-    id: 'uno',
     name: 'Arduino Uno',
-    package: 'arduino',
-    plan: 'create-free',
+    board_id: 'uno',
+    vendor: 'arduino',
   },
   'esp32:esp32:esp32doit-devkit-v1': {
     architecture: 'esp32',
     fqbn: 'esp32:esp32:esp32doit-devkit-v1',
-    href: '/v3/boards/esp32:esp32:esp32doit-devkit-v1',
-    id: 'esp32doit-devkit-v1',
-    menus: [
-      {
-        id: 'UploadSpeed',
-        name: 'Upload Speed',
-        variants: [
-          {
-            id: '921600',
-            name: '921600',
-          },
-          {
-            id: '115200',
-            name: '115200',
-          },
-          {
-            id: '230400',
-            name: '230400',
-          },
-          {
-            id: '460800',
-            name: '460800',
-          },
-        ],
-      },
-      {
-        id: 'FlashFreq',
-        name: 'Flash Frequency',
-        variants: [
-          {
-            id: '80',
-            name: '80MHz',
-          },
-          {
-            id: '40',
-            name: '40MHz',
-          },
-        ],
-      },
-      {
-        id: 'DebugLevel',
-        name: 'Core Debug Level',
-        variants: [
-          {
-            id: 'none',
-            name: 'None',
-          },
-          {
-            id: 'error',
-            name: 'Error',
-          },
-          {
-            id: 'warn',
-            name: 'Warn',
-          },
-          {
-            id: 'info',
-            name: 'Info',
-          },
-          {
-            id: 'debug',
-            name: 'Debug',
-          },
-        ],
-      },
-      {
-        id: 'EraseFlash',
-        name: 'Erase All Flash Before Sketch Upload',
-        variants: [
-          {
-            id: 'none',
-            name: 'Disabled',
-          },
-          {
-            id: 'all',
-            name: 'Enabled',
-          },
-        ],
-      },
-    ],
     name: 'DOIT ESP32 DEVKIT V1',
-    package: 'esp32',
-    plan: 'create-free',
+    board_id: 'esp32doit-devkit-v1',
+    vendor: 'espressif',
   },
 };

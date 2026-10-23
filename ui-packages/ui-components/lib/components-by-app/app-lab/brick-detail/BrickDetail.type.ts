@@ -1,102 +1,65 @@
-import { BrickDetails, BrickInstance } from '@cloud-editor-mono/infrastructure';
 import {
-  Board,
-  ConfigureAppBrickDialogLogic,
-  TrainNewModelDialogLogic,
-} from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+  AppBrickDetails,
+  BrickDetails,
+} from '@cloud-editor-mono/infrastructure';
 
-export interface BrickDetailModelImpulse {
-  id: string;
-  name: string;
-  isInstalled: boolean;
-  installedModelId: string | undefined;
-  isOutdated?: boolean;
-  /**
-   * Board model id for an Edge Impulse model that is already known to the
-   * board and can therefore be downloaded by id through the generic,
-   * login-free path (no linked Edge Impulse account required). Undefined for
-   * models that must be installed from the Edge Impulse cloud.
-   */
-  downloadModelId?: string;
-}
+import { AddHuggingFaceModelDialogProps } from '../../../dialogs/app-lab/add-hugging-face-model-dialog/AddHuggingFaceModelDialog';
+import { ConfigureAppBrickDialogLogic } from '../../../dialogs/app-lab/configure-app-brick-dialog/ConfigureAppBrickDialog';
+import { TrainNewModelDialogProps } from '../../../dialogs/app-lab/train-new-model-dialog/TrainNewModelDialog';
+import { BrickDetailModel, ModelDownloadInfo } from '../ai-model/AiModel.type';
+import { BrickExample } from './sub-components/tabs/examples-tab/ExamplesTab.type';
 
-export interface BrickDetailModel {
-  id: string;
-  name: string;
-  description: string;
-  url?: string;
-  source: string;
-  isBuiltIn: boolean;
-  isInstalled: boolean;
-  metadata: Record<string, string>;
-  edgeImpulseProps?: {
-    projectId: string;
-    impulses: BrickDetailModelImpulse[];
-  };
+const BRICK_DETAIL_TAB_IDS = [
+  'overview',
+  'examples',
+  'documentation',
+  'aiModels',
+] as const;
+
+export type BrickDetailTabId = typeof BRICK_DETAIL_TAB_IDS[number];
+
+export const isBrickDetailTabId = (value: unknown): value is BrickDetailTabId =>
+  typeof value === 'string' &&
+  (BRICK_DETAIL_TAB_IDS as readonly string[]).includes(value);
+
+interface ConfigureBrickDialogProps {
+  open: boolean;
+  appId: string;
+  setOpen: (open: boolean) => void;
+  logic: ConfigureAppBrickDialogLogic;
+  onOpenExternal: (url: string) => void;
 }
 
 export type BrickDetailLogic = (
   brickId: string,
-  appId?: string,
+  onModelInstalled?: (modelId: string) => void,
 ) => {
-  board?: Board;
   brick?: BrickDetails;
-  isBrickLoading?: boolean;
-  isCustomBrick?: boolean;
-  brickInstance?: BrickInstance;
+  isBrickLoading: boolean;
+  isCustomBrick: boolean;
+  brickInstance?: AppBrickDetails;
   readme?: string | null;
   apiDocs?: string | null;
-  examples?:
-    | {
-        content: string;
-        path: string;
-        exampleName?: string;
-        exampleId?: string;
-      }[]
-    | null;
-  models?: BrickDetailModel[];
-  readOnly?: boolean;
-  hideEdgeImpulse?: boolean;
-  isExample?: boolean;
+  examples?: BrickExample[] | null;
+  models: BrickDetailModel[];
+  readOnly: boolean;
+  trainNewModelEnabled: boolean;
+  addHuggingFaceModelEnabled: boolean;
+  isExample: boolean;
   diskUsageWarning: (
     modelId: string,
   ) => { used: string; total: string } | undefined;
-  configureDialogProps?: {
-    open: boolean;
-    appId: string;
-    setOpen: (open: boolean) => void;
-    logic: ConfigureAppBrickDialogLogic;
-    onOpenExternal: (url: string) => void;
-  };
-  trainNewModelDialogProps?: {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    logic: TrainNewModelDialogLogic;
-  };
-  isEdgeImpulseConnected: boolean;
+  configureDialogProps?: ConfigureBrickDialogProps;
+  trainNewModelDialogProps?: TrainNewModelDialogProps;
   onTrainNewModelClick: () => void;
   openExternalLink: (url: string) => void;
   downloadEIModel: (projectId: string, impulseId: string) => Promise<void>;
-  downloadGenericModel: (projectId: string) => Promise<void>;
+  downloadGenericModel: (modelId: string) => Promise<void>;
   removeModel: (modelId: string, isForced?: boolean) => Promise<void>;
   openModelPage: (modelId: string, impulseId?: string) => void;
   getDownloadInfo: (modelId: string) => ModelDownloadInfo | undefined;
-  modelDownloadInfo?: ModelDownloadInfo;
   updateModelInUse: (modelId: string) => Promise<void>;
   isModelUninstalling: (modelId: string) => boolean;
-  isModelInstalledInApp?: (model: BrickDetailModel) => boolean;
-};
-
-export type UploadAiModelLogic = {
-  onUpload: (file: File) => void;
-  onError: (error: string) => void;
-  openImportModelDialog: () => void;
-};
-
-export type ModelDownloadInfo = {
-  impulseId: string;
-  isDownloading: boolean;
-  percentage?: number;
-  error?: boolean;
-  success?: boolean;
+  isModelInstalledInApp: (model: BrickDetailModel) => boolean;
+  addHuggingFaceModelDialogProps?: AddHuggingFaceModelDialogProps;
 };

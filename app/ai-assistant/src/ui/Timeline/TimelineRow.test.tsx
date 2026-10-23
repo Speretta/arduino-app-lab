@@ -5,7 +5,7 @@ import { FileOpenProvider } from '../Link/FileOpenContext';
 import type { TimelineItem } from './Timeline';
 import { TimelineRow } from './TimelineRow';
 
-const openFile = vi.fn<[string], void>();
+const openFile = vi.fn<(path: string) => void>();
 
 const item: TimelineItem = {
   id: 'tool-1',

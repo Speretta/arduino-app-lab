@@ -1,9 +1,9 @@
 ---
 name: crelt
-version: 1.0.6
+version: 1.0.7
 type: npm
 summary: Tiny DOM-element-creation utility
-homepage: https://github.com/marijnh/crelt#readme
+homepage: https://code.haverbeke.berlin/marijn/crelt
 license: mit
 licenses:
 - sources: LICENSE

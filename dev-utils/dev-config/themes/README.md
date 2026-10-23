@@ -1,1 +1,0 @@
-Folder for themes scripts output files and env variables.

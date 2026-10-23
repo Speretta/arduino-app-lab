@@ -5,7 +5,7 @@ import {
   ThreeDots,
 } from '@cloud-editor-mono/images/assets/icons';
 import {
-  BrickDetailModelImpulse,
+  AiModelImpulse,
   ButtonAppearance,
   ButtonVariant,
   DropdownMenuButton,
@@ -16,13 +16,13 @@ import {
 
 import styles from '../ai-model.module.scss';
 import { AiModelProps } from '../AiModel.type';
-import { isInstalledDownloadableModel } from '../helpers';
+import { canUninstallModel } from '../helpers';
 import { messages } from '../messages';
 
 export interface AiModelMenuProps {
   model: AiModelProps['model'];
   isEdgeImpulse: boolean;
-  selectedImpulse?: BrickDetailModelImpulse;
+  selectedImpulse?: AiModelImpulse;
   openModelPage?: AiModelProps['openModelPage'];
   removeModel?: AiModelProps['removeModel'];
   forceRemove?: boolean;
@@ -103,7 +103,7 @@ export const AiModelMenu: React.FC<AiModelMenuProps> = ({
     );
   }
 
-  if (isInstalledDownloadableModel(model)) {
+  if (canUninstallModel(model)) {
     return (
       <div className={styles['ai-model-actions']}>
         <DropdownMenuButton

@@ -1,3 +1,4 @@
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
 @use "../../../images/public/css-images.module.scss";
 
 .serial-monitor-wrapper {
@@ -5,14 +6,25 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    background-color: var(--editor-background);
 }
 
 .serial-monitor-contents-message-sent {
-    color: #00979d;
+    color: var(--accent-default, #00979d);
 
+    // Masked rather than inserted as content: the glyph is a single-colour data URI, so only a mask can tint it with the accent colour.
     &::before {
-        content: url(css-images.$monitorInputIconData);
+        content: "";
+        display: inline-block;
         width: 12px;
+        height: 10px;
         margin-right: 6px;
+        background-color: currentColor;
+        mask-image: url("#{css-images.$monitorInputIconData}");
+        mask-repeat: no-repeat;
+        mask-position: center;
+        -webkit-mask-image: url("#{css-images.$monitorInputIconData}");
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-position: center;
     }
 }

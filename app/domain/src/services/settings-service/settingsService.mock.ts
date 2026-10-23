@@ -2,6 +2,7 @@ import { NetworkItem } from '@cloud-editor-mono/ui-components/lib/components-by-
 
 import type {
   EthernetConnectionStatus,
+  NetworkStatus,
   SettingsService,
   WiFiConnectionStatus,
 } from './settings-service.type';
@@ -21,16 +22,12 @@ export const MockSettingsService: SettingsService = {
     return [...mockNetworkList];
   },
 
-  async getWiFiStatus(): Promise<WiFiConnectionStatus> {
-    return wifiStatus;
-  },
-
-  async getEthernetStatus(): Promise<EthernetConnectionStatus> {
-    return ethernetStatus;
-  },
-
-  async getInternetStatus(): Promise<boolean> {
-    return internetStatus;
+  async getNetworkStatus(): Promise<NetworkStatus> {
+    return {
+      wifi: wifiStatus,
+      ethernet: ethernetStatus,
+      internet: internetStatus,
+    };
   },
 
   async connectToWiFi(ssid: string): Promise<void | 'timeout'> {

@@ -8,7 +8,7 @@ import {
   openAgentSerialMonitor$,
   sendToAgentSerialMonitor,
 } from '@cloud-editor-mono/create-agent-client-ts';
-import { SerialMonitorStatus } from '@cloud-editor-mono/ui-components';
+import { SerialMonitorStatus } from '@cloud-editor-mono/ui-components/lib/serial-monitor/SerialMonitor.type';
 import {
   closeWebSerialMonitor$,
   openWebSerialMonitor$,

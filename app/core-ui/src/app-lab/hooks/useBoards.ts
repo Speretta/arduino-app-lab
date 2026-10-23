@@ -1,3 +1,4 @@
+import { requestBoardSwitch } from '@cloud-editor-mono/ai-assistant';
 import {
   boardNeedsImageUpdate,
   getBoards,
@@ -6,7 +7,6 @@ import {
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import { Board } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useQuery } from '@tanstack/react-query';
-import { del, get, set } from 'idb-keyval';
 import { useCallback, useEffect, useReducer, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -17,6 +17,7 @@ import {
   PREVIOUS_BOARD_IDS,
   PREVIOUS_BOARD_SERIALS,
 } from '../constants';
+import { del, get, set } from '../services/persistentStore';
 import { useBoardLifecycleStore } from '../store/boardLifecycle';
 import { useBoardSerialTracker } from './useBoardSerialTracker';
 import { useIsBoard } from './useIsBoard';
@@ -26,6 +27,7 @@ const CONNECT_TIMEOUT_MS = 15_000;
 export type BoardAppInfo = {
   appId: string;
   section: string;
+  breadcrumbId?: string;
 };
 
 export type UseBoards = () => {
@@ -37,6 +39,7 @@ export type UseBoards = () => {
     | 'conn-started'
     | 'conn-error'
     | 'conn-and-selection-done';
+  // Asks first when the agent is mid-turn (opens SwitchBoardDialog); switches straight away otherwise.
   selectBoard: (board: Board) => Promise<void>;
   autoSelectBoard: (boardSerial: string) => Promise<void>;
   isAutoSelectingBoard: boolean;
@@ -50,7 +53,11 @@ export type UseBoards = () => {
   setSelectedBoardCheckingStatus: () => void;
   lastAppInfo?: BoardAppInfo;
   lastAppInfoLoaded: boolean;
-  saveAppId: (appId: string, section: string) => Promise<void>;
+  saveAppId: (
+    appId: string,
+    section: string,
+    breadcrumbId?: string,
+  ) => Promise<void>;
   resetAppId: () => Promise<void>;
 };
 
@@ -225,13 +232,21 @@ export const useBoards: UseBoards = () => {
   const [isAutoSelectingBoard, setIsAutoSelectingBoard] = useState(true);
   const [couldNotAutoSelectBoard, setCouldNotAutoSelectBoard] = useState(false);
 
-  const { isLoading: isLoadingBoards } = useQuery(['boards'], getBoards, {
+  // `isPending`, not `isLoading`: flashing disables the query, and v5 reports
+  // `isLoading: false` while disabled. Auto-selection reads this to decide
+  // whether an empty board list means "none found" or "not asked yet".
+  const { data: boardsData, isPending: isLoadingBoards } = useQuery({
+    queryKey: ['boards'],
+    queryFn: getBoards,
     refetchInterval: isBoard ? undefined : 3000,
     enabled: !boardIsFlashing,
-    onSuccess: (data) => {
-      dispatch({ type: 'SET_BOARDS', payload: data });
-    },
   });
+
+  useEffect(() => {
+    if (boardsData) {
+      dispatch({ type: 'SET_BOARDS', payload: boardsData });
+    }
+  }, [boardsData, dispatch]);
 
   // If the selected board is unplugged, and no longer detected for 5 seconds, reload the app
   useEffect(() => {
@@ -366,6 +381,25 @@ export const useBoards: UseBoards = () => {
     [connectToBoard, updateLastConnection],
   );
 
+  // Switching board stops the agent, so requestBoardSwitch holds the switch back behind its confirmation
+  // while a turn is in flight and re-issues it on confirm. Auto-selection calls handleSelectBoard directly
+  // on purpose — it only runs at startup, before there is an agent to interrupt.
+  const requestSelectBoard = useCallback(
+    async (board: Board): Promise<void> => {
+      const maySwitch = requestBoardSwitch({
+        currentBoardName:
+          useBoardLifecycleStore.getState().selectedConnectedBoard?.name,
+        confirm: (): void => {
+          void handleSelectBoard(board);
+        },
+      });
+      if (maySwitch) {
+        await handleSelectBoard(board);
+      }
+    },
+    [handleSelectBoard],
+  );
+
   const handleBoardConnectionWithPassword = useCallback(
     async (password: string) => {
       if (!selectedBoard) {
@@ -425,14 +459,18 @@ export const useBoards: UseBoards = () => {
 
   // save app ID mapped to current board with section
   const saveAppId = useCallback(
-    async (appId: string, section: string): Promise<void> => {
+    async (
+      appId: string,
+      section: string,
+      breadcrumbId?: string,
+    ): Promise<void> => {
       const boardSerial =
         useBoardLifecycleStore.getState().selectedConnectedBoard?.serial;
       if (!boardSerial) return;
       const mapping = {
         ...((await get<Record<string, BoardAppInfo>>(BOARD_APP_MAPPING)) || {}),
       };
-      mapping[boardSerial] = { appId, section };
+      mapping[boardSerial] = { appId, section, breadcrumbId };
       await set(BOARD_APP_MAPPING, mapping);
     },
     [],
@@ -596,7 +634,7 @@ export const useBoards: UseBoards = () => {
     selectedBoard: selectedConnectedBoard,
     selectingBoard: selectedBoard,
     boardSelectionStatus: boardStatus,
-    selectBoard: handleSelectBoard,
+    selectBoard: requestSelectBoard,
     autoSelectBoard,
     isAutoSelectingBoard,
     couldNotAutoSelectBoard,

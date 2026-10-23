@@ -12,6 +12,7 @@ const { app, runtime } = vi.hoisted(() => {
       AgentPrompt: vi.fn(async () => undefined),
       AgentCancel: vi.fn(async () => undefined),
       AgentCloseSession: vi.fn(async () => undefined),
+      AgentListSessions: vi.fn(async (): Promise<unknown[]> => []),
       AgentSetSessionModel: vi.fn(async () => undefined),
       AgentPermissionReply: vi.fn(async () => undefined),
       AgentSignIn: vi.fn(async () => undefined),
@@ -58,6 +59,9 @@ vi.mock('../../wailsjs/go/models', () => ({
         this.cancelled = src.cancelled;
       }
     },
+    EditorContext: {
+      createFrom: (src: object): object => ({ ...src }),
+    },
   },
 }));
 
@@ -76,16 +80,61 @@ describe('codingAgentService.impl — commands', () => {
     await svc.closeSession('s1');
     expect(app.AgentStart).toHaveBeenCalledWith('claude');
     expect(app.AgentStop).toHaveBeenCalled();
-    expect(app.AgentPrompt).toHaveBeenCalledWith('s1', 'hello');
+    expect(app.AgentPrompt).toHaveBeenCalledWith('s1', 'hello', undefined);
     expect(app.AgentCancel).toHaveBeenCalledWith('s1');
     expect(app.AgentCloseSession).toHaveBeenCalledWith('s1');
   });
 
-  it('newSession passes the appId as cwd (empty string when absent)', async () => {
+  // Agent Mode has no editor: Go gets a nil context and sends the agent nothing.
+  it('sends the editor beside the chat with the prompt, and nothing without one', async () => {
+    const editor = {
+      file: {
+        path: 'python/main.py',
+        content: 'import time\n',
+        unsaved: false,
+      },
+    };
+
+    await svc.prompt('s1', 'what does it do?', editor);
+    await svc.prompt('s1', 'and in Agent Mode?');
+
+    expect(app.AgentPrompt).toHaveBeenNthCalledWith(
+      1,
+      's1',
+      'what does it do?',
+      expect.objectContaining(editor),
+    );
+    expect(app.AgentPrompt).toHaveBeenNthCalledWith(
+      2,
+      's1',
+      'and in Agent Mode?',
+      undefined,
+    );
+  });
+
+  // The name spares the desktop an HTTP lookup on a path the user waits on, so dropping it here costs 2s per new chat.
+  it('passes the workspace app id and name (empty strings when absent)', async () => {
     await svc.newSession();
-    expect(app.AgentNewSession).toHaveBeenLastCalledWith('');
+    expect(app.AgentNewSession).toHaveBeenLastCalledWith('', '');
+    await svc.newSession('my-app', 'My App');
+    expect(app.AgentNewSession).toHaveBeenLastCalledWith('my-app', 'My App');
     await svc.newSession('my-app');
-    expect(app.AgentNewSession).toHaveBeenLastCalledWith('my-app');
+    expect(app.AgentNewSession).toHaveBeenLastCalledWith('my-app', '');
+  });
+});
+
+describe('codingAgentService.impl — session list', () => {
+  // The field is optional the whole way down, so dropping it here type-checks and fails silently: every session just looks unscoped.
+  it('carries the session workspace across the bridge', async () => {
+    app.AgentListSessions.mockResolvedValueOnce([
+      { id: 's1', workspaceAppId: 'dXNlcjpibGluaw' },
+      { id: 's2' },
+    ]);
+
+    const [scoped, general] = await svc.listSessions();
+
+    expect(scoped.workspaceAppId).toBe('dXNlcjpibGluaw');
+    expect(general.workspaceAppId).toBeUndefined();
   });
 });
 

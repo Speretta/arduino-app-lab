@@ -7,6 +7,6 @@ export const autocompletionConfig: Parameters<typeof autocompletion>[0] = {
   closeOnBlur: true,
   maxRenderedOptions: undefined,
   defaultKeymap: true,
-  aboveCursor: true,
+  aboveCursor: false,
   icons: true,
 };

@@ -1,4 +1,5 @@
 import { ArduinoUser } from '@bcmi-labs/art-auth';
+import { AccountActivity } from '@bcmi-labs/art-ui';
 import React from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 

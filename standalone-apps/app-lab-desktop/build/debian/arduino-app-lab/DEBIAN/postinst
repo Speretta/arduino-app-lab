@@ -2,3 +2,39 @@
 
 # TODO: xdg-mime default ArduinoAppLab.desktop x-scheme-handler/arduino-app-lab
 update-desktop-database
+
+# App Lab runs as `arduino`, and WebKit cannot open its storage when these
+# directories are owned by root. Only root-owned entries in App Lab's own
+# directories change, plus ~/.local and ~/.local/share when they are root-owned
+# directories. find -P never follows a symbolic link, and -execdir runs chown
+# inside the directory that holds the entry: a link placed in these
+# user-writable trees cannot send the chown to a file outside them.
+repair_ownership() {
+  home=$(getent passwd arduino | cut -d: -f6)
+  [ -n "$home" ] && [ -d "$home" ] || return 0
+  owner="arduino:$(id -gn arduino)" || return 0
+
+  set --
+  for start in "$home/.local" "$home/.cache"; do
+    [ -d "$start" ] && [ ! -L "$start" ] && set -- "$@" "$start"
+  done
+  [ $# -gt 0 ] || return 0
+
+  find -P "$@" -xdev \
+    \( -path "$home/.local" -o -path "$home/.local/share" \) \
+      \( -type d -user root -execdir chown -h "$owner" {} + -o -true \) \
+    -o -path "$home/.cache" \
+    -o \( -path "$home/.local/share/app-lab" \
+          -o -path "$home/.local/share/arduino-app-lab" \
+          -o -path "$home/.local/share/arduino_applab_workspace" \
+          -o -path "$home/.cache/app-lab" \) -type l -prune \
+    -o \( -path "$home/.local/share/app-lab" -o -path "$home/.local/share/app-lab/*" \
+          -o -path "$home/.local/share/arduino-app-lab" -o -path "$home/.local/share/arduino-app-lab/*" \
+          -o -path "$home/.local/share/arduino_applab_workspace" \
+          -o -path "$home/.local/share/arduino_applab_workspace/*" \
+          -o -path "$home/.cache/app-lab" -o -path "$home/.cache/app-lab/*" \) \
+      \( -user root -execdir chown -h "$owner" {} + -o -true \) \
+    -o -prune
+}
+
+repair_ownership || true

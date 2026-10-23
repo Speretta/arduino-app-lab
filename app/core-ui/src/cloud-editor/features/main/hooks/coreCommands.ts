@@ -35,7 +35,6 @@ import {
   useState,
 } from 'react';
 import { IntlContext } from 'react-intl';
-import { useObservable } from 'react-use';
 import { Subject } from 'rxjs';
 
 import { usePreferenceObservable } from '../../../../common/hooks/preferences';
@@ -49,6 +48,7 @@ import {
   useIotCertificateCheck,
   useIotUpload,
 } from '../../../../common/hooks/queries/iot';
+import { useObservableRef } from '../../../../common/hooks/useObservable';
 import { AuthContext } from '../../../../common/providers/auth/authContext';
 import { ComponentContext } from '../../../../common/providers/component/componentContext';
 import { SerialCommunicationContext } from '../../../../common/providers/serial-communication/serialCommunicationContext';
@@ -102,7 +102,8 @@ export const useCoreCommands: UseCoreCommands = function (
   );
   const [isUploading, setIsUploading] = useState<IsUploading>({ value: false });
 
-  const unsavedFileIds = useObservable(
+  // Only `saveAllFiles` reads the set.
+  const unsavedFileIdsRef = useObservableRef(
     getUnsavedFilesSubject<Subject<Set<FileId>>>(),
   );
 
@@ -110,34 +111,37 @@ export const useCoreCommands: UseCoreCommands = function (
     if (isReadOnly) return;
     if (isExampleSketchRoute) return;
 
-    if (unsavedFileIds) {
-      unsavedFileIds.forEach(async (fileId: string) => {
-        const subject$ = getCodeSubjectById(fileId).getValue();
+    unsavedFileIdsRef.current?.forEach(async (fileId: string) => {
+      const subject$ = getCodeSubjectById(fileId).getValue();
 
-        const code = subject$?.value;
-        const hash = subject$?.meta.hash;
+      const code = subject$?.value;
+      const hash = subject$?.meta.hash;
 
-        try {
-          const res = await saveSketchFileQuery({ code, fileId, hash });
-          if (!res || 'errStatus' in res) return;
+      try {
+        const res = await saveSketchFileQuery({ code, fileId, hash });
+        if (!res || 'errStatus' in res) return;
 
-          if (isCodeChangeWithCtx(subject$)) {
-            codeSubjectNext(
-              fileId,
-              code,
-              subject$.context.saveCode,
-              undefined,
-              false,
-              res?.hash,
-            );
-          }
-          getUnsavedFilesSubjectNext(fileId, false);
-        } catch (error) {
-          console.error(error);
+        if (isCodeChangeWithCtx(subject$)) {
+          codeSubjectNext(
+            fileId,
+            code,
+            subject$.context.saveCode,
+            undefined,
+            false,
+            res?.hash,
+          );
         }
-      });
-    }
-  }, [isReadOnly, isExampleSketchRoute, unsavedFileIds, saveSketchFileQuery]);
+        getUnsavedFilesSubjectNext(fileId, false);
+      } catch (error) {
+        console.error(error);
+      }
+    });
+  }, [
+    isReadOnly,
+    isExampleSketchRoute,
+    unsavedFileIdsRef,
+    saveSketchFileQuery,
+  ]);
 
   const {
     upload,

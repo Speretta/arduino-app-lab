@@ -22,37 +22,6 @@ export type KeyboardLayout = {
   label: string;
 };
 
-export type CarrierDeviceType = 'camera' | 'display';
-
-export type CarrierDeviceStatus = {
-  device: string;
-  option: string;
-  deviceType: CarrierDeviceType;
-};
-
-export type CarrierStatus = {
-  carrierName: string;
-  current: CarrierDeviceStatus[];
-  currentEnabled: boolean;
-  next: CarrierDeviceStatus[];
-  nextEnabled: boolean;
-};
-
-export type CarriersStatus = {
-  carriers: CarrierStatus[];
-};
-
-export type CarrierDevice = {
-  name: string;
-  deviceType: CarrierDeviceType;
-  availableDevices: string[];
-};
-
-export type Carrier = {
-  name: string;
-  devices: CarrierDevice[];
-};
-
 export type UseBoardConfigurationLogic = () => {
   hasBoardConfigurationError: boolean;
   checkBoardName: (name: string | undefined) => boolean;
@@ -99,7 +68,7 @@ export type UseConnectionLost = (
   onConnectionLost?: () => void,
 ) => void;
 
-export type BoardSerialTrackerLogic = {
+export type BoardSerialTrackerLogic = () => {
   isBoardNew: (serial: string) => Promise<boolean>;
   markBoardAsUsed: (serial: string) => Promise<void>;
   getLastConnection: (serial: string) => Promise<string | null>;

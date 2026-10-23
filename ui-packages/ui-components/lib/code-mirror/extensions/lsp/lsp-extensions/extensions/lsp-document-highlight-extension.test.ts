@@ -15,10 +15,10 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { LspMessage, LspRequestMessage } from '../../lsp-types';
 import { createLspClientTransport } from '../../lsp-client/lsp-client-transport';
 import { CustomLspClient } from '../../lsp-client/lsp-client-types';
 import { LspClientWorkspace } from '../../lsp-client/lsp-client-workspace';
+import { LspMessage, LspRequestMessage } from '../../lsp-types';
 import { getLspDocumentHighlightExtension } from './lsp-document-highlight-extension';
 
 vi.mock('../../lsp-debug', () => ({
@@ -30,7 +30,8 @@ const FILE_URI = `${WORKSPACE_URI}/main.py`;
 const DOC = 'value = 1\nprint(value)';
 const HIGHLIGHT_DEBOUNCE_MS = 150;
 
-const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve));
+const flush = (): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve));
 
 interface Backend {
   view: EditorView;
@@ -74,6 +75,8 @@ const startBackend = async (): Promise<Backend> => {
   });
 
   client.connect(transport);
+  // Sends leave the transport one at a time, so `initialize` is not out yet.
+  await flush();
 
   const requestsFor = (method: string): LspRequestMessage[] =>
     sent.filter((message) => message.method === method);
@@ -147,7 +150,9 @@ describe('lsp document highlight', () => {
     // `selection.main.head` never moves. That matters: the extension discards a
     // response whose cursor moved, which would hide the conversion entirely.
     view.dispatch({ selection: { anchor: 0 } });
-    view.dispatch({ changes: { from: view.state.doc.length, insert: '\nmore' } });
+    view.dispatch({
+      changes: { from: view.state.doc.length, insert: '\nmore' },
+    });
     await new Promise((resolve) =>
       setTimeout(resolve, HIGHLIGHT_DEBOUNCE_MS + 50),
     );
@@ -182,7 +187,7 @@ describe('lsp document highlight', () => {
     consoleError.mockRestore();
   });
 
-  // A cross-file rename opens the other file into the same pane, so a response
+  // A cross-file rename opens the other file into the same panel, so a response
   // for the file we asked about lands while the view shows a different one.
   // Positions from a 200-line module against a 2-line one threw
   // `RangeError: Invalid position 108 in document of length 18`.
@@ -240,8 +245,20 @@ describe('lsp document highlight', () => {
       jsonrpc: '2.0',
       id: request.id,
       result: [
-        { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } }, kind: 3 },
-        { range: { start: { line: 1, character: 6 }, end: { line: 1, character: 11 } }, kind: 2 },
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 5 },
+          },
+          kind: 3,
+        },
+        {
+          range: {
+            start: { line: 1, character: 6 },
+            end: { line: 1, character: 11 },
+          },
+          kind: 2,
+        },
       ],
     });
     await flush();

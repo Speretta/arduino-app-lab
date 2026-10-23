@@ -17,11 +17,13 @@ export type UseLanguageServer = () => {
   resetLspState: () => void;
 };
 
+const IDLE_LSP_STATE: LspState = { type: 'idle' };
+
 const idleLspStates: Record<LspId, LspState> = Array.from(
   new Set(Object.values(LSP_LANGS)),
 ).reduce((acc, lang) => {
   const lspId = lang as LspId;
-  acc[lspId] = { type: 'idle' };
+  acc[lspId] = IDLE_LSP_STATE;
   return acc;
 }, {} as Record<LspId, LspState>);
 
@@ -38,7 +40,7 @@ export const useLanguageServer: UseLanguageServer =
       return LSP_LANGS[ext as keyof typeof LSP_LANGS];
     }, [activeSelectedFile]);
     const lspState = useMemo((): LspState => {
-      if (!lspId) return { type: 'idle' };
+      if (!lspId) return IDLE_LSP_STATE;
       return lspStates[lspId];
     }, [lspId, lspStates]);
 
@@ -47,12 +49,15 @@ export const useLanguageServer: UseLanguageServer =
       setLspStates(idleLspStates);
     }, []);
 
-    return {
-      activeSelectedFile,
-      setActiveSelectedFile,
-      lspId,
-      lspState,
-      setLspStates,
-      resetLspState,
-    };
+    return useMemo(
+      () => ({
+        activeSelectedFile,
+        setActiveSelectedFile,
+        lspId,
+        lspState,
+        setLspStates,
+        resetLspState,
+      }),
+      [activeSelectedFile, lspId, lspState, resetLspState],
+    );
   };

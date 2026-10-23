@@ -1,5 +1,10 @@
 import { setCSSVariable } from '@cloud-editor-mono/common';
-import { AddTab, ChevronDown } from '@cloud-editor-mono/images/assets/icons';
+import {
+  AddTab,
+  ChatAgent,
+  ChevronDown,
+  SplitView,
+} from '@cloud-editor-mono/images/assets/icons';
 import {
   defaultDropAnimationSideEffects,
   DndContext,
@@ -9,6 +14,12 @@ import { SortableContext } from '@dnd-kit/sortable';
 import clsx from 'clsx';
 import { Key, useCallback, useEffect, useMemo, useRef } from 'react';
 
+import {
+  ButtonAppearance,
+  ButtonSize,
+  ButtonVariant,
+} from '../components-by-app/app-lab/essential/button';
+import { IconButton } from '../components-by-app/app-lab/essential/icon-button';
 import {
   useSplitDrag,
   useSplitDragPointer,
@@ -37,21 +48,45 @@ import styles from './tabs-bar.module.scss';
 interface EditorTabsBarProps {
   tabsBarLogic: TabsBarLogic;
   /**
-   * Pane this tabs bar belongs to. When provided alongside a
+   * Panel this tabs bar belongs to. When provided alongside a
    * SplitDragProvider, tab drags will report this as the drag's origin
-   * pane so cross-pane drop zones can dispatch Move semantics.
+   * panel so cross-panel drop zones can dispatch Move semantics.
    */
-  paneId?: 'A' | 'B';
+  panelId?: 'A' | 'B';
   classes?: { container?: string; selected?: string; tab?: string };
+  /**
+   * Toggles split view. Rendered here (rather than as the standalone
+   * absolutely-positioned overlay panel B still uses for its own disabled
+   * icon) so it sits in the same flex row as `agentPanel` below instead of
+   * floating on top of it — per Figma, split-view precedes the agent icon.
+   */
+  splitToggle?: {
+    label: string;
+    /** Panel B renders this as a static, non-interactive mirror icon. */
+    disabled?: boolean;
+    onToggle: VoidFunction;
+  };
+  /**
+   * Toggles the agent side panel. Lives in this bar's own `.tabs-bar-right`
+   * flex area (not an absolutely-positioned overlay) so it stays visible
+   * and non-overlapping when the panel narrows in split view.
+   */
+  agentPanel?: {
+    label: string;
+    isOpen?: boolean;
+    onToggle: VoidFunction;
+  };
 }
 
 /**
  * Hit-tests a pointer position against this bar's rendered tab elements
  * (identified by their `data-file-id` attribute, in DOM = tab order) and
  * returns the would-be insertion point for a tab dragged from the other
- * pane's bar, or null when the pointer is not over the bar.
+ * panel's bar, or null when the pointer is not over the bar. Takes the bar
+ * rather than the tabs list, so the strip beyond the last tab — which the
+ * list stops covering once it shrink-wraps — still drops at the end.
  */
-function getCrossPaneInsertion(
+function getCrossPanelInsertion(
   barEl: HTMLElement,
   pointer: { x: number; y: number },
 ): { tabId: string; direction: 'left' | 'right'; insertIndex: number } | null {
@@ -90,7 +125,7 @@ function getCrossPaneInsertion(
 
 // Distance (px) from each edge of the tabs bar within which a foreign tab
 // drag triggers auto-scroll, and the max scroll speed (px/frame) applied
-// right at the edge. Lets a cross-pane drag reach tabs that are scrolled
+// right at the edge. Lets a cross-panel drag reach tabs that are scrolled
 // out of view.
 const DRAG_AUTOSCROLL_EDGE = 48;
 const DRAG_AUTOSCROLL_MAX_SPEED = 14;
@@ -98,7 +133,7 @@ const DRAG_AUTOSCROLL_MAX_SPEED = 14;
 const EditorTabsBar: React.FC<EditorTabsBarProps> = (
   props: EditorTabsBarProps,
 ) => {
-  const { tabsBarLogic, classes, paneId } = props;
+  const { tabsBarLogic, classes, panelId, splitToggle, agentPanel } = props;
   const {
     tabs,
     selectableMainFile,
@@ -125,53 +160,54 @@ const EditorTabsBar: React.FC<EditorTabsBarProps> = (
     onSplitRight,
     onSplitLeft,
     onCloseAll,
-    onCrossPaneDrop,
+    onCrossPanelDrop,
   } = tabsBarLogic();
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const tabsBarRef = useRef<HTMLDivElement>(null);
   const scrollTabsRef = useRef<HTMLUListElement>(null);
   const renameTabRef = useRef<HTMLLIElement>(null);
   const splitDragCtx = useSplitDrag();
   const splitDragPointer = useSplitDragPointer();
 
-  // True while a tab from the OTHER pane's bar is being dragged.
+  // True while a tab from the OTHER panel's bar is being dragged.
   const hasForeignTabDrag = Boolean(
-    paneId &&
+    panelId &&
       splitDragCtx?.payload &&
-      splitDragCtx.payload.originPane !== paneId,
+      splitDragCtx.payload.originPanel !== panelId,
   );
 
   // Insertion indicator for a foreign tab hovering this bar — same per-tab
   // highlight as intra-bar reorder. Purely derived from the shared drag
   // payload + pointer, so cancel/exit cleanup is implicit: endDrag clears
   // both and the indicator disappears with them.
-  const crossPaneIndicator = useMemo(() => {
-    if (!hasForeignTabDrag || !splitDragPointer || !scrollTabsRef.current) {
+  const crossPanelIndicator = useMemo(() => {
+    if (!hasForeignTabDrag || !splitDragPointer || !tabsBarRef.current) {
       return null;
     }
-    return getCrossPaneInsertion(scrollTabsRef.current, splitDragPointer);
+    return getCrossPanelInsertion(tabsBarRef.current, splitDragPointer);
   }, [hasForeignTabDrag, splitDragPointer]);
 
   // True while one of THIS bar's tabs is being dragged.
   const hasOwnTabDrag = Boolean(
-    paneId &&
+    panelId &&
       splitDragCtx?.payload &&
-      splitDragCtx.payload.originPane === paneId,
+      splitDragCtx.payload.originPanel === panelId,
   );
 
   // dnd-kit's lenient collision strategy keeps `over` (and with it the
   // reorder indicator) alive when the pointer drifts outside the bar —
   // deliberate, so slightly sloppy horizontal drags still reorder. But
-  // once the pointer is past the bar horizontally (the other pane's
-  // territory) or well below it (the editor body / cross-pane drop
+  // once the pointer is past the bar horizontally (the other panel's
+  // territory) or well below it (the editor body / cross-panel drop
   // zones), a drop no longer reorders this bar, so the lingering
   // indicator would advertise a drop position that doesn't exist. One
   // bar-height of vertical slack preserves the sloppy-reorder tolerance.
   const ownIndicatorStale = useMemo(() => {
-    if (!hasOwnTabDrag || !splitDragPointer || !scrollTabsRef.current) {
+    if (!hasOwnTabDrag || !splitDragPointer || !tabsBarRef.current) {
       return false;
     }
-    const rect = scrollTabsRef.current.getBoundingClientRect();
+    const rect = tabsBarRef.current.getBoundingClientRect();
     const verticalSlack = rect.height;
     return (
       splitDragPointer.x < rect.left ||
@@ -184,18 +220,18 @@ const EditorTabsBar: React.FC<EditorTabsBarProps> = (
   // Register this bar as a positional drop target for foreign tab drags.
   useEffect(() => {
     const ctx = splitDragCtx;
-    if (!ctx || !paneId || !onCrossPaneDrop) return undefined;
-    ctx.registerTabsBarDropTarget(paneId, {
+    if (!ctx || !panelId || !onCrossPanelDrop) return undefined;
+    ctx.registerTabsBarDropTarget(panelId, {
       getInsertionIndex: (pointer): number | null =>
-        scrollTabsRef.current
-          ? getCrossPaneInsertion(scrollTabsRef.current, pointer)
-              ?.insertIndex ?? null
+        tabsBarRef.current
+          ? getCrossPanelInsertion(tabsBarRef.current, pointer)?.insertIndex ??
+            null
           : null,
       commit: (payload, insertIndex): void =>
-        onCrossPaneDrop(payload.fileId, insertIndex),
+        onCrossPanelDrop(payload.fileId, insertIndex),
     });
-    return (): void => ctx.registerTabsBarDropTarget(paneId, null);
-  }, [splitDragCtx, paneId, onCrossPaneDrop]);
+    return (): void => ctx.registerTabsBarDropTarget(panelId, null);
+  }, [splitDragCtx, panelId, onCrossPanelDrop]);
 
   // Auto-scroll this bar while a foreign tab is dragged near its edges so
   // tabs scrolled out of view become reachable as drop targets. The
@@ -283,10 +319,10 @@ const EditorTabsBar: React.FC<EditorTabsBarProps> = (
     tabs,
     updateTabOrder,
     splitDrag:
-      splitDragCtx && paneId
+      splitDragCtx && panelId
         ? {
             onStart: (fileId): void =>
-              splitDragCtx.startDrag({ fileId, originPane: paneId }),
+              splitDragCtx.startDrag({ fileId, originPanel: panelId }),
             onMove: (coords): void => splitDragCtx.updatePointer(coords),
             onEnd: (): boolean => {
               const consumed = splitDragCtx.finishDragAtPointer();
@@ -355,6 +391,7 @@ const EditorTabsBar: React.FC<EditorTabsBarProps> = (
               <SortableEditorTab
                 id={id}
                 key={id}
+                classes={classes}
                 tabData={tab}
                 isPreview={tab.fileId === previewFileId}
                 isSelected={selectedTab?.fileId === tab.fileId}
@@ -374,8 +411,8 @@ const EditorTabsBar: React.FC<EditorTabsBarProps> = (
                 dropIndicator={
                   !ownIndicatorStale && dropIndicator?.tabId === tab.fileId
                     ? dropIndicator.direction
-                    : crossPaneIndicator?.tabId === tab.fileId
-                    ? crossPaneIndicator.direction
+                    : crossPanelIndicator?.tabId === tab.fileId
+                    ? crossPanelIndicator.direction
                     : undefined
                 }
               />
@@ -454,6 +491,7 @@ const EditorTabsBar: React.FC<EditorTabsBarProps> = (
 
   return (
     <div
+      ref={tabsBarRef}
       className={clsx(styles['tabs-bar'], classes?.container, {
         [styles['tabs-bar-scrollable']]: isScrollable,
       })}
@@ -483,6 +521,19 @@ const EditorTabsBar: React.FC<EditorTabsBarProps> = (
         )}
       </ul>
       <div className={styles['tabs-bar-right']}>
+        {isScrollable && showFileSearch && (
+          <FilterableListButton
+            buttonChildren={<ChevronDown />}
+            getSections={getFilterableListSections}
+            label={'Search tabs'}
+            onAction={onFilterableListAction}
+            classes={{
+              wrapper: styles['tabs-bar-right-item'],
+              button: styles['tabs-bar-right-button'],
+              listContainer: styles['tabs-bar-right-menu'],
+            }}
+          />
+        )}
         {!isReadOnly ? (
           <DropdownMenuButton
             buttonChildren={<AddTab />}
@@ -503,18 +554,33 @@ const EditorTabsBar: React.FC<EditorTabsBarProps> = (
           accept={SUPPORTED_TYPES.join(',')}
           className={styles['import-file-input']}
         />
-        {isScrollable && showFileSearch && (
-          <FilterableListButton
-            buttonChildren={<ChevronDown />}
-            getSections={getFilterableListSections}
-            label={'Search tabs'}
-            onAction={onFilterableListAction}
-            classes={{
-              wrapper: styles['tabs-bar-right-item'],
-              button: styles['tabs-bar-right-button'],
-              listContainer: styles['tabs-bar-right-menu'],
-            }}
-          />
+        {(splitToggle || agentPanel) && (
+          <div className={styles['tabs-bar-actions']}>
+            {splitToggle && (
+              <IconButton
+                label={splitToggle.label}
+                Icon={SplitView}
+                size={ButtonSize.XSmall}
+                variant={ButtonVariant.Tertiary}
+                appearance={ButtonAppearance.LowContrast}
+                disabled={splitToggle.disabled}
+                onClick={splitToggle.onToggle}
+              />
+            )}
+            {agentPanel && (
+              <IconButton
+                label={agentPanel.label}
+                Icon={ChatAgent}
+                size={ButtonSize.XSmall}
+                variant={ButtonVariant.Tertiary}
+                appearance={ButtonAppearance.LowContrast}
+                aria-pressed={agentPanel.isOpen}
+                onClick={agentPanel.onToggle}
+                // The agent works on the file of the active panel, so opening it must not switch panels.
+                data-keeps-active-editor-panel
+              />
+            )}
+          </div>
         )}
       </div>
     </div>

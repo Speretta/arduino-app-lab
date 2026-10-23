@@ -12,12 +12,16 @@
  * react-dnd drag source from the DOM mid-drag so WebKitGTK ended the drag
  * before the drop arrived.
  */
+import * as ContextMenu from '@radix-ui/react-context-menu';
 import { act, fireEvent, render } from '@testing-library/react';
 import { createRef } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { NodeApi } from 'react-arborist';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { FileContextMenu } from './FileContextMenu';
 import FileTree from './FileTree';
 import { FileTreeApi, TreeNode } from './fileTree.type';
+import { TreeContextMenu } from './TreeContextMenu';
 
 const makeNodes = (): TreeNode[] => [
   {
@@ -57,9 +61,15 @@ const makeNodes = (): TreeNode[] => [
   },
 ];
 
+const noConflict = (): Promise<{
+  hasDuplicate: boolean;
+  conflictType: null;
+}> => Promise.resolve({ hasDuplicate: false, conflictType: null });
+
 const baseProps = {
   height: 400,
   isReadOnly: false,
+  checkPathConflict: vi.fn(noConflict),
   selectedFileChange: vi.fn(),
   onFolderSelect: vi.fn(),
   renderNodeIcon: (): JSX.Element => <span />,
@@ -448,102 +458,8 @@ describe('FileTree empty name validation', () => {
     vi.useRealTimers();
   });
 
-  it('rejects file with Windows-invalid characters', () => {
-    vi.useFakeTimers();
-    const ref = createRef<FileTreeApi>();
-    const onFileCreate = vi.fn(() => Promise.resolve());
-    const { container } = render(
-      <FileTree
-        ref={ref}
-        {...baseProps}
-        nodes={makeNodes()}
-        selectedNode={selectedFile()}
-        onFileCreate={onFileCreate}
-      />,
-    );
-
-    act(() => {
-      ref.current!.handleFileCreate('');
-    });
-    act(() => {
-      vi.advanceTimersByTime(50);
-    });
-
-    const input = container.querySelector('input');
-    expect(input).not.toBeNull();
-
-    // '$' and '`' expand even inside the double quotes the transports apply to
-    // board paths; the rest are illegal in a name on a Windows host, which the
-    // LSP workspace mirror writes to.
-    const invalidChars = [
-      'test$file',
-      'test`file',
-      '<test>',
-      'test:file',
-      'test"file',
-      'test|file',
-      'test?file',
-      'test*file',
-      'test\\file',
-      'nested/file',
-    ];
-    invalidChars.forEach((invalidName) => {
-      fireEvent.change(input!, { target: { value: invalidName } });
-      fireEvent.keyDown(input!, { key: 'Enter' });
-    });
-
-    expect(onFileCreate).not.toHaveBeenCalled();
-
-    vi.useRealTimers();
-  });
-
-  it('rejects file with Windows reserved names', () => {
-    vi.useFakeTimers();
-    const ref = createRef<FileTreeApi>();
-    const onFileCreate = vi.fn(() => Promise.resolve());
-    const { container } = render(
-      <FileTree
-        ref={ref}
-        {...baseProps}
-        nodes={makeNodes()}
-        selectedNode={selectedFile()}
-        onFileCreate={onFileCreate}
-      />,
-    );
-
-    act(() => {
-      ref.current!.handleFileCreate('');
-    });
-    act(() => {
-      vi.advanceTimersByTime(50);
-    });
-
-    const input = container.querySelector('input');
-    expect(input).not.toBeNull();
-
-    // Test Windows reserved names
-    const reservedNames = [
-      'con',
-      'prn',
-      'aux',
-      'nul',
-      'com1',
-      'lpt1',
-      'CON',
-      'con.txt',
-    ];
-    reservedNames.forEach((reservedName) => {
-      fireEvent.change(input!, { target: { value: reservedName } });
-      fireEvent.keyDown(input!, { key: 'Enter' });
-    });
-
-    expect(onFileCreate).not.toHaveBeenCalled();
-
-    vi.useRealTimers();
-  });
   const openCreateInput = (
     onFileCreate: (path: string) => Promise<void>,
-    onValidationError?: () => void,
   ): HTMLInputElement => {
     const ref = createRef<FileTreeApi>();
     const { container } = render(
@@ -553,7 +469,6 @@ describe('FileTree empty name validation', () => {
         nodes={makeNodes()}
         selectedNode={selectedFile()}
         onFileCreate={onFileCreate}
-        onValidationError={onValidationError}
       />,
     );
     act(() => {
@@ -566,61 +481,6 @@ describe('FileTree empty name validation', () => {
     expect(input).not.toBeNull();
     return input as HTMLInputElement;
   };
-
-  it('rejects a trailing dot, which trimming cannot remove', () => {
-    vi.useFakeTimers();
-    const onFileCreate = vi.fn(() => Promise.resolve());
-    const input = openCreateInput(onFileCreate);
-
-    fireEvent.change(input, { target: { value: 'test.py.' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    expect(onFileCreate).not.toHaveBeenCalled();
-    vi.useRealTimers();
-  });
-
-  it('holds the input open on Enter so an invalid name can be corrected', () => {
-    vi.useFakeTimers();
-    const onFileCreate = vi.fn(() => Promise.resolve());
-    const onValidationError = vi.fn();
-    const input = openCreateInput(onFileCreate, onValidationError);
-
-    fireEvent.change(input, { target: { value: 'my$file.py' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    // Refused, but the typed text survives and the row says why, so the name
-    // can be fixed in place instead of vanishing and starting over.
-    expect(onFileCreate).not.toHaveBeenCalled();
-    expect(onValidationError).toHaveBeenCalled();
-    expect(input).toHaveValue('my$file.py');
-    expect(input).toHaveAttribute('aria-invalid', 'true');
-
-    fireEvent.change(input, { target: { value: 'my_file.py' } });
-    expect(input).toHaveAttribute('aria-invalid', 'false');
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    expect(onFileCreate).toHaveBeenCalledWith('my_file.py');
-    vi.useRealTimers();
-  });
-
-  it('cancels on blur with an invalid name rather than trapping the row', () => {
-    vi.useFakeTimers();
-    const onFileCreate = vi.fn(() => Promise.resolve());
-    const input = openCreateInput(onFileCreate);
-
-    fireEvent.change(input, { target: { value: 'my$file.py' } });
-    // Blur is only treated as deliberate once the focus grace period has passed.
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
-    fireEvent.blur(input);
-
-    expect(onFileCreate).not.toHaveBeenCalled();
-    // Escape must not be the only way out: the row is gone, not stuck in an
-    // input that can never be submitted.
-    expect(document.querySelectorAll('input')).toHaveLength(0);
-    vi.useRealTimers();
-  });
 
   it('accepts names that are legal on the board and on the host', () => {
     vi.useFakeTimers();
@@ -656,5 +516,489 @@ describe('FileTree empty name validation', () => {
 
     expect(onFileCreate).toHaveBeenCalledWith(name);
     vi.useRealTimers();
+  });
+});
+
+describe('FileTree lazy folder listing', () => {
+  const unlistedNodes = (): TreeNode[] => [
+    { name: 'python', path: 'python', type: 'folder', children: null },
+    {
+      name: 'app.yaml',
+      path: 'app.yaml',
+      type: 'file',
+      extension: 'yaml',
+      mimeType: 'text/yaml',
+    },
+  ];
+
+  const nestedNodes = (): TreeNode[] => [
+    {
+      name: 'python',
+      path: 'python',
+      type: 'folder',
+      children: [
+        { name: 'lib', path: 'python/lib', type: 'folder', children: null },
+      ],
+    },
+  ];
+
+  it('reports the folder path when an unlisted folder is opened', () => {
+    const onFolderExpand = vi.fn();
+    const { getByText } = render(
+      <FileTree
+        {...baseProps}
+        nodes={unlistedNodes()}
+        selectedNode={undefined}
+        onFolderExpand={onFolderExpand}
+      />,
+    );
+
+    fireEvent.click(getByText('python'));
+
+    expect(onFolderExpand).toHaveBeenCalledWith('python', true);
+  });
+
+  it('reports the close, so the folder stops being listed', () => {
+    const onFolderExpand = vi.fn();
+    const { getByText } = render(
+      <FileTree
+        {...baseProps}
+        nodes={unlistedNodes()}
+        selectedNode={undefined}
+        onFolderExpand={onFolderExpand}
+      />,
+    );
+
+    fireEvent.click(getByText('python'));
+    fireEvent.click(getByText('python'));
+
+    expect(onFolderExpand.mock.calls).toEqual([
+      ['python', true],
+      ['python', false],
+    ]);
+  });
+
+  // A subfolder left open comes back open with its parent, so it has to be
+  // listed again even though nothing toggled it.
+  it('reports the descendants that come back open with the folder', () => {
+    const onFolderExpand = vi.fn();
+    const { getByText } = render(
+      <FileTree
+        {...baseProps}
+        nodes={nestedNodes()}
+        selectedNode={undefined}
+        onFolderExpand={onFolderExpand}
+      />,
+    );
+
+    fireEvent.click(getByText('python'));
+    fireEvent.click(getByText('lib'));
+    fireEvent.click(getByText('python')); // close
+    onFolderExpand.mockClear();
+
+    fireEvent.click(getByText('python')); // reopen
+
+    expect(onFolderExpand.mock.calls).toEqual([
+      ['python', true],
+      ['python/lib', true],
+    ]);
+  });
+
+  it('does not report a file selection as a folder open', () => {
+    const onFolderExpand = vi.fn();
+    const { getByText } = render(
+      <FileTree
+        {...baseProps}
+        nodes={unlistedNodes()}
+        selectedNode={undefined}
+        onFolderExpand={onFolderExpand}
+      />,
+    );
+
+    fireEvent.click(getByText('app.yaml'));
+
+    expect(onFolderExpand).not.toHaveBeenCalled();
+  });
+
+  it('lists the folder a file is being created in, so the new row shows', () => {
+    vi.useFakeTimers();
+    const onFolderExpand = vi.fn();
+    const ref = createRef<FileTreeApi>();
+    render(
+      <FileTree
+        ref={ref}
+        {...baseProps}
+        nodes={unlistedNodes()}
+        selectedNode={undefined}
+        onFolderExpand={onFolderExpand}
+      />,
+    );
+
+    act(() => {
+      ref.current!.handleFileCreate('python');
+    });
+
+    expect(onFolderExpand).toHaveBeenCalledWith('python', true);
+    vi.useRealTimers();
+  });
+});
+
+describe('FileTree folder open state', () => {
+  const folderNodes = (folderPath = 'sub'): TreeNode[] => [
+    {
+      name: folderPath.split('/').pop() as string,
+      path: folderPath,
+      type: 'folder',
+      children: [
+        {
+          name: 'main.py',
+          path: `${folderPath}/main.py`,
+          type: 'file',
+          extension: 'py',
+          mimeType: 'text/x-python',
+        },
+      ],
+    },
+  ];
+
+  // A folder whose listing failed is dropped by the consumer; its row stayed
+  // open over nothing until the user closed and reopened it by hand.
+  it('closes the folder it is told to close', () => {
+    const { getByText, queryByText, rerender } = render(
+      <FileTree
+        {...baseProps}
+        nodes={folderNodes()}
+        selectedNode={undefined}
+      />,
+    );
+
+    fireEvent.click(getByText('sub'));
+    expect(queryByText('main.py')).not.toBeNull();
+
+    rerender(
+      <FileTree
+        {...baseProps}
+        nodes={folderNodes()}
+        selectedNode={undefined}
+        closeFolder={{ path: 'sub', seq: 1 }}
+      />,
+    );
+
+    expect(queryByText('main.py')).toBeNull();
+    const row = getByText('sub').closest('[role="treeitem"]');
+    expect(row?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  // The renamed folder is a new row id, so react-arborist has it closed while
+  // the consumer has carried the listing over to the new path.
+  it('reopens a renamed folder that was open', async () => {
+    vi.useFakeTimers();
+    const onFileRename = vi.fn(() => Promise.resolve());
+    const { getByText, queryByText, rerender } = render(
+      <FileTree
+        {...baseProps}
+        nodes={folderNodes()}
+        selectedNode={undefined}
+        onFileRename={onFileRename}
+      />,
+    );
+
+    fireEvent.click(getByText('sub'));
+    expect(queryByText('main.py')).not.toBeNull();
+
+    // Rename it through the row's context menu, as the user does. Radix places
+    // the menu with `DOMRect.fromRect`, which jsdom does not define — and the
+    // rejection that follows is reported as an unhandled error.
+    vi.stubGlobal('DOMRect', {
+      fromRect: (rect: { x: number; y: number }) => ({
+        ...rect,
+        width: 0,
+        height: 0,
+        top: rect.y,
+        bottom: rect.y,
+        left: rect.x,
+        right: rect.x,
+      }),
+    });
+    fireEvent.contextMenu(getByText('sub'));
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    fireEvent.click(getByText('Rename'));
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+
+    const input = document.querySelector('input') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    fireEvent.change(input, { target: { value: 'renamed' } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+
+    expect(onFileRename).toHaveBeenCalledWith('sub', 'renamed', 'folder');
+
+    // The consumer's listing comes back under the new path.
+    rerender(
+      <FileTree
+        {...baseProps}
+        nodes={folderNodes('renamed')}
+        selectedNode={undefined}
+        onFileRename={onFileRename}
+      />,
+    );
+
+    expect(queryByText('main.py')).not.toBeNull();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+});
+
+describe('FileTree drop conflict check', () => {
+  const dropNodes = (): TreeNode[] => [
+    { name: 'python', path: 'python', type: 'folder', children: null },
+    {
+      name: 'notes.md',
+      path: 'notes.md',
+      type: 'file',
+      extension: 'md',
+      mimeType: 'text/markdown',
+    },
+  ];
+
+  const dropOntoPython = async (
+    props: Partial<React.ComponentProps<typeof FileTree>>,
+  ): Promise<void> => {
+    const ref = createRef<FileTreeApi>();
+    render(
+      <FileTree
+        ref={ref}
+        {...baseProps}
+        {...props}
+        nodes={dropNodes()}
+        selectedNode={undefined}
+      />,
+    );
+
+    const tree = ref.current!;
+    const dragNode = { data: dropNodes()[1] } as NodeApi<TreeNode>;
+    const parentNode = {
+      id: 'python',
+      isOpen: true,
+      data: dropNodes()[0],
+      open: (): void => undefined,
+    } as unknown as NodeApi<TreeNode>;
+
+    await act(async () => {
+      tree.handleDrop({ dragNodes: [dragNode], parentNode, index: 0 });
+    });
+  };
+
+  // The tree only holds the folders it has listed, so a name already taken
+  // inside a collapsed one is invisible to it.
+  it('asks the injected check, and moves when the name is free', async () => {
+    const checkPathConflict = vi.fn(noConflict);
+    const onFileMove = vi.fn(() => Promise.resolve());
+
+    await dropOntoPython({ checkPathConflict, onFileMove });
+
+    expect(checkPathConflict).toHaveBeenCalledWith('python/notes.md', 'file');
+    expect(onFileMove).toHaveBeenCalledWith(
+      'notes.md',
+      'python/notes.md',
+      'file',
+    );
+  });
+
+  it('raises the conflict dialog instead of moving when the name is taken', async () => {
+    const checkPathConflict = vi.fn(() =>
+      Promise.resolve({
+        hasDuplicate: true,
+        conflictType: 'file-file' as const,
+      }),
+    );
+    const onFileMove = vi.fn(() => Promise.resolve());
+    const onDuplicateConflict = vi.fn();
+
+    await dropOntoPython({
+      checkPathConflict,
+      onFileMove,
+      onDuplicateConflict,
+    });
+
+    expect(onFileMove).not.toHaveBeenCalled();
+    expect(onDuplicateConflict).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourcePath: 'notes.md',
+        targetPath: 'python/notes.md',
+        conflictType: 'file-file',
+      }),
+    );
+  });
+
+  it('aborts the move when the check fails', async () => {
+    const checkPathConflict = vi.fn(() => Promise.reject(new Error('offline')));
+    const onFileMove = vi.fn(() => Promise.resolve());
+    const onDuplicateConflict = vi.fn();
+
+    await dropOntoPython({
+      checkPathConflict,
+      onFileMove,
+      onDuplicateConflict,
+    });
+
+    expect(onFileMove).not.toHaveBeenCalled();
+    expect(onDuplicateConflict).not.toHaveBeenCalled();
+  });
+});
+
+describe('FileTree context menu groups', () => {
+  // Radix places the menu with `DOMRect.fromRect`, which jsdom does not define,
+  // and it does so after the menu opens, so the stub stays for the block.
+  beforeAll(() => {
+    vi.stubGlobal('DOMRect', {
+      fromRect: (rect: { x: number; y: number }) => ({
+        ...rect,
+        width: 0,
+        height: 0,
+        top: rect.y,
+        bottom: rect.y,
+        left: rect.x,
+        right: rect.x,
+      }),
+    });
+  });
+  afterAll(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // The open menu as labels, with '|' for each separator.
+  const openMenu = (menu: JSX.Element): string[] => {
+    const { getByText, unmount } = render(
+      <ContextMenu.Root>
+        <ContextMenu.Trigger>
+          <div>trigger</div>
+        </ContextMenu.Trigger>
+        {menu}
+      </ContextMenu.Root>,
+    );
+    fireEvent.contextMenu(getByText('trigger'));
+    const content = document.querySelector('[role="menu"]') as HTMLElement;
+    const items = Array.from(content.children).map((child) =>
+      child.getAttribute('role') === 'separator'
+        ? '|'
+        : (child.textContent as string),
+    );
+    unmount();
+    return items;
+  };
+
+  const treeMenuProps = {
+    onCreate: () => (): void => undefined,
+    onAddBrick: vi.fn(),
+    onCreateBrick: vi.fn(),
+    onResourceImport: vi.fn(),
+  };
+
+  it('shows Add sketch library in its own group when it is offered', () => {
+    expect(
+      openMenu(
+        <TreeContextMenu {...treeMenuProps} onAddSketchLibrary={vi.fn()} />,
+      ),
+    ).toEqual([
+      'Create new file',
+      'Create new folder',
+      '|',
+      'Import file',
+      'Import folder',
+      '|',
+      'Add sketch library',
+      '|',
+      'Add Brick',
+      'Create new Brick',
+    ]);
+  });
+
+  it('shows Add sketch folder in place of Add sketch library', () => {
+    expect(
+      openMenu(<TreeContextMenu {...treeMenuProps} onAddSketch={vi.fn()} />),
+    ).toEqual([
+      'Create new file',
+      'Create new folder',
+      '|',
+      'Import file',
+      'Import folder',
+      '|',
+      'Add sketch folder',
+      '|',
+      'Add Brick',
+      'Create new Brick',
+    ]);
+  });
+
+  it('drops the empty sketch group and its separator', () => {
+    expect(openMenu(<TreeContextMenu {...treeMenuProps} />)).toEqual([
+      'Create new file',
+      'Create new folder',
+      '|',
+      'Import file',
+      'Import folder',
+      '|',
+      'Add Brick',
+      'Create new Brick',
+    ]);
+  });
+
+  const rowMenu = (node: TreeNode): string[] =>
+    openMenu(
+      <FileContextMenu
+        node={node}
+        onRename={vi.fn()}
+        onCreate={() => (): void => undefined}
+        onDelete={vi.fn()}
+        onResourceImport={vi.fn()}
+      />,
+    );
+
+  const folderNode = (path: string): TreeNode => ({
+    name: path,
+    path,
+    type: 'folder',
+    children: [],
+  });
+
+  it('separates the three groups of a folder row', () => {
+    expect(rowMenu(folderNode('assets'))).toEqual([
+      'Create new file',
+      'Create new folder',
+      '|',
+      'Import file',
+      'Import folder',
+      '|',
+      'Rename',
+      'Delete',
+    ]);
+  });
+
+  it('ends the python folder menu without a separator', () => {
+    expect(rowMenu(folderNode('python'))).toEqual([
+      'Create new file',
+      'Create new folder',
+      '|',
+      'Import file',
+      'Import folder',
+    ]);
+  });
+
+  it('shows a file row only Rename and Delete, without a separator', () => {
+    expect(
+      rowMenu({
+        name: 'notes.md',
+        path: 'notes.md',
+        type: 'file',
+        extension: 'md',
+        mimeType: 'text/markdown',
+      }),
+    ).toEqual(['Rename', 'Delete']);
   });
 });

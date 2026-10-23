@@ -14,7 +14,7 @@
 
     &:hover {
       border-radius: 32px;
-      background-color: #dae3e3;
+      background-color: var(--component-bg-above);
     }
   }
 
@@ -34,13 +34,13 @@
   .notification {
     display: flex;
     justify-content: space-between;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.2); // TODO: Create suitable variable
     border-radius: 8px;
     padding: 8px 16px;
     color: white;
-    background: #374146;
+    background: var(--sidebar-background);
     margin: 0 16px;
-    box-shadow: 0px 4px 20px 0px #00000040;
+    box-shadow: 0px 4px 20px 0px #00000040; // TODO: Create suitable variable
   }
 
   .messageContainer {

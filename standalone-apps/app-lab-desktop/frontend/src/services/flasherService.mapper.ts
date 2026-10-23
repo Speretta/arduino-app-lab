@@ -7,6 +7,8 @@ function mapImage(image: flasher.OSImageRelease): OSImageRelease {
     id: image.ID,
     latest: image.Latest,
     version_label: image.VersionLabel,
+    board: image.Board,
+    os: image.Os,
   };
 }
 
@@ -23,5 +25,7 @@ export function mapOSImageRelease(
     ID: image.id || '',
     Latest: image.latest || false,
     VersionLabel: image.version_label || '',
+    Board: image.board || '',
+    Os: image.os || '',
   };
 }

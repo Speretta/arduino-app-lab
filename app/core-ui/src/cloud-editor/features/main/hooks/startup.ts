@@ -333,7 +333,7 @@ export const useGetSketchStartUpQueries: UseGetSketchStartUpQueries = function (
   );
 
   const refreshFileList = (): void => {
-    queryClient.invalidateQueries(filesListKey);
+    queryClient.invalidateQueries({ queryKey: filesListKey });
   };
 
   const contentIsNotUndefined =

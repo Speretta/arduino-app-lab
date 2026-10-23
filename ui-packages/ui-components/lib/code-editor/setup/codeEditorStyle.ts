@@ -9,24 +9,42 @@ export const editorViewStyle = {
     fontSize: `calc(${styleVars.editorFontSizeVar} * 1px)`,
     lineHeight: '1.4',
     letterSpacing: '0.02em',
-    overscrollBehavior: 'none',
+    overflowX: 'hidden',
+  },
+  // Editor scrollbars: track matches the code canvas so it doesn't read as a
+  // black/dark strip; grey thumb inset via a track-coloured padding-box border.
+  // Overrides the global rule in index.scss.
+  '.cm-scroller::-webkit-scrollbar': {
+    width: '14px',
+    height: '14px',
+  },
+  '.cm-scroller::-webkit-scrollbar-track': {
+    background: styles.editorBackground,
+  },
+  '.cm-scroller::-webkit-scrollbar-thumb': {
+    backgroundColor: '#7f8c8d',
+    border: `4px solid ${styles.editorBackground}`,
+    backgroundClip: 'padding-box',
+    borderRadius: '10px',
   },
   '.cm-content': {
     width: 'calc(100% - 48px)',
     padding: '8px 16px',
     paddingBottom: `calc(${styleVars.editorPaddingBottomVar} * 1px)`,
+    // Default text colour for tokens the highlighter doesn't tag. rc-97 set this
+    // on the editor container; main's restructure dropped it, leaving code text
+    // to fall back to --text-default (a regression). Restore the neutral colour.
+    color: styles.editorSyntaxHighlightNeutral,
   },
   '.cm-line': {
+    // rc-97 behavior: wrap long lines instead of scrolling horizontally (no horizontal scrollbar means no Toolbar update-depth loop and no overscroll guard needed).
+    whiteSpace: 'break-spaces',
+    wordBreak: 'break-word',
     padding: '0px',
-
-    // Browsers stop painting ultra-long lines for memory reasons.
-    // These 3D rules trick the browser into promoting the line to a dedicated GPU layer.
-    // NOTE: can be improved by implementing a "show more" button for long lines
-    transform: 'translateZ(0)',
-    willChange: 'transform',
   },
   '.cm-line.cm-activeLine': {
-    background: `${styles.editorActiveLineBackground}`,
+    // Band across the active line: App Lab's look. Cloud Editor pins it transparent and marks the gutter instead (see .cm-activeLineGutter).
+    background: styles.editorActiveLineBackground,
   },
   '.cm-line .cm-selectionMatch': {
     background: `${styles.editorSearchMatchBackground} !important`,
@@ -60,7 +78,11 @@ export const editorViewStyle = {
     backgroundColor: 'unset',
     borderRight: 'none',
     minWidth: '48px',
-    background: styles.editorBackground,
+    // Gutter blends into the toolbar above it rather than the code canvas.
+    // --component-bg-below-1 (the toolbar background) resolves to #171e21 in
+    // both apps: in CE it reads as a distinct strip beside the lighter #2c353a
+    // canvas; in AL (canvas also #171e21) it's visually unchanged.
+    background: 'var(--component-bg-below-1)',
   },
   '.cm-gutters .cm-lineNumbers': {
     flexGrow: 1,
@@ -69,7 +91,9 @@ export const editorViewStyle = {
     padding: '0 8px',
   },
   '.cm-gutters .cm-activeLineGutter': {
-    background: 'none',
+    // Selected-line box on the active line number: Cloud Editor's look (rc-97).
+    // App Lab pins it transparent and bands the line instead.
+    background: styles.editorActiveLineGutterBackground,
     color: styles.editorLinesForegroundActive,
   },
   '.cm-gutters .cm-foldGutter .cm-gutterElement': {
@@ -87,7 +111,7 @@ export const editorViewStyle = {
     border: 'none !important',
     overflow: 'visible !important',
   },
-  // Float only the find-and-replace panel as a per-pane top-right overlay, anchored to `.cm-editor`.
+  // Float only the find-and-replace panel as a per-panel top-right overlay, anchored to `.cm-editor`.
   // `zIndex` mirrors `$zIndex1`(z-indexes.scss).
   '& > .cm-panels-bottom > .cm-find-replace-host': {
     position: 'absolute !important',

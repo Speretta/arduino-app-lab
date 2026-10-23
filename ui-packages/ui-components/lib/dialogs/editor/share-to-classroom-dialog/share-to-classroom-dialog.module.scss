@@ -6,12 +6,12 @@
 }
 
 .share-to-classroom-button {
-  color: shared.theme-var(--button-secondary-label);
+  color: var(--text-accent);
   display: flex;
   align-items: center;
   margin: 32px auto 0 auto;
   border-radius: 32px;
-  border: 2px solid shared.theme-var(--button-secondary-border);
+  border: 2px solid var(--border-accent);
   padding: 8px 16px;
 
   &:focus {

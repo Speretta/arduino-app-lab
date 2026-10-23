@@ -15,8 +15,11 @@ interface ConfirmDialogProps {
   heading: string;
   description: string;
   confirmLabel: string;
+  cancelLabel?: string;
   // Destructive (red) confirm for irreversible actions vs the default accent.
   destructive?: boolean;
+  // Icon colour, independent of the confirm button: a warning can carry a red icon over a plain confirm.
+  iconTone?: 'accent' | 'error';
   loading?: boolean;
   onConfirm: VoidFunction;
   onClose: VoidFunction;
@@ -28,7 +31,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   heading,
   description,
   confirmLabel,
+  cancelLabel,
   destructive = false,
+  iconTone = destructive ? 'error' : 'accent',
   loading = false,
   onConfirm,
   onClose,
@@ -45,23 +50,32 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       body: styles['dialog-body'],
     }}
     footer={
-      <Button
-        variant={destructive ? ButtonVariant.Secondary : ButtonVariant.Primary}
-        appearance={
-          destructive ? ButtonAppearance.Destructive : ButtonAppearance.Action
-        }
-        loading={loading}
-        onClick={onConfirm}
-      >
-        {confirmLabel}
-      </Button>
+      <>
+        {cancelLabel !== undefined && (
+          <Button variant={ButtonVariant.Secondary} onClick={onClose}>
+            {cancelLabel}
+          </Button>
+        )}
+        <Button
+          variant={
+            destructive ? ButtonVariant.Secondary : ButtonVariant.Primary
+          }
+          appearance={
+            destructive ? ButtonAppearance.Destructive : ButtonAppearance.Action
+          }
+          loading={loading}
+          onClick={onConfirm}
+        >
+          {confirmLabel}
+        </Button>
+      </>
     }
   >
     <div className={styles['body']}>
       <Icon
         className={
-          destructive
-            ? `${styles['icon']} ${styles['icon--destructive']}`
+          iconTone === 'error'
+            ? `${styles['icon']} ${styles['icon--error']}`
             : styles['icon']
         }
         aria-hidden="true"

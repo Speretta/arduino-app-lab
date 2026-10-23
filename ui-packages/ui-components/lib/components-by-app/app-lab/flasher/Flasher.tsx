@@ -52,6 +52,7 @@ export const Flasher: React.FC<FlasherProps> = ({
     setFlashing,
     setSucceeded,
     close,
+    getCurrentImage,
     listAvailableImages,
     getAvailableFreeSpace,
     getUserPartitionPreservationSupported,
@@ -59,6 +60,8 @@ export const Flasher: React.FC<FlasherProps> = ({
     openArduinoSupport,
     clearBoardAsUsed,
     flashingBoard,
+    preserveDataSupported,
+    preparationImage,
   } = flasherLogic();
 
   const handleFlash = useCallback(
@@ -125,16 +128,18 @@ export const Flasher: React.FC<FlasherProps> = ({
           <FlasherConfiguration
             flashEvent={flashEvent}
             loading={loading}
+            getCurrentImage={getCurrentImage}
             listAvailableImages={listAvailableImages}
             getAvailableFreeSpace={getAvailableFreeSpace}
             getUserPartitionPreservationSupported={
               getUserPartitionPreservationSupported
             }
+            preserveDataSupported={preserveDataSupported}
             onConfirm={handleFlash}
           />
         );
       case FlashBoardStep.Preparation:
-        return <FlasherPreparation />;
+        return <FlasherPreparation image={preparationImage} />;
       case FlashBoardStep.Flashing:
         return (
           flashEvent && (

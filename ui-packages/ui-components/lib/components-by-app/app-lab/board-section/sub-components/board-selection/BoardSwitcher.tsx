@@ -29,6 +29,7 @@ export interface BoardSwitcherProps {
   title?: string;
   useStaticPosition?: boolean;
   onOpenChange?: (isOpen: boolean) => void;
+  isOpen?: boolean;
   classes?: BoardSwitcherClasses;
 }
 
@@ -40,6 +41,7 @@ export const BoardSwitcher: React.FC<BoardSwitcherProps> = ({
   title,
   useStaticPosition,
   onOpenChange,
+  isOpen,
   classes,
 }: BoardSwitcherProps) => {
   const { formatMessage } = useI18n();
@@ -74,6 +76,8 @@ export const BoardSwitcher: React.FC<BoardSwitcherProps> = ({
     <DropdownMenuButton
       title={title}
       useStaticPosition={useStaticPosition}
+      isOpen={isOpen}
+      onOpen={onOpenChange}
       sections={[
         {
           name: 'Boards',
@@ -121,7 +125,6 @@ export const BoardSwitcher: React.FC<BoardSwitcherProps> = ({
       ]}
       buttonChildren={buttonChildren}
       onAction={onDropdownAction}
-      onOpen={onOpenChange}
       classes={{
         dropdownMenuButtonWrapper: classes?.dropdownMenuButtonWrapper,
         dropdownMenuButton: classes?.dropdownMenuButton,

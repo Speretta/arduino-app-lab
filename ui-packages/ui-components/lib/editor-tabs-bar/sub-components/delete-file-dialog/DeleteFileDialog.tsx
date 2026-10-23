@@ -31,6 +31,7 @@ const DeleteFileDialog: React.FC<DeleteFileDialogProps> = (
 
   return (
     <ConfirmActionDialog
+      containerClasses={styles['container']}
       headerTitle={formatMessage(messages.deleteFileDialogTitle)}
       dialogTitle={dialogTitle}
       dialogMessage={

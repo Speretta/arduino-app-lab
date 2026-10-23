@@ -1,9 +1,9 @@
 ---
 name: goober
-version: 2.1.16
+version: 2.1.19
 type: npm
 summary: A less than 1KB css-in-js solution
-homepage: 
+homepage:
 license: mit
 licenses:
 - sources: LICENSE

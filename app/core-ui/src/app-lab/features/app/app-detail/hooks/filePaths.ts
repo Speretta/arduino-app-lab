@@ -1,6 +1,6 @@
 import {
   OpenFilesStoreItem,
-  OpenFilesStorePaneState,
+  OpenFilesStorePanelState,
 } from '../../../../../common/hooks/files';
 
 // Helpers for App Lab file ids.
@@ -16,6 +16,9 @@ export const isAbsoluteId = (id: string): boolean =>
   id.startsWith('/') || id.startsWith('file://');
 
 export const isHostLocalId = (id: string): boolean => id.startsWith('file://');
+
+export const parentDir = (path: string): string =>
+  path.split('/').slice(0, -1).join('/');
 
 export const resolveAbsPath = (id: string, appPath?: string): string =>
   isAbsoluteId(id) ? id : `${appPath ?? ''}/${id}`;
@@ -39,15 +42,15 @@ const dropHostLocalKeys = <T>(
     Object.entries(byFileId).filter(([id]) => !isHostLocalId(id)),
   );
 
-const paneWithoutHostLocalIds = (
-  pane: OpenFilesStorePaneState,
-): OpenFilesStorePaneState => ({
-  ...pane,
-  items: withoutHostLocal(pane.items),
+const panelWithoutHostLocalIds = (
+  panel: OpenFilesStorePanelState,
+): OpenFilesStorePanelState => ({
+  ...panel,
+  items: withoutHostLocal(panel.items),
   selected:
-    pane.selected && isHostLocalId(pane.selected) ? null : pane.selected,
-  markdownByFileId: dropHostLocalKeys(pane.markdownByFileId),
-  brickTabByFileId: dropHostLocalKeys(pane.brickTabByFileId),
+    panel.selected && isHostLocalId(panel.selected) ? null : panel.selected,
+  markdownByFileId: dropHostLocalKeys(panel.markdownByFileId),
+  brickTabByFileId: dropHostLocalKeys(panel.brickTabByFileId),
 });
 
 /**
@@ -72,8 +75,8 @@ export const withoutHostLocalIds = (
       ? null
       : item.previewFileId,
   panes: item.panes && {
-    A: paneWithoutHostLocalIds(item.panes.A),
-    B: item.panes.B && paneWithoutHostLocalIds(item.panes.B),
+    A: panelWithoutHostLocalIds(item.panes.A),
+    B: item.panes.B && panelWithoutHostLocalIds(item.panes.B),
   },
 });
 /**

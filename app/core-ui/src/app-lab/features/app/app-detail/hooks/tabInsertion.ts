@@ -19,11 +19,11 @@ export interface ResolveNewTabInsertionResult {
 }
 
 /**
- * Pure tab-open resolver shared by pane A ([useEditorFiles]) and pane B
- * ([appLabEditorPanel]) so both panes insert new tabs and manage the single
+ * Pure tab-open resolver shared by panel A ([useEditorFiles]) and panel B
+ * ([appLabEditorPanel]) so both panels insert new tabs and manage the single
  * preview slot identically.
  *
- * Rules (mirrored from pane A's original `selectFile`):
+ * Rules (mirrored from panel A's original `selectFile`):
  *  - An existing preview tab is replaced in place — it is removed and the new
  *    tab takes its slot (adjusting an explicit `insertIndex` for the removal).
  *  - With no explicit `insertIndex`, the new tab lands right after the active

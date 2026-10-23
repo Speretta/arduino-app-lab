@@ -92,7 +92,6 @@ export const ExportAppDialog: React.FC<ExportAppDialogProps> = ({
           variant={ButtonVariant.Primary}
           loading={isLoading}
           type="submit"
-          /* eslint-disable-next-line jsx-a11y/no-autofocus */
           autoFocus
         >
           {formatMessage(messages.confirmButton)}

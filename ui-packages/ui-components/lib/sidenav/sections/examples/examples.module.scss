@@ -63,17 +63,13 @@ $examplesMenuButtonHeight: 24;
 %summary {
   summary {
     min-height: 32px;
-    
+
     &::-webkit-details-marker {
       display: none;
     }
 
     &:hover {
-      background-color: #ecf1f1;
-
-      .examples-menu-button-wrapper {
-        background: linear-gradient(270deg, #ecf1f1 49.61%, rgba(255, 255, 255, 0) 84.09%);
-      }
+      background-color: var(--sidebar-panel-item-background-hover);
     }
   }
 }
@@ -106,18 +102,10 @@ $examplesMenuButtonHeight: 24;
 
 .examples-link-active {
   .examples-link-wrapper {
-    background-color: #dae3e3;
+    background-color: var(--editor-lines-background-selected);
 
     &:hover {
-      background-color: #dae3e3;
-
-      .examples-menu-button-wrapper {
-        background: linear-gradient(270deg, #dae3e3 49.61%, rgba(255, 255, 255, 0) 84.09%);
-      }
-    }
-
-    .examples-menu-button-wrapper {
-      background: linear-gradient(270deg, #dae3e3 49.61%, rgba(255, 255, 255, 0) 84.09%);
+      background-color: var(--sidebar-panel-item-background-hover);
     }
   }
 }
@@ -131,14 +119,9 @@ $examplesMenuButtonHeight: 24;
   min-height: 32px;
 
   &:hover {
-    background-color: #ecf1f1;
-
+    background-color: var(--sidebar-panel-item-background-hover);
     .examples-menu-button {
       visibility: visible;
-    }
-
-    .examples-menu-button-wrapper {
-      background: linear-gradient(270deg, #ecf1f1 49.61%, rgba(255, 255, 255, 0) 84.09%);
     }
   }
 }
@@ -152,7 +135,7 @@ $examplesMenuButtonHeight: 24;
 }
 
 .examples-link {
-  color: shared.theme-var(--header-title-label);
+  color: var(--text-default);
   text-decoration: none;
   display: grid;
   grid-auto-flow: column;
@@ -186,7 +169,6 @@ $examplesMenuButtonHeight: 24;
 .examples-menu-button-wrapper {
   width: 100%;
   height: 100%;
-  background: linear-gradient(270deg, #f7f9f9 49.61%, rgba(255, 255, 255, 0) 84.09%);
 }
 
 $menuAndButtonWidth: -(dropdown-menu-variables.$dropdownMenuWidth) + $examplesMenuButtonWidth;
@@ -214,8 +196,8 @@ $menuAndButtonWidth: -(dropdown-menu-variables.$dropdownMenuWidth) + $examplesMe
   display: grid;
   align-items: center;
   justify-items: start;
-  gap: 3px;  
-  color: #7F8C8D;
+  gap: 3px;
+  color: var(--text-subtle);
   overflow: hidden;
 }
 

@@ -51,6 +51,8 @@ import {
   mapGetBoardsByVidPid,
   mapGetExamplesDataResponse,
   mapGetLibrariesNewToLegacy,
+  mapLibraryNewToLegacy,
+  mapReleaseNewToLibraryDetailsLegacy,
   mapSketchCompilationResponse,
 } from './mapper';
 
@@ -172,7 +174,6 @@ export async function getLibraryRequest(
   if (!res) {
     throw new Error('Failed to fetch library details');
   }
-  const { mapReleaseNewToLibraryDetailsLegacy } = await import('./mapper');
   return mapReleaseNewToLibraryDetailsLegacy(res);
 }
 
@@ -266,7 +267,6 @@ export async function getFavoriteLibrariesRequest(
     if (!Array.isArray(items)) return [];
 
     if (items.length > 0 && hasId(items[0])) {
-      const { mapLibraryNewToLegacy } = await import('./mapper');
       return items.map((item) => ({
         ...mapLibraryNewToLegacy(
           item as Parameters<typeof mapLibraryNewToLegacy>[0],
@@ -425,11 +425,11 @@ export async function getCompilationStreamRequest(
   const endpoint = `${BASE_COMPILATION_URL}/${params.id}/events`;
   const sseUrl = `${Config.BUILDER_API_V2_URL}${endpoint}`;
 
-  return getEventSource(
-    sseUrl,
+  return getEventSource({
+    url: sseUrl,
     handlers,
     token,
     abortController,
-    builderV2CFHeaders,
-  );
+    headers: builderV2CFHeaders,
+  });
 }

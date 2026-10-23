@@ -1,60 +1,29 @@
 {
   "name": "@bcmi-labs/cloud-editor-domain",
-  "version": "1.4.3",
+  "private": true,
+  "version": "1.4.4",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "buildDev": "tsc && vite build --mode development",
-    "watch": "yarn buildDev --watch",
-    "test": "vitest"
+    "test": "yarn run -T vitest"
   },
-  "peerDependencies": {
-    "@bcmi-labs/art-auth": "*",
-    "@bcmi-labs/cloud-sidebar": "*",
-    "@tanstack/react-location": "3.7.4",
-    "@tanstack/react-query": "4.12.0",
-    "clsx": ">= 1.2.1",
-    "dotenv": ">= 16.0.3",
-    "file-saver": ">= 2.0.5",
-    "idb-keyval": ">= 6.2.1",
-    "jszip": ">= 3.10.1",
-    "object-hash": ">= 3.0.0",
-    "react": ">= 18.2.0",
-    "react-dom": ">= 18.2.0",
-    "rxjs": ">= 7.5.7",
-    "semver": ">= 7.3.8"
-  },
-  "files": [
-    "dist"
-  ],
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
-    "module": "./dist/lib/domain.es.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-      ".": {
-        "import": "./dist/lib/domain.es.js"
-      },
-      "./dist/style.css": {
-        "import": "./dist/style.css"
-      }
-    }
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+ssh://git@github.com:bcmi-labs/cloud-editor-mono.git"
-  },
-  "module": "./lib/index.ts",
-  "types": "./index.d.ts",
   "exports": {
     ".": {
       "import": "./lib/index.ts"
     },
     "./src/services/preferences-service": {
       "import": "./src/services/preferences-service/index.ts"
+    },
+    "./src/services/browser-service": {
+      "import": "./src/services/browser-service/index.ts"
+    },
+    "./src/services/feature-flags-service": {
+      "import": "./src/services/feature-flags-service/index.ts"
+    },
+    "./src/services/file-opener-service": {
+      "import": "./src/services/file-opener-service/index.ts"
+    },
+    "./src/services/wails-service": {
+      "import": "./src/services/wails-service/index.ts"
     },
     "./src/services/services-by-app/app-lab": {
       "import": "./src/services/services-by-app/app-lab/index.ts"

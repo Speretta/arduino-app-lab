@@ -5,9 +5,10 @@ import pkgJson from './package.json';
 
 const pkg: any = pkgJson;
 
-const externalDependencies = pkg.peerDependencies
-  ? Object.keys(pkg.peerDependencies)
-  : [];
+const externalDependencies = [
+  ...Object.keys(pkg.peerDependencies || {}),
+  ...Object.keys(pkg.dependencies || {}),
+];
 
 export default defineConfig(
   libConfig({

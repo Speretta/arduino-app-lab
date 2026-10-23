@@ -1,7 +1,7 @@
 import { NavigationGroup } from '@cloud-editor-mono/images/assets/icons';
 import {
   EmptyState,
-  LearnItem as Card,
+  LearnItem,
   PageLayout,
   TopBar,
   useI18n,
@@ -28,7 +28,7 @@ const LearnList: React.FC = () => {
       ) : null}
       <div className={styles['learn-list']}>
         {/* Loading state */}
-        {learnListLoading ? <Card variant="skeleton" /> : null}
+        {learnListLoading ? <LearnItem variant="skeleton" /> : null}
         {/* Learn cards */}
         {!learnListLoading && learnList.length > 0
           ? learnList.map((item) => (
@@ -38,7 +38,7 @@ const LearnList: React.FC = () => {
                 to="/learn/$resourceId"
                 params={{ resourceId: item.id || '' }}
               >
-                <Card
+                <LearnItem
                   key={item.id}
                   name={item.title}
                   description={item.description}

@@ -1,6 +1,7 @@
 import {
   deleteAIModel,
   getAppBrickInstance,
+  getAppBricks,
   getAppDetail,
   getBrickDetails,
   getFileContent,
@@ -8,20 +9,29 @@ import {
   updateAppBrick,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import {
+  AiFramework,
   AIModelItem,
+  AppBrickDetails,
+  AppBrickListItem,
   BrickCreateUpdateRequest,
   BrickDetails,
-  BrickInstance,
+  BrickModel,
   EIProject,
+  isUnsupportedEndpointError,
 } from '@cloud-editor-mono/infrastructure';
 import {
+  AiModelImpulse,
   BrickDetailLogic,
   BrickDetailModel,
-  BrickDetailModelImpulse,
   ConfigureAppBrickDialogLogic,
+  EDGE_IMPULSE_SOURCE,
+  getDownloadableSourceUrl,
+  getHuggingFaceModelPlaceholderName,
+  getModelPageUrl,
+  HUGGING_FACE_SOURCE,
+  isEdgeImpulseModel,
   TrainNewModelDialogLogic,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
-// import { isEdgeImpulseModel } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab/ai-model/helpers';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useCallback,
@@ -35,21 +45,35 @@ import {
 import { BoardScopedQuery } from '../boardScopedQuery';
 import { GET_FILE_CONTENT_QUERY_KEY } from '../features/app/app-detail/hooks/useFileContents';
 import { sendAppLabNotification } from '../features/notifications';
-import { AiModelsContext } from '../providers/ai-models/aiModelsContext';
+import { useAiModels } from '../providers/ai-models/aiModelsContext';
 import { AuthContext } from '../providers/auth/authContext';
-import { BoardResourcesContext } from '../providers/board-resources/boardResourcesContext';
 import { EdgeImpulseContext } from '../providers/edge-impulse/edgeImpulseContext';
-import { useBoardLifecycleStore } from '../store/boardLifecycle';
+import { bytesToGiB, useBoardResourcesStore } from '../store/boardResources';
+import { plainModelId } from '../utils/modelId';
 
-export const makeAppBrickDetailLogic = (appId?: string) => {
-  return (brickId: string): ReturnType<BrickDetailLogic> =>
-    useBrickDetailLogic(brickId, appId);
+const HUGGING_FACE_MODEL_COMPATIBLE_BRICK_IDS = ['arduino:llm'];
+
+// logic used in `arduino-app-cli` versions < 0.14.0
+const EI_TRAIN_NEW_MODEL_INCOMPATIBLE_BRICK_IDS = [
+  'arduino:llm',
+  'arduino:vlm',
+  'arduino:gesture_recognition',
+  'arduino:asr',
+  'arduino:tts',
+];
+
+const EDGE_IMPULSE_AI_FRAMEWORK: AiFramework = 'edgeimpulse';
+
+export const makeAppBrickDetailLogic = (appId?: string): BrickDetailLogic => {
+  return (brickId, onModelInstalled) =>
+    useBrickDetailLogic(brickId, appId, onModelInstalled);
 };
 
-export const useBrickDetailLogic: BrickDetailLogic = (
+export const useBrickDetailLogic = (
   brickId: string,
   appId?: string,
-) => {
+  onModelInstalled?: (modelId: string) => void,
+): ReturnType<BrickDetailLogic> => {
   const queryClient = useQueryClient();
 
   const {
@@ -69,13 +93,22 @@ export const useBrickDetailLogic: BrickDetailLogic = (
     getEIProjectsByBrickType,
     downloadImpulse,
     currentDownloads,
+    clearDownload,
     installedModels,
     getInstalledModel,
     isModelOutdated,
+    installAIModelSSE,
     downloadAIModelSSE,
-  } = useContext(AiModelsContext);
+  } = useAiModels();
 
-  const { homeDiskUsedGB, homeDiskTotalGB } = useContext(BoardResourcesContext);
+  const homeDiskUsed = useBoardResourcesStore(
+    (state) => state.resources?.homeDisk?.used,
+  );
+  const homeDiskTotal = useBoardResourcesStore(
+    (state) => state.resources?.homeDisk?.total,
+  );
+  const homeDiskUsedGB = bytesToGiB(homeDiskUsed);
+  const homeDiskTotalGB = bytesToGiB(homeDiskTotal);
 
   useEffect(() => {
     enabledEIAutoRefresh(true);
@@ -111,6 +144,13 @@ export const useBrickDetailLogic: BrickDetailLogic = (
     // refreshed `appDetail`. In the brick-list (read-only) flow `appId` is
     // undefined, so this stays disabled as before.
     enabled: !!appId && !!brickId,
+  });
+
+  // Keeps the app's brick list cached for selectInstalledModel.
+  useQuery({
+    queryKey: [BoardScopedQuery.APP_BRICKS, appId],
+    queryFn: () => getAppBricks(appId ?? ''),
+    enabled: !!appId,
   });
 
   const usedByAppsInstances = useQueries({
@@ -177,18 +217,28 @@ export const useBrickDetailLogic: BrickDetailLogic = (
     enabled: !!brick,
   });
 
+  // No brick declares a model the user has only just typed a source for, so the
+  // placeholder row comes from the download registry, not from local state.
+  const huggingFaceModelDownloads = useMemo(
+    () =>
+      Object.entries(currentDownloads || {}).filter(
+        ([, info]) => info.linkedBrickId === brickId && !info.error,
+      ),
+    [brickId, currentDownloads],
+  );
+
   const models: BrickDetailModel[] = useMemo(() => {
     // Builtin arduino models
     const builtInModels: BrickDetailModel[] = (brick?.compatible_models || [])
       .map((m) => getInstalledModel(m.id ?? ''))
-      .filter((m): m is AIModelItem => !!m && m.is_builtin === true)
+      .filter((m): m is AIModelItem => !!m && !!m.is_builtin)
       .map(mapModelToBrickDetailModel);
 
     const customAiModels: BrickDetailModel[] = (brick?.compatible_models || [])
       .map((m) => getInstalledModel(m.id ?? ''))
       .filter(
         (m): m is AIModelItem =>
-          !!m && !m.metadata?.['ei-project-id'] && !m.is_builtin === true,
+          !!m && !isUserEdgeImpulseProjectModel(m) && !m.is_builtin,
       )
       .map(mapModelToBrickDetailModel);
 
@@ -234,8 +284,10 @@ export const useBrickDetailLogic: BrickDetailLogic = (
             name: i.name,
             isInstalled: !!installed,
             installedModelId: installed?.id,
-            isOutdated: installed?.id
-              ? isModelOutdated(installed.id)
+            // The outdated lookup is keyed the way `app.yaml` names a model,
+            // not the way a models response addresses one.
+            isOutdated: installed
+              ? isModelOutdated(plainModelId(installed))
               : undefined,
           };
         });
@@ -245,7 +297,8 @@ export const useBrickDetailLogic: BrickDetailLogic = (
           name: project.name.toString(),
           description: project.description,
           isBuiltIn: false,
-          source: 'edgeimpulse',
+          source: EDGE_IMPULSE_SOURCE,
+          origin: 'edge-impulse-user-project',
           isInstalled:
             remoteImpulses.some((i) => i.isInstalled) ||
             orphanImpulses.some((i) => i.isInstalled),
@@ -275,6 +328,7 @@ export const useBrickDetailLogic: BrickDetailLogic = (
     const orphanEdgeImpulseModels = (installedModels || []).reduce((acc, m) => {
       const projectId = m.metadata?.['ei-project-id'];
       if (
+        !isUserEdgeImpulseProjectModel(m) ||
         !projectId ||
         m.is_builtin ||
         remoteModelsIdSet.has(projectId) ||
@@ -286,7 +340,7 @@ export const useBrickDetailLogic: BrickDetailLogic = (
 
       const isInstalled = m.status === 'installed';
 
-      const impulse: BrickDetailModelImpulse = {
+      const impulse: AiModelImpulse = {
         id: m.metadata?.['ei-impulse-id'] ?? '',
         name: m.metadata?.['ei-impulse-name'] ?? '',
         isInstalled,
@@ -304,7 +358,8 @@ export const useBrickDetailLogic: BrickDetailLogic = (
           description: m.description ?? '',
           isBuiltIn: false,
           isInstalled,
-          source: 'edgeimpulse',
+          source: EDGE_IMPULSE_SOURCE,
+          origin: m.origin,
           metadata: m.metadata ?? {},
           edgeImpulseProps: { projectId, impulses: [] },
         };
@@ -316,9 +371,26 @@ export const useBrickDetailLogic: BrickDetailLogic = (
       return acc;
     }, {} as Record<string, BrickDetailModel>);
 
+    const huggingFaceModels: BrickDetailModel[] = huggingFaceModelDownloads.map(
+      ([source, info]) => ({
+        id: source,
+        name: getHuggingFaceModelPlaceholderName(source, info.fileName),
+        description: '',
+        source: HUGGING_FACE_SOURCE,
+        origin: 'user',
+        metadata: {
+          source: HUGGING_FACE_SOURCE,
+        },
+        isInstalled: false,
+        isBuiltIn: false,
+        isPlaceholder: true,
+      }),
+    );
+
     return [
       ...builtInModels,
       ...customAiModels,
+      ...huggingFaceModels,
       ...remoteEgeImpulseModels,
       ...Object.values(orphanEdgeImpulseModels),
     ];
@@ -328,6 +400,7 @@ export const useBrickDetailLogic: BrickDetailLogic = (
     getInstalledModel,
     installedModels,
     isModelOutdated,
+    huggingFaceModelDownloads,
   ]);
 
   const diskUsageWarning = useCallback(
@@ -337,8 +410,7 @@ export const useBrickDetailLogic: BrickDetailLogic = (
       if (!model) {
         return undefined;
       }
-      const modelSizeMB = parseFloat(model.metadata?.model_size_mb || '0');
-      const modelSizeGB = modelSizeMB / 1024;
+      const modelSizeGB = (model.size ?? 0) / 1024 ** 3;
 
       // Show warning if the model size is larger than the available space
       if (
@@ -371,7 +443,7 @@ export const useBrickDetailLogic: BrickDetailLogic = (
       // Optimistic update
       queryClient.setQueryData(
         [BoardScopedQuery.GET_BRICK_INSTANCE, brickId, appId],
-        (prev: BrickInstance | undefined) => ({ ...prev, model: modelId }),
+        (prev: AppBrickDetails | undefined) => ({ ...prev, model: modelId }),
       );
 
       const prevId = brickInstance?.model;
@@ -397,7 +469,7 @@ export const useBrickDetailLogic: BrickDetailLogic = (
       } else {
         queryClient.setQueryData(
           [BoardScopedQuery.GET_BRICK_INSTANCE, brickId, appId],
-          (prev: BrickInstance | undefined) => ({ ...prev, model: prevId }),
+          (prev: AppBrickDetails | undefined) => ({ ...prev, model: prevId }),
         );
         sendAppLabNotification({
           message: 'An error occurred while setting model',
@@ -408,14 +480,53 @@ export const useBrickDetailLogic: BrickDetailLogic = (
     [appId, appDetail, brick?.name, brickId, brickInstance?.model, queryClient],
   );
 
+  const selectInstalledModel = useCallback(
+    async (modelId: string): Promise<boolean> => {
+      // In the Add Brick dialog the brick is added to the app only on "Add":
+      // until then the daemon rejects a model update for it. Read from the
+      // cache because "Add" can happen while the download runs.
+      const appBricks = queryClient.getQueryData<AppBrickListItem[]>([
+        BoardScopedQuery.APP_BRICKS,
+        appId,
+      ]);
+      if (readOnly || !appBricks?.some((b) => b.id === brickId)) {
+        onModelInstalled?.(modelId);
+        return false;
+      }
+      await updateModelInUse(modelId, true);
+      return true;
+    },
+    [appId, brickId, onModelInstalled, queryClient, readOnly, updateModelInUse],
+  );
+
+  // Guarded: a brick-details entry that was reset must not come back as a lone
+  // `compatible_models` list with no id, name or author.
+  const addCompatibleModel = useCallback(
+    (model: BrickModel) => {
+      queryClient.setQueryData(
+        [BoardScopedQuery.GET_BRICK_DETAILS, brickId],
+        (prev: BrickDetails | undefined) => {
+          if (!prev) {
+            return prev;
+          }
+          const models = prev.compatible_models || [];
+          return models.some((m) => m.id === model.id)
+            ? prev
+            : { ...prev, compatible_models: models.concat(model) };
+        },
+      );
+    },
+    [brickId, queryClient],
+  );
+
   const downloadGenericModel = useCallback(
     async (modelId: string): Promise<void> => {
-      const success = await downloadAIModelSSE(modelId);
-      if (success && !readOnly) {
-        await updateModelInUse(modelId, true);
+      const installed = await installAIModelSSE(modelId);
+      if (installed) {
+        await selectInstalledModel(installed.id);
       }
     },
-    [downloadAIModelSSE, readOnly, updateModelInUse],
+    [installAIModelSSE, selectInstalledModel],
   );
 
   const downloadEIModel = useCallback(
@@ -430,9 +541,11 @@ export const useBrickDetailLogic: BrickDetailLogic = (
       // card's progress bar keeps working.
       if (impulse?.downloadModelId) {
         const modelId = impulse.downloadModelId;
-        const success = await downloadAIModelSSE(modelId, projectId);
-        if (success && !readOnly) {
-          await updateModelInUse(modelId, true);
+        const installed = await installAIModelSSE(modelId, {
+          progressKey: projectId,
+        });
+        if (installed) {
+          await selectInstalledModel(installed.id);
         }
         return;
       }
@@ -441,17 +554,11 @@ export const useBrickDetailLogic: BrickDetailLogic = (
       // which requires a linked account.
       const model = await downloadImpulse(projectId, impulseId);
       if (model) {
-        queryClient.setQueryData(
-          [BoardScopedQuery.GET_BRICK_DETAILS, brickId],
-          (prev: BrickDetails | undefined) => ({
-            ...prev,
-            compatible_models: (brick?.compatible_models || []).concat(model),
-          }),
-        );
+        addCompatibleModel(model);
 
         // Select model
-        if (!readOnly) {
-          await updateModelInUse(model.id ?? '', true);
+        const isModelInUse = await selectInstalledModel(model.id);
+        if (isModelInUse) {
           sendAppLabNotification({
             message: `Installation complete ${model.name} is now installed and in use`,
             variant: 'success',
@@ -460,14 +567,11 @@ export const useBrickDetailLogic: BrickDetailLogic = (
       }
     },
     [
-      brick,
-      brickId,
+      addCompatibleModel,
       models,
-      readOnly,
-      downloadAIModelSSE,
+      installAIModelSSE,
       downloadImpulse,
-      queryClient,
-      updateModelInUse,
+      selectInstalledModel,
     ],
   );
 
@@ -497,25 +601,46 @@ export const useBrickDetailLogic: BrickDetailLogic = (
     uninstallingModelsRef.current[modelId] = true;
     setUninstallingModels((prev) => ({ ...prev, [modelId]: true }));
     try {
-      const modelName = getInstalledModel(modelId)?.name;
+      const removedModel = getInstalledModel(modelId);
+      const modelName = removedModel?.name;
+      // A user-linked model is listed only while it is downloaded; a declared
+      // one stays on the list as downloadable.
+      const isUserModel = removedModel?.origin === 'user';
       await deleteAIModel(modelId, isForced);
       queryClient.setQueryData(
         [BoardScopedQuery.GET_INSTALLED_MODELS],
         (prev: AIModelItem[] | undefined) => {
-          // update the model just downloaded with id `modelId` to have `status: 'notinstalled'`
-          return (prev || []).map((model) => {
-            if (model.id === modelId) {
-              return {
-                ...model,
-                status: 'notinstalled',
-              };
-            }
-            return model;
-          });
+          return (
+            (prev || [])
+              .filter((model) => !(isUserModel && model.id === modelId))
+              // update the model just downloaded with id `modelId` to have `status: 'not-installed'`
+              .map((model) =>
+                model.id === modelId
+                  ? { ...model, status: 'not-installed' as const }
+                  : model,
+              )
+          );
         },
       );
 
-      queryClient.invalidateQueries([BoardScopedQuery.GET_INSTALLED_MODELS]);
+      if (isUserModel) {
+        // It is gone from the board, so no brick can offer it any more — every
+        // cached brick, not just this one.
+        queryClient.setQueriesData(
+          { queryKey: [BoardScopedQuery.GET_BRICK_DETAILS] },
+          (prev: BrickDetails | undefined) =>
+            prev && {
+              ...prev,
+              compatible_models: (prev.compatible_models || []).filter(
+                (m) => m.id !== modelId,
+              ),
+            },
+        );
+      }
+
+      queryClient.invalidateQueries({
+        queryKey: [BoardScopedQuery.GET_INSTALLED_MODELS],
+      });
 
       sendAppLabNotification({
         message: `${modelName} successfully uninstalled`,
@@ -554,15 +679,21 @@ export const useBrickDetailLogic: BrickDetailLogic = (
 
   const openModelPage = useCallback(
     (modelId: string, impulseId?: string) => {
-      let url = '';
       const model = models.find((m) => m.id === modelId);
-      if (model?.edgeImpulseProps) {
+      if (!model) {
+        return;
+      }
+
+      let url: string;
+      if (isEdgeImpulseModel(model)) {
         url = `https://studio.edgeimpulse.com/studio/${model.edgeImpulseProps.projectId}`;
         if (impulseId) {
           url += `/impulse/${impulseId}/create-impulse`;
         }
       } else {
-        url = model?.url ?? model?.metadata?.['source-model-url'] ?? '';
+        url = getModelPageUrl(
+          model.url || model.metadata?.['source-model-url'] || '',
+        );
       }
 
       openExternalLink(url);
@@ -598,31 +729,20 @@ export const useBrickDetailLogic: BrickDetailLogic = (
     ],
   );
 
-  const [trainNewModelDialogOpen, setTrainNewModelDialogOpen] = useState(false);
+  // ai_frameworks_compatibility is missing on `arduino-app-cli` versions < 0.14.0
+  const trainNewModelEnabled =
+    (brick?.ai_frameworks_compatibility
+      ? brick.ai_frameworks_compatibility.includes(EDGE_IMPULSE_AI_FRAMEWORK)
+      : !EI_TRAIN_NEW_MODEL_INCOMPATIBLE_BRICK_IDS.includes(brick?.id ?? '')) &&
+    !isExample;
 
-  /*
-   * TODO: fix this 
-   * THIS WOULD BE THE CORRECT LOGIC, if only had that `ai_frameworks_compatibility` field in the json feed 
-   *
-    const hideEdgeImpulse =
-      brick?.ai_frameworks_compatibility?.includes('edgeImpulse') === false;
-   * 
-   * BUT in the meanwhile, we will use a whitelist of bricks that we know are
-   * not compatible with Edge Impulse
-   */
-  const hideEdgeImpulse = [
-    'arduino:llm',
-    'arduino:vlm',
-    'arduino:gesture_recognition',
-    'arduino:asr',
-    'arduino:tts',
-  ].includes(brick?.id ?? '');
+  const [trainNewModelDialogOpen, setTrainNewModelDialogOpen] = useState(false);
 
   const trainNewModelDialogProps:
     | ReturnType<BrickDetailLogic>['trainNewModelDialogProps']
     | undefined = useMemo(
     () =>
-      !hideEdgeImpulse
+      trainNewModelEnabled
         ? {
             open: trainNewModelDialogOpen,
             onOpenChange: setTrainNewModelDialogOpen,
@@ -643,10 +763,10 @@ export const useBrickDetailLogic: BrickDetailLogic = (
       dismissWelcomePage,
       edgeImpulseLogin,
       edgeImpulseUser,
-      hideEdgeImpulse,
       isWelcomePageDismissed,
       openAndAssociateToDevice,
       trainNewModelDialogOpen,
+      trainNewModelEnabled,
     ],
   );
 
@@ -658,26 +778,105 @@ export const useBrickDetailLogic: BrickDetailLogic = (
     setTrainNewModelDialogOpen(true);
   }, [isEdgeImpulseConnected, openAndAssociateToDevice]);
 
-  const selectedBoard = useBoardLifecycleStore(
-    (state) => state.selectedConnectedBoard,
+  const addHuggingFaceModelEnabled =
+    HUGGING_FACE_MODEL_COMPATIBLE_BRICK_IDS.includes(brick?.id ?? '') &&
+    !isExample;
+
+  const downloadHuggingFaceModel = useCallback(
+    (source: string): Promise<void> =>
+      new Promise<void>((resolve, reject) => {
+        downloadAIModelSSE(source, {
+          linkedBrickId: brickId,
+          onStarted: resolve,
+          onError: (error) => {
+            if (isUnsupportedEndpointError(error)) {
+              resolve();
+              return;
+            }
+            reject(error);
+          },
+        })
+          .then(async (installed) => {
+            if (installed) {
+              addCompatibleModel(installed);
+            }
+
+            clearDownload(source);
+
+            if (installed) {
+              await selectInstalledModel(installed.id);
+            }
+          })
+          .catch((error: unknown) => {
+            clearDownload(source);
+            reject(error);
+          });
+      }),
+    [
+      addCompatibleModel,
+      brickId,
+      clearDownload,
+      downloadAIModelSSE,
+      selectInstalledModel,
+    ],
   );
 
+  const isHuggingFaceModelSourceDownloading = useCallback(
+    (source: string): boolean => !!currentDownloads?.[source]?.isDownloading,
+    [currentDownloads],
+  );
+
+  const isHuggingFaceModelSourceInstalled = useCallback(
+    (source: string): boolean =>
+      models.some(
+        (model) =>
+          model.isInstalled && getDownloadableSourceUrl(model) === source,
+      ),
+    [models],
+  );
+
+  const [addHuggingFaceModelDialogOpen, setAddHuggingFaceModelDialogOpen] =
+    useState(false);
+
+  const addHuggingFaceModelDialogProps: ReturnType<BrickDetailLogic>['addHuggingFaceModelDialogProps'] =
+    useMemo(
+      () =>
+        addHuggingFaceModelEnabled
+          ? {
+              open: addHuggingFaceModelDialogOpen,
+              onOpenChange: setAddHuggingFaceModelDialogOpen,
+              downloadModel: downloadHuggingFaceModel,
+              isSourceDownloading: isHuggingFaceModelSourceDownloading,
+              isSourceInstalled: isHuggingFaceModelSourceInstalled,
+              onOpenExternal: openExternalLink,
+            }
+          : undefined,
+      [
+        addHuggingFaceModelEnabled,
+        addHuggingFaceModelDialogOpen,
+        downloadHuggingFaceModel,
+        isHuggingFaceModelSourceDownloading,
+        isHuggingFaceModelSourceInstalled,
+        openExternalLink,
+      ],
+    );
+
   return {
-    board: selectedBoard,
     brick,
     isBrickLoading,
     brickInstance,
     isCustomBrick: brick?.author !== 'Arduino',
     readOnly,
+    addHuggingFaceModelEnabled,
     readme,
     apiDocs,
     examples,
     models,
     configureDialogProps,
     trainNewModelDialogProps,
+    addHuggingFaceModelDialogProps,
     diskUsageWarning,
-    isEdgeImpulseConnected,
-    hideEdgeImpulse,
+    trainNewModelEnabled,
     isExample,
     openExternalLink,
     openModelPage,
@@ -707,12 +906,12 @@ export const useConfigureAppBrickDialog: ConfigureAppBrickDialogLogic = (
       }
       const success = await updateAppBrick(appId, brickId, req);
       if (success) {
-        queryClient.invalidateQueries([
-          BoardScopedQuery.GET_BRICK_INSTANCE,
-          brickId,
-          appId,
-        ]);
-        queryClient.invalidateQueries([BoardScopedQuery.APP_BRICKS, appId]);
+        queryClient.invalidateQueries({
+          queryKey: [BoardScopedQuery.GET_BRICK_INSTANCE, brickId, appId],
+        });
+        queryClient.invalidateQueries({
+          queryKey: [BoardScopedQuery.APP_BRICKS, appId],
+        });
       }
       return success;
     },
@@ -731,15 +930,40 @@ export const useConfigureAppBrickDialog: ConfigureAppBrickDialogLogic = (
   };
 };
 
-function mapModelToBrickDetailModel(model: AIModelItem): BrickDetailModel {
-  return {
-    id: model.id ?? '',
-    name: model.name ?? '',
-    description: model.description ?? '',
-    source: model.metadata?.source || 'edgeimpulse',
-    url: model.metadata?.['ei-model-url'],
-    metadata: model.metadata ?? {},
-    isInstalled: model.status == 'installed' || false,
-    isBuiltIn: !!model.is_builtin,
-  };
-}
+// `origin` is the authoritative answer, but a daemon older than the
+// one-endpoint API sends none: there, the Edge Impulse metadata is the only
+// thing that names a model as the user's own deployment.
+const isUserEdgeImpulseProjectModel = (model: AIModelItem): boolean =>
+  model.origin
+    ? model.origin === 'edge-impulse-user-project'
+    : !!model.metadata?.['ei-project-id'];
+
+const getModelSource = (model: AIModelItem): string | undefined => {
+  if (model.metadata?.source) {
+    return model.metadata.source;
+  }
+
+  switch (model.origin) {
+    case 'user':
+      return HUGGING_FACE_SOURCE;
+    case 'edge-impulse-user-project':
+      return EDGE_IMPULSE_SOURCE;
+    // `curated` says the board's list declares the model, not where it came
+    // from; those entries name their provider in metadata, read above.
+    default:
+      return undefined;
+  }
+};
+
+const mapModelToBrickDetailModel = (model: AIModelItem): BrickDetailModel => ({
+  id: model.id,
+  name: model.name ?? '',
+  description: model.description ?? '',
+  source: getModelSource(model),
+  origin: model.origin,
+  url: model.metadata?.['ei-model-url'],
+  metadata: model.metadata ?? {},
+  size: model.size ?? undefined,
+  isInstalled: model.status === 'installed',
+  isBuiltIn: !!model.is_builtin,
+});

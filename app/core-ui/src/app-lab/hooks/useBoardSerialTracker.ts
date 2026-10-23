@@ -1,5 +1,6 @@
-import { get, set } from 'idb-keyval';
 import { useCallback } from 'react';
+
+import { get, set } from '../services/persistentStore';
 
 const USED_SERIAL_NUMBERS_KEY = 'arduino:used-serial-numbers';
 const LAST_CONNECTIONS_KEY = 'arduino:last-connections';

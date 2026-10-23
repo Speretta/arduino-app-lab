@@ -24,7 +24,10 @@
   &--info {
     background-color: var(--feedback-neutral-default, #aeb8b8);
     --color: var(--text-inverted, #171e21);
-    --divider-color: var(--feedback-diver-light, #7E8C8D);
+    // Applied, not just declared: otherwise the text inherits :root's syntax-highlight
+    // colour (#dae3e3 in dark), which is unreadable on this always-light-grey bar.
+    color: var(--color);
+    --divider-color: var(--border-strong);
     --divider-opacity: 1;
   }
 
@@ -73,13 +76,18 @@
   }
 
   &--error {
-    background-color: vars.$notifyerror;
+    // Design-system token (--red-coral) rather than the imported library's darker red, so it
+    // matches the reference; dark text, like every other variant.
+    background-color: var(--feedback-error-default, #ff8878);
     --color: var(--text-inverted, #171e21);
+    color: var(--color);
   }
 
   &--warning {
-    background-color: vars.$sunflower;
-    --color: #{vars.$jet};
+    // Token (--yellow-saffron), not the library's brighter sunflower.
+    background-color: var(--feedback-warning-default, #c1ab15);
+    --color: var(--text-inverted, #171e21);
+    color: var(--color);
   }
 
   &--sm {

@@ -1,5 +1,4 @@
 @use "../../../../public/shared.module.scss";
-@use "@cloud-editor-mono/arduino-sass";
 
 .body-container {
   text-align: left;
@@ -8,7 +7,7 @@
 
 .body-title {
   word-break: break-all;
-  color: shared.theme-var(--associate-dialog-title);
+  color: var(--text-default);
 }
 
 .radio-group {
@@ -50,7 +49,7 @@
   height: 144px !important;
   width: 100% !important;
   resize: none;
-  border: 1px solid arduino-sass.$smoke;
+  border: 1px solid var(--border-default);
   border-radius: 2px;
   background-color: unset !important;
   padding: 12px 20px;

@@ -9,7 +9,7 @@ import React, { useContext } from 'react';
 
 import { AuthContext } from './auth/authContext';
 
-const { API_URL, ID_URL, DIGITAL_STORE_URL, CLOUD_CDN_URL: ICON_CDN } = Config;
+const { API2_URL, ID_URL, DIGITAL_STORE_URL, CLOUD_CDN_URL: ICON_CDN } = Config;
 
 export const CloudContextProviderRenderer: React.FC<
   React.PropsWithChildren
@@ -34,7 +34,9 @@ const CloudContextProviderWrapper: React.FC<
   return (
     <CloudContextProvider
       api={{
-        baseurl: API_URL,
+        // The sidebar's backends (classroom/restrictions) are served from the
+        // api2 host on both environments.
+        baseurl: API2_URL,
       }}
       onSpaceChange={createOnSpaceChange(
         client.getCustomization()?.url || Config.CLOUD_HOME_URL,

@@ -20,22 +20,31 @@ export const useGenAiBanner = (): ReturnType<UseGenAiBanner> => {
   const { mutate: dismissGenAiBanner } = useMutation({
     mutationFn: (tryGenAi?: boolean) => {
       if (tryGenAi) {
-        navigate({ search: { ...search, [NAV_PARAM]: SidenavItemId.GenAI } });
+        navigate({
+          search: {
+            ...search,
+            [NAV_PARAM]: SidenavItemId.GenAI,
+          },
+        });
       }
+
       return set(GEN_AI_BANNER_KEY, true);
     },
+
     onSuccess: () => {
-      queryClient.invalidateQueries([GEN_AI_BANNER_KEY]);
+      queryClient.invalidateQueries({
+        queryKey: [GEN_AI_BANNER_KEY],
+      });
     },
   });
 
-  const { data: genAiBannerDismissValue, isLoading } = useQuery(
-    [GEN_AI_BANNER_KEY],
-    async () => {
+  const { data: genAiBannerDismissValue, isLoading } = useQuery({
+    queryKey: [GEN_AI_BANNER_KEY],
+    queryFn: async () => {
       const data = await get(GEN_AI_BANNER_KEY);
       return data ?? null;
     },
-  );
+  });
 
   return {
     dismissGenAiBanner,

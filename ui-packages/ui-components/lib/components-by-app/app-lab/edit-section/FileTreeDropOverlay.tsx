@@ -3,9 +3,9 @@ import { CSSProperties, useLayoutEffect, useState } from 'react';
 
 import dropZoneStyles from '../../../editor-panel/editor-split-drop-zone.module.scss';
 
-const RIGHT_PANE_PANEL_ID = 'split-right';
-const LEFT_PANE_PANEL_ID = 'split-left';
-// When pane B isn't yet mounted, dropping in the right ~30% of the editor
+const RIGHT_PANEL_ID = 'split-right';
+const LEFT_PANEL_ID = 'split-left';
+// When panel B isn't yet mounted, dropping in the right ~30% of the editor
 // area creates panel B with the dropped file. Must match the drop
 // hit-test in AppLabEditSection's handleDrop.
 const CREATE_B_THRESHOLD = 0.7;
@@ -14,7 +14,7 @@ const TABS_BAR_OFFSET = 'var(--editor-tabs-bar-height, 40px)';
 interface FileTreeDropOverlayProps {
   /**
    * Container the overlay positions itself against. Should be a
-   * `position: relative` ancestor of the split editor panes (typically the
+   * `position: relative` ancestor of the split editor panels (typically the
    * `.editor` wrapper in AppLabEditSection).
    */
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -25,7 +25,7 @@ interface FileTreeDropOverlayProps {
 /**
  * Highlight overlay shown while a file-tree node is dragged over the
  * editor area. Mirrors {@link EditorSplitDropZone}'s visual treatment so
- * file-tree drags get the same drop-target preview as cross-pane tab
+ * file-tree drags get the same drop-target preview as cross-panel tab
  * drags:
  *
  *  - Pointer over panel A's body (split open) → border highlight on A.
@@ -43,7 +43,7 @@ const FileTreeDropOverlay = ({
   pointer,
 }: FileTreeDropOverlayProps): JSX.Element | null => {
   // Recompute geometry on every pointer update so the highlight follows
-  // the user's cursor across panes. Layout-effect avoids a flash of stale
+  // the user's cursor across panels. Layout-effect avoids a flash of stale
   // geometry between dragover and paint.
   const [style, setStyle] = useState<{
     overlay: CSSProperties;
@@ -57,11 +57,11 @@ const FileTreeDropOverlay = ({
       return;
     }
     const containerRect = container.getBoundingClientRect();
-    const rightPaneEl = container.querySelector<HTMLElement>(
-      `#${RIGHT_PANE_PANEL_ID}`,
+    const rightPanelEl = container.querySelector<HTMLElement>(
+      `#${RIGHT_PANEL_ID}`,
     );
-    const leftPaneEl = container.querySelector<HTMLElement>(
-      `#${LEFT_PANE_PANEL_ID}`,
+    const leftPanelEl = container.querySelector<HTMLElement>(
+      `#${LEFT_PANEL_ID}`,
     );
 
     const rectFor = (
@@ -76,9 +76,9 @@ const FileTreeDropOverlay = ({
       };
     };
 
-    if (rightPaneEl && leftPaneEl) {
-      const rightRect = rightPaneEl.getBoundingClientRect();
-      const target = pointer.x >= rightRect.left ? rightPaneEl : leftPaneEl;
+    if (rightPanelEl && leftPanelEl) {
+      const rightRect = rightPanelEl.getBoundingClientRect();
+      const target = pointer.x >= rightRect.left ? rightPanelEl : leftPanelEl;
       const geo = rectFor(target);
       setStyle({
         overlay: {
@@ -120,7 +120,11 @@ const FileTreeDropOverlay = ({
   if (!style) return null;
 
   return (
-    <div className={dropZoneStyles['drop-zone']} aria-hidden>
+    <div
+      className={dropZoneStyles['drop-zone']}
+      aria-hidden
+      style={{ pointerEvents: 'none' }}
+    >
       <div
         className={clsx(
           dropZoneStyles.overlay,

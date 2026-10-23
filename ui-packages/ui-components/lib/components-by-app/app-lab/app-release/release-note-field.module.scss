@@ -1,0 +1,45 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0.12px;
+  color: var(--text-default);
+}
+
+.label-optional {
+  margin-left: 4px;
+  font-weight: 400;
+  color: var(--text-subtle);
+}
+
+.editor {
+  box-sizing: border-box;
+  width: 100%;
+  // Four lines tall, so it reads as a field for long text; it stays resizable past that.
+  height: 88px;
+  min-height: 88px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--component-bg-below-1);
+  color: var(--text-default);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: 0.12px;
+  resize: vertical;
+
+  &:focus-visible {
+    outline: none;
+    border-color: var(--accent-default);
+  }
+}

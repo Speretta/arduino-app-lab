@@ -57,6 +57,9 @@ const EditSection: React.FC<EditSectionProps> = (props: EditSectionProps) => {
               [styles['library-editor-panel-container']]:
                 props.codeOnlyResType === 'library',
             }),
+            tabsBar: styles['editor-tabs-bar-indent'],
+            tab: styles['editor-tab'],
+            selectedTab: styles['editor-selected-tab'],
           }}
         />
       </>
@@ -72,7 +75,12 @@ const EditSection: React.FC<EditSectionProps> = (props: EditSectionProps) => {
         <EditorPanel
           editorPanelLogic={editorPanelLogic}
           getKeywords={getKeywords}
-          classes={{ container: styles['editor-panel-container'] }}
+          classes={{
+            container: styles['editor-panel-container'],
+            tabsBar: styles['editor-tabs-bar-indent'],
+            tab: styles['editor-tab'],
+            selectedTab: styles['editor-selected-tab'],
+          }}
         />
       </SplitConsole>
     </div>

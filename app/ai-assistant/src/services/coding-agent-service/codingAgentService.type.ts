@@ -1,3 +1,5 @@
+import type { AgentEditorContext } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+
 import { Unsubscribe } from '../common';
 
 export type AgentId = 'claude' | 'codex' | 'opencode';
@@ -61,6 +63,14 @@ export interface AgentMode {
 // background after a switch); 'error' is the persisted last-turn outcome. Waiting/current are derived FE-side.
 export type SessionStatus = 'error' | 'running';
 
+// A workspace a session can be opened in: the general one (empty id — the whole board) or a single app.
+// The host owns the list, since it owns the board's apps; a session records its choice as `workspaceAppId`.
+export interface AgentWorkspace {
+  id: string;
+  name: string;
+  icon?: string; // the app's emoji, shown beside the name in the picker
+}
+
 // A persisted chat session as listed in the sidebar (from ACP SessionInfo).
 export interface SessionSummary {
   id: SessionId;
@@ -68,6 +78,8 @@ export interface SessionSummary {
   updatedAt?: string; // ISO 8601 last-activity timestamp
   status?: SessionStatus; // backend status: running (live) or error (last turn); absent = idle/ok
   pinned?: boolean; // user pinned this session to the top of the sidebar
+  workspaceAppId?: string; // the app this session was opened for; absent is the general workspace
+  workspaceName?: string; // that app's name when the session was opened, for one the board no longer lists
 }
 
 export type ToolCallStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
@@ -81,6 +93,8 @@ export interface ToolCall {
   status: ToolCallStatus;
   input?: unknown; // ACP rawInput — Go to forward (co-design TODO)
   output?: string; // Go forwards plain text today; rich content is GA-track
+  // The call acts on an app other than the session's workspace: the host resolved it, the UI only renders it.
+  outsideWorkspace?: boolean;
 }
 
 // A multi-step plan the agent surfaces as a static checklist (reuses the
@@ -141,6 +155,7 @@ export type AgentUpdate =
       status: ToolCallStatus;
       input?: unknown;
       output?: string;
+      outsideWorkspace?: boolean; // the enriched call turned out to act on another app
     } // content · ACP tool_call_update
   | { type: 'checklist'; checklist: Checklist } // content · ACP plan (full snapshot)
   | { type: 'choices'; choices: ChoiceRequest } // content · ACP form elicitation (Claude's AskUserQuestion); the agent's turn stays blocked until choicesReply answers it
@@ -225,7 +240,8 @@ export interface CodingAgentService {
   disconnect: (agentId: AgentId) => Promise<void>;
   // Mark an agent as the default used for new sessions.
   setDefaultAgent: (agentId: AgentId) => Promise<void>;
-  newSession: (appId?: string) => Promise<SessionId>;
+  // appName rides along so the agent's system prompt can name the app without the desktop asking the board for it.
+  newSession: (appId?: string, appName?: string) => Promise<SessionId>;
   // persisted sessions for the workspace, newest first (feeds the sessions sidebar)
   listSessions: () => Promise<SessionSummary[]>;
   // reopen a persisted session: replays its history via onUpdate so the thread can be rebuilt
@@ -238,8 +254,12 @@ export interface CodingAgentService {
   deleteSession: (sessionId: SessionId) => Promise<void>;
   // status + pending permission, so the UI can rehydrate after a reload
   getSessionState: (sessionId: SessionId) => Promise<SessionState>;
-  // resolves when the turn ends; updates stream via onUpdate
-  prompt: (sessionId: SessionId, text: string) => Promise<void>;
+  // resolves when the turn ends; updates stream via onUpdate. editorContext is the editor beside a docked panel, for the agent only.
+  prompt: (
+    sessionId: SessionId,
+    text: string,
+    editorContext?: AgentEditorContext,
+  ) => Promise<void>;
   cancel: (sessionId: SessionId) => Promise<void>;
   // free the session on the agent (call when the chat unmounts) to avoid leaks
   closeSession: (sessionId: SessionId) => Promise<void>;
@@ -258,6 +278,10 @@ export interface CodingAgentService {
   onRestart: (handler: (restart: AgentRestart) => void) => Unsubscribe;
   // Emits the subscription sign-in URL the agent CLI prints, so the UI can offer a copyable link.
   onLoginUrl: (handler: (url: string) => void) => Unsubscribe;
+  // An app a session could be scoped to is gone — deleted from the UI, or by the agent's own apps_delete.
+  // Its chats went with it, so a panel sitting on that workspace has to move off. Fires before the chats
+  // are actually deleted on the agent, which is slow and must not hold the UI back.
+  onWorkspaceAppForgotten: (handler: (appId: string) => void) => Unsubscribe;
   applyToEditor: (code: string, language?: string) => Promise<void>;
   // Open a file the agent read/wrote in App Lab's app editor; rejects if the path is no longer valid (e.g. the board changed).
   openAgentFile: (path: string) => Promise<void>;

@@ -1,16 +1,11 @@
 import {
   CodeEditorText,
-  FileNode,
   ImportResourceResult,
   TreeNode,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { BehaviorSubject, Observable } from 'rxjs';
 
 export interface ArduinoAppFilesService {
-  getAppFiles: (path: string) => Promise<{
-    filesList: FileNode[];
-    fileTree: TreeNode[];
-  }>;
   // `suppressWatch` (defaults to true at the desktop impl) tells the backend to
   // ignore the filesystem events this mutation produces, so UI edits — which
   // already update state optimistically — don't trigger a self-refresh. Pass
@@ -32,15 +27,11 @@ export interface ArduinoAppFilesService {
     nodeType?: 'file' | 'folder',
     suppressWatch?: boolean,
   ) => Promise<void>;
-  moveAppFile: (
-    fromPath: string,
-    toPath: string,
-    suppressWatch?: boolean,
-  ) => Promise<void>;
   removeAppFile: (path: string, suppressWatch?: boolean) => Promise<void>;
   createAppFolder: (path: string, suppressWatch?: boolean) => Promise<void>;
 
-  getAppFileTree(path: string): Promise<TreeNode[]>;
+  listAppDirectory(appPath: string, relDirPath?: string): Promise<TreeNode[]>;
+  statAppPath(path: string): Promise<{ isDir: boolean } | null>;
   getAppFileContent(path: string): Promise<string>;
   selectResourcePathToImport: (
     remoteDir: string,

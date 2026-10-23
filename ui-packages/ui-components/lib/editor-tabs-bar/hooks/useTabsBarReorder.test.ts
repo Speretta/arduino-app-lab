@@ -5,7 +5,7 @@
  * `splitDrag` adapter —
  *  - completed drags call `onEnd`, and a consumed drop skips tab reorder;
  *  - cancelled drags (Escape / interrupted activation) call `onCancel`,
- *    never `onEnd`, so an aborted drag can never commit a cross-pane move;
+ *    never `onEnd`, so an aborted drag can never commit a cross-panel move;
  *  - drag moves report viewport pointer coordinates via `onMove`.
  *
  * dnd-kit events are fabricated as minimal objects; activator events use
@@ -19,7 +19,7 @@ import type {
   DragStartEvent,
 } from '@dnd-kit/core';
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, Mock, vi } from 'vitest';
 
 import { SelectableFileData } from '../EditorTabsBar.type';
 import { useTabsBarReorder } from './useTabsBarReorder';
@@ -34,18 +34,20 @@ const makeTab = (id: string): SelectableFileData => ({
 
 const tabs = [makeTab('tab-a'), makeTab('tab-b'), makeTab('tab-c')];
 
+// Mirrors the hook's `splitDrag` adapter. Each spy carries its real signature
+// so the object stays assignable to the adapter type.
 const makeSplitDrag = (
   consumed = false,
 ): {
-  onStart: ReturnType<typeof vi.fn>;
-  onMove: ReturnType<typeof vi.fn>;
-  onEnd: ReturnType<typeof vi.fn>;
-  onCancel: ReturnType<typeof vi.fn>;
+  onStart: Mock<(fileId: string) => void>;
+  onMove: Mock<(pointer: { x: number; y: number }) => void>;
+  onEnd: Mock<() => boolean>;
+  onCancel: Mock<() => void>;
 } => ({
-  onStart: vi.fn(),
-  onMove: vi.fn(),
-  onEnd: vi.fn(() => consumed),
-  onCancel: vi.fn(),
+  onStart: vi.fn<(fileId: string) => void>(),
+  onMove: vi.fn<(pointer: { x: number; y: number }) => void>(),
+  onEnd: vi.fn<() => boolean>().mockReturnValue(consumed),
+  onCancel: vi.fn<() => void>(),
 });
 
 const startEvent = (id: string): DragStartEvent =>
@@ -110,7 +112,7 @@ describe('useTabsBarReorder — split-drag integration', () => {
   it('reports the real pointer position over activator + delta once a live pointer event is seen', () => {
     // dnd-kit's `delta` bakes in scroll compensation, so `activator + delta`
     // drifts when the source bar auto-scrolls. A captured live pointer event
-    // must take precedence to keep the cross-pane indicator aligned.
+    // must take precedence to keep the cross-panel indicator aligned.
     const splitDrag = makeSplitDrag();
     const { result } = renderHook(() =>
       useTabsBarReorder({ tabs, updateTabOrder: vi.fn(), splitDrag }),

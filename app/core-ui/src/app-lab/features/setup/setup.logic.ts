@@ -1,5 +1,6 @@
 import { setNetworkMode } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import {
+  BoardSerialTrackerLogic,
   NetworkCredentials,
   SetupItemId,
   UseBoardConfigurationLogic,
@@ -141,7 +142,9 @@ export const createUseSetupLogic = function (
 
     const { onOpenTerminal, terminalError } = useTerminal();
     const { boardItem } = useBoardItem();
-    const boardSerialTracker = useBoardSerialTracker();
+    // Handed over uninvoked: Welcome runs it in its own render.
+    const serialTracker = useBoardSerialTracker();
+    const boardSerialTracker: BoardSerialTrackerLogic = () => serialTracker;
 
     // Track if auto-selection was ever started to keep loader during transition
     const [autoSelectionStarted, setAutoSelectionStarted] = useState(false);

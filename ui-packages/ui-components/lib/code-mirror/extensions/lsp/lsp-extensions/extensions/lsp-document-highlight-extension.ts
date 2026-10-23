@@ -78,7 +78,7 @@ export const getLspDocumentHighlightExtension = ({
         return;
       }
 
-      // The file this response will describe. A pane is reused across tabs
+      // The file this response will describe. A panel is reused across tabs
       // (switching calls setState on the same EditorView), and a cross-file
       // rename opens other files into it, so by the time the response lands the
       // view can be showing something else entirely.
@@ -99,7 +99,7 @@ export const getLspDocumentHighlightExtension = ({
           position: plugin.toPosition(pos),
         });
 
-        // Discard the response if the pane moved on to another file. Comparing
+        // Discard the response if the panel moved on to another file. Comparing
         // the cursor alone is not enough — offsets collide between files, and a
         // response for a 200-line module converted against a 2-line one threw
         // `RangeError: Invalid position 108 in document of length 18` and lost

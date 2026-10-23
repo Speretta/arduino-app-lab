@@ -1,29 +1,40 @@
 import {
+  AppBrickListItem,
   AppDetailedInfo,
   BrickCreateUpdateRequest,
-  BrickInstance,
   BrickListItem,
 } from '@cloud-editor-mono/infrastructure';
 
+import {
+  LspReferenceRow,
+  LspReferencesPanelActions,
+  LspReferencesResult,
+} from '../../../code-mirror/extensions/lsp/lsp-references/lsp-references-types';
 import {
   AddSketchLibraryDialogLogic,
   ConfigureAppBrickDialogLogic,
   ImportResourceLogic,
 } from '../../../dialogs';
 import {
+  ConflictType,
   DuplicateFileDialogLogic,
   OnDuplicateConflictParams,
 } from '../../../dialogs/app-lab/duplicate-file-dialog/types';
 import { TreeNode } from '../../../file-tree';
+import { SnackbarProps } from '../../../snackbar';
 import { SelectableFileData } from '../../shared';
 import { AppsSection } from '../app-detail';
 import { BrickDetailLogic } from '../brick-detail';
 import { AppLabEditorPanelLogic } from '../editor-panel';
 import { MultipleConsolePanelLogic } from '../multiple-console-panel';
 
+export type SendAppLabNotification = (
+  props: Omit<SnackbarProps, 'onClose' | 'toastId'> & { duration?: number },
+) => void;
+
 export type AppLabEditSectionLogic = () => {
   app: AppDetailedInfo | undefined;
-  appBricks: BrickInstance[] | undefined;
+  appBricks: AppBrickListItem[] | undefined;
   bricks: BrickListItem[] | undefined;
   appLibraries?: Array<{ id: string; version: string }>;
   section: AppsSection;
@@ -35,7 +46,7 @@ export type AppLabEditSectionLogic = () => {
   setSelectedFile: (
     id: string | TreeNode | undefined,
     isPreview?: boolean,
-    targetPane?: 'A' | 'B',
+    targetPanel?: 'A' | 'B',
   ) => void;
   setSelectedFolder: (node: TreeNode | undefined) => void;
   openFilesFolder: () => void;
@@ -97,16 +108,34 @@ export type AppLabEditSectionLogic = () => {
    */
   onMoveBlocked?: (node: TreeNode) => void;
   onDragOverFolderChange: (path: string) => void;
+  /** See `FileTreeProps.onFolderExpand`. */
+  onFolderExpand?: (path: string, isOpen: boolean) => void;
+  /** See `FileTreeProps.checkPathConflict`. */
+  checkPathConflict: (
+    toPath: string,
+    nodeType: 'file' | 'folder',
+  ) => Promise<{ hasDuplicate: boolean; conflictType: ConflictType }>;
+  /** See `FileTreeProps.closeFolder`. */
+  closeFolder?: { path: string; seq: number };
+  sendAppLabNotification: SendAppLabNotification;
+  lspReferencesResult?: LspReferencesResult | null;
+  lspGoToReference?: (row: LspReferenceRow) => void;
   /**
-   * Called when inline validation fails in the file tree (e.g. invalid characters).
-   * Consumers wire this to a notification.
+   * The app has `sketch/sketch.ino` and `sketch/sketch.yaml`. `undefined`
+   * while that cannot be told: a listing still loading or failed.
    */
-  onValidationError?: () => void;
-};
+  hasSketch?: boolean;
+  /** The board is reachable and has no internet. */
+  boardOffline: boolean;
+  boardType?: string;
+  /** Creates whatever of the sketch folder and its two files is missing. */
+  addSketch: () => void;
+  openNetworkSettings: () => void;
+} & Pick<LspReferencesPanelActions, 'closeLspReferences'>;
 
 export type FilesManagerSectionLogic = () => {
   app: AppDetailedInfo | undefined;
-  appBricks: BrickInstance[] | undefined;
+  appBricks: AppBrickListItem[] | undefined;
   bricks: BrickListItem[] | undefined;
   appLibraries?: Array<{ id: string; version: string }>;
   section: AppsSection;
@@ -118,7 +147,7 @@ export type FilesManagerSectionLogic = () => {
   setSelectedFile: (
     id: string | TreeNode | undefined,
     isPreview?: boolean,
-    targetPane?: 'A' | 'B',
+    targetPanel?: 'A' | 'B',
   ) => void;
   setSelectedFolder: (node: TreeNode | undefined) => void;
   openExternalLink: (url: string) => void;
@@ -172,11 +201,25 @@ export type FilesManagerSectionLogic = () => {
   /**
    * Called when the user starts dragging a brick from the sidebar's
    * `BrickItem`. The drop pipeline in `AppLabEditSection` reads this to
-   * route brick drops to pane A / B (same hit-test as file-tree drops).
+   * route brick drops to panel A / B (same hit-test as file-tree drops).
    */
-  onBrickDragStart?: (brick: BrickInstance) => void;
+  onBrickDragStart?: (brick: AppBrickListItem) => void;
   onBrickDragEnd?: () => void;
   onDragOverFolderChange: (path: string) => void;
-  /** See `AppLabEditSectionLogic.onValidationError`. */
-  onValidationError?: () => void;
+  /** See `FileTreeProps.onFolderExpand`. */
+  onFolderExpand?: (path: string, isOpen: boolean) => void;
+  /** See `FileTreeProps.checkPathConflict`. */
+  checkPathConflict: (
+    toPath: string,
+    nodeType: 'file' | 'folder',
+  ) => Promise<{ hasDuplicate: boolean; conflictType: ConflictType }>;
+  /** See `FileTreeProps.closeFolder`. */
+  closeFolder?: { path: string; seq: number };
+  sendAppLabNotification: SendAppLabNotification;
+  /** See `AppLabEditSectionLogic.hasSketch`. */
+  hasSketch?: boolean;
+  boardOffline: boolean;
+  boardType?: string;
+  addSketch: () => void;
+  openNetworkSettings: () => void;
 };

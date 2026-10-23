@@ -116,9 +116,9 @@ export function AuthProvider(props: {
     }),
   );
 
-  const enrichedUser = useQuery(
-    ['enrichedUser'],
-    async () => {
+  const enrichedUser = useQuery({
+    queryKey: ['enrichedUser'],
+    queryFn: async () => {
       const isMinor = Boolean(store.user['http://arduino.cc/is_minor']);
 
       const res = await checkResponse<ArduinoUserEnrichedData>(
@@ -156,8 +156,8 @@ export function AuthProvider(props: {
 
       return { ...userData, settings };
     },
-    { enabled: store.isAuthenticated && store.user !== unauthenticatedUser },
-  );
+    enabled: store.isAuthenticated && store.user !== unauthenticatedUser,
+  });
 
   const syncAuthState = useCallback(async () => {
     const us = await client.getUser();

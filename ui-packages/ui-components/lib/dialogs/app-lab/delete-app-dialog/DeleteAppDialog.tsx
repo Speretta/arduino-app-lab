@@ -28,15 +28,16 @@ export const DeleteAppDialog: React.FC<DeleteAppDialogProps> = ({
 
   const { formatMessage } = useI18n();
 
-  const { mutateAsync: handleDeleteApp, isLoading } = useMutation(
-    ['delete-app'],
-    async (): Promise<void> => {
+  const { mutateAsync: handleDeleteApp, isPending } = useMutation({
+    mutationKey: ['delete-app'],
+    mutationFn: async (): Promise<void> => {
       const result = await confirmAction();
+
       if (result) {
         onOpenChange(false);
       }
     },
-  );
+  });
 
   return (
     <AppLabDialog
@@ -59,11 +60,10 @@ export const DeleteAppDialog: React.FC<DeleteAppDialogProps> = ({
           <Button
             variant={ButtonVariant.Secondary}
             appearance={ButtonAppearance.Destructive}
-            loading={isLoading}
+            loading={isPending}
             Icon={Bin}
             iconPosition="right"
             type="submit"
-            /* eslint-disable-next-line jsx-a11y/no-autofocus */
             autoFocus
           >
             {formatMessage(messages.confirmButton)}

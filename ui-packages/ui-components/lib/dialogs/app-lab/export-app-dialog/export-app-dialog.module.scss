@@ -11,14 +11,14 @@
     font-weight: 700;
     line-height: 28px;
     margin: 0;
-    color: var(--text-primary, #ffffff);
+    color: var(--text-default);
   }
 
   &-description {
     font-size: 14px;
     line-height: 20px;
     margin: 0;
-    color: var(--text-primary, #ffffff);
+    color: var(--text-default);
 
     strong {
       font-weight: 600;
@@ -35,7 +35,7 @@
 .checkbox-label {
   font-size: 14px;
   line-height: 20px;
-  color: var(--text-primary, #ffffff);
+  color: var(--text-default);
   cursor: pointer;
   user-select: none;
 }
@@ -55,7 +55,7 @@
     height: 16px;
 
     path {
-      fill: var(--button-primary-background, #25C2C7);
+      fill: var(--accent-default, #25C2C7);
     }
   }
 
@@ -110,7 +110,7 @@
   &--description {
     font-size: 14px;
     line-height: 20px;
-    color: var(--text-primary, #ffffff);
+    color: var(--text-default);
     text-align: center;
   }
 }

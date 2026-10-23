@@ -128,7 +128,7 @@ describe('linkSplitEditors', () => {
     expect(editor1.dispatch).not.toHaveBeenCalled();
   });
 
-  it('seeds the split pane from the primary document when the panes differ', () => {
+  it('seeds the split panel from the primary document when the panels differ', () => {
     const editor1 = makeRealEditorView(ViewInstances.Editor, 'void setup() {}');
     const editor2 = makeRealEditorView(ViewInstances.Editor2, 'stale content');
 
@@ -138,11 +138,11 @@ describe('linkSplitEditors', () => {
     linkSplitEditors();
 
     expect(editor2.state.doc.toString()).toBe('void setup() {}');
-    // The source pane is authoritative and is never written to.
+    // The source panel is authoritative and is never written to.
     expect(editor1.state.doc.toString()).toBe('void setup() {}');
   });
 
-  it('leaves the split pane untouched when both panes already match', () => {
+  it('leaves the split panel untouched when both panels already match', () => {
     const editor1 = makeRealEditorView(ViewInstances.Editor, 'same doc');
     const editor2 = makeRealEditorView(ViewInstances.Editor2, 'same doc');
 
@@ -172,7 +172,7 @@ describe('linkSplitEditors', () => {
     expect(editor1.state.doc.toString()).toBe('abcd');
   });
 
-  it('re-seeds the peer instead of throwing when the panes have diverged', () => {
+  it('re-seeds the peer instead of throwing when the panels have diverged', () => {
     const editor1 = makeRealEditorView(ViewInstances.Editor, 'ab');
     const editor2 = makeRealEditorView(ViewInstances.Editor2, 'ab');
 
@@ -188,7 +188,7 @@ describe('linkSplitEditors', () => {
       annotations: splitSyncAnnotation.of(true),
     });
 
-    // Now an edit in the primary pane must re-converge the peer rather than
+    // Now an edit in the primary panel must re-converge the peer rather than
     // applying a change set against the wrong document length.
     editor1.dispatch({ changes: { from: 2, insert: 'c' } });
 
@@ -222,7 +222,7 @@ describe('unlinkSplitEditors', () => {
     expect(editor1.state.doc.toString()).toBe('ab1');
   });
 
-  it('does not dispatch to either pane — it only flips the sync flag', () => {
+  it('does not dispatch to either panel — it only flips the sync flag', () => {
     // Split-sync is a permanently-installed updateListener gated by a module
     // flag, so unlinking must neither reconfigure nor write to either view.
     const editor1 = makeMockEditorInstance();
@@ -239,7 +239,7 @@ describe('unlinkSplitEditors', () => {
     expect(editor2.dispatch).not.toHaveBeenCalled();
   });
 
-  it('does not throw when only one pane is present', () => {
+  it('does not throw when only one panel is present', () => {
     const editor1 = makeMockEditorInstance();
     viewInstances[ViewInstances.Editor].instance =
       editor1 as unknown as typeof viewInstances[ViewInstances.Editor]['instance'];
@@ -249,7 +249,7 @@ describe('unlinkSplitEditors', () => {
 });
 
 // ---------------------------------------------------------------------------
-// useCodeMirrorInstanceCleanup — Editor2 (split pane)
+// useCodeMirrorInstanceCleanup — Editor2 (split panel)
 // ---------------------------------------------------------------------------
 
 describe('useCodeMirrorInstanceCleanup — Editor2', () => {
@@ -273,7 +273,7 @@ describe('useCodeMirrorInstanceCleanup — Editor2', () => {
     unmount();
 
     expect(viewInstances[ViewInstances.Editor2].instance).toBeNull();
-    // With no peer mounted, an edit in the primary pane is a no-op, not a throw
+    // With no peer mounted, an edit in the primary panel is a no-op, not a throw
     // against the destroyed view.
     expect(() =>
       editor1.dispatch({ changes: { from: 2, insert: 'c' } }),
@@ -347,7 +347,7 @@ describe('useCodeMirrorInstanceCleanup — Editor2', () => {
 });
 
 // ---------------------------------------------------------------------------
-// useCodeMirrorInstanceCleanup — primary Editor (left pane)
+// useCodeMirrorInstanceCleanup — primary Editor (left panel)
 // ---------------------------------------------------------------------------
 
 describe('useCodeMirrorInstanceCleanup — primary Editor', () => {
@@ -492,7 +492,7 @@ describe('useCodeMirrorStateCleanup', () => {
 // ---------------------------------------------------------------------------
 
 describe('clearEditorStateCaches', () => {
-  it('drops all cached states for both editor panes', () => {
+  it('drops all cached states for both editor panels', () => {
     viewInstanceStateMaps[ViewInstances.Editor].set('file-1', {} as never);
     viewInstanceStateMaps[ViewInstances.Editor2].set('file-2', {} as never);
 

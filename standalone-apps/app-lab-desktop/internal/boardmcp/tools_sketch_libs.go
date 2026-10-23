@@ -38,12 +38,15 @@ func registerSketchLibrariesList(srv *mcp.Server, access BoardAccess) string {
 func registerSketchLibrariesAdd(srv *mcp.Server, access BoardAccess) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "sketch_libraries_add",
-		Description: "Add an Arduino library (with its dependencies) to an app's sketch on the connected board. Pass the app id from apps_list and the library as 'Name' or 'Name@Version' (omit the version for the latest). Mutating — asks the user for permission. Example apps can't be altered. Returns the libraries that were added.",
+		Description: "Add an Arduino library (with its dependencies) to an app's sketch on the connected board. Pass the app id from apps_list and the library as 'Name' or 'Name@Version' (omit the version for the latest). Mutating — asks the user for permission. Example apps and App releases can't be altered. Returns the libraries that were added.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in sketchLibInput) (*mcp.CallToolResult, any, error) {
 		id, lib := strings.TrimSpace(in.ID), strings.TrimSpace(in.Library)
 		if id == "" || lib == "" {
 			return nil, nil, fmt.Errorf("app id and library are required")
+		}
+		if err := requireUserApp(ctx, access, id); err != nil {
+			return nil, nil, err
 		}
 		// add_deps=true: an Arduino library's dependencies are needed for the sketch to compile.
 		path := "/v1/apps/" + url.PathEscape(id) + "/sketch/libraries/" + url.PathEscape(lib) + "?add_deps=true"
@@ -59,12 +62,15 @@ func registerSketchLibrariesAdd(srv *mcp.Server, access BoardAccess) {
 func registerSketchLibrariesRemove(srv *mcp.Server, access BoardAccess) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "sketch_libraries_remove",
-		Description: "Remove an Arduino library from an app's sketch on the connected board; its dependencies are left in place (they may be shared with other libraries). Pass the app id from apps_list and the library as 'Name' or 'Name@Version'. Mutating — asks the user for permission. Example apps can't be altered. Returns the libraries that were removed.",
+		Description: "Remove an Arduino library from an app's sketch on the connected board; its dependencies are left in place (they may be shared with other libraries). Pass the app id from apps_list and the library as 'Name' or 'Name@Version'. Mutating — asks the user for permission. Example apps and App releases can't be altered. Returns the libraries that were removed.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in sketchLibInput) (*mcp.CallToolResult, any, error) {
 		id, lib := strings.TrimSpace(in.ID), strings.TrimSpace(in.Library)
 		if id == "" || lib == "" {
 			return nil, nil, fmt.Errorf("app id and library are required")
+		}
+		if err := requireUserApp(ctx, access, id); err != nil {
+			return nil, nil, err
 		}
 		path := "/v1/apps/" + url.PathEscape(id) + "/sketch/libraries/" + url.PathEscape(lib)
 		body, err := orchestratorRequest(ctx, access, http.MethodDelete, path, nil)

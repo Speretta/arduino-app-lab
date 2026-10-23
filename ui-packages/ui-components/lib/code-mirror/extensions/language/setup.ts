@@ -13,6 +13,7 @@ import { highlightSpecialChars } from '@codemirror/view';
 import { autocompletionConfig } from '../../../code-editor/setup/codeEditorAutocomplete';
 import { customPythonAutocomplete } from '../autocomplete/langs/py';
 import { preprocArgCommentHighlight } from './preprocArgHighlight';
+import { yamlLint } from './yamlLint';
 
 export enum FileExt {
   Ino = 'ino',
@@ -78,6 +79,12 @@ export const fileExtCodeMirrorExtensionMap: FileExtCodeMirrorExtensionMap = {
   [FileExt.Json]: jsonCodeExts,
   [FileExt.Txt]: [],
   [FileExt.Other]: [],
+};
+
+// Linters run only in the editor. Read-only code blocks in the chat reuse
+// fileExtCodeMirrorExtensionMap and must not show diagnostics.
+export const fileExtLinterMap: Partial<FileExtCodeMirrorExtensionMap> = {
+  [FileExt.Yaml]: yamlLint,
 };
 
 export const languageToFileExtMap: { [key: string]: FileExt } = {

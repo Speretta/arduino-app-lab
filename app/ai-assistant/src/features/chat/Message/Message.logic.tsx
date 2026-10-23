@@ -9,17 +9,20 @@ import {
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { isNetworkError } from '../../../services';
 import { MessagePart } from '../../../store';
 import {
   type TimelineItem,
   type TimelineItemType,
   CodeBlock,
+  fileNameFromPath,
   formatToolTitle,
   Heading,
   InlineDiff,
   Link,
   List,
-  stripKeyFromPath,
+  mcpToolName,
+  stripKeysFromText,
   Table,
   Text,
   webToolLabel,
@@ -294,6 +297,25 @@ export const useElapsedSeconds = (
   return startedAt
     ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
     : 0;
+};
+
+/**
+ * Drops the transport error the agent narrates when its own request dies ("API Error: Connection
+ * closed mid-response…"): the composer banner already reports that failure, localized, so the
+ * turn keeps only what it managed to answer. Applied on a network failure alone — with no banner
+ * to speak for it, the agent's line is the only account the user gets.
+ */
+export const withoutTransportError = (parts: MessagePart[]): MessagePart[] => {
+  const last = parts[parts.length - 1];
+  if (last?.type !== 'text') {
+    return parts;
+  }
+  const blocks = last.text.split(/\n{2,}/);
+  if (!isNetworkError(blocks[blocks.length - 1])) {
+    return parts;
+  }
+  const text = blocks.slice(0, -1).join('\n\n').trimEnd();
+  return text ? [...parts.slice(0, -1), { ...last, text }] : parts.slice(0, -1);
 };
 
 /** Message parts minus internal plumbing tool calls (deferred-tool loading), before rendering. */
@@ -706,11 +728,21 @@ const fileRowLabel = (
     return { title: `${verb} ${files.length} ${plural}` };
   }
   const path = files[0];
-  // Drop the mirror root and checkout key, so the row shows 'python/main.py'.
+  // The row is a link, so it shows the file name alone — the full path is kept for opening it.
   return {
     title: verb,
-    file: { path, label: stripKeyFromPath(path.replace(/\\/g, '/')) },
+    file: { path, label: fileNameFromPath(path.replace(/\\/g, '/')) },
   };
+};
+
+// board_exec's panel opens on the output alone, which doesn't say what produced it — a bare file listing could be any
+// of a dozen commands. Return the command so the body can lead with it; empty for every other tool.
+const boardExecCommand = (title: string, input: unknown): string => {
+  if (mcpToolName(title) !== 'board_exec') {
+    return '';
+  }
+  const command = (input as { command?: unknown } | null)?.command;
+  return typeof command === 'string' ? command.trim() : '';
 };
 
 /** Narrows a tool status to the settled subset the timeline colors (completed/failed), else undefined. */
@@ -745,6 +777,8 @@ export const timelineItems = (
   parts: MessagePart[],
   done: boolean,
   liveTail = false,
+  // Localised by the caller: this builder has no intl of its own.
+  outsideWorkspaceLabel = '',
 ): TimelineItem[] => {
   const items: TimelineItem[] = [];
   let reasoning: string[] = [];
@@ -799,8 +833,22 @@ export const timelineItems = (
       if (kind === 'switch_mode') {
         continue;
       }
-      const hasOutput =
-        (status === 'completed' || status === 'failed') && output !== undefined;
+      const settled = status === 'completed' || status === 'failed';
+      // apps_checkout answers with the mirror directory, which is plumbing the user has no use for: the row's title
+      // already says what happened, so it gets no body rather than a machine path.
+      const isCheckout = mcpToolName(title) === 'apps_checkout';
+      const command = boardExecCommand(title, part.toolCall.input);
+      // The command leads, then a blank line, then the output — so a run with no output still shows what ran.
+      const body =
+        settled && !isCheckout
+          ? [
+              command && `> ${command}`,
+              // Outputs are full of mirror paths (a search result is a list of them): show them as the user's own.
+              output !== undefined && stripKeysFromText(stripCodeFence(output)),
+            ]
+              .filter(Boolean)
+              .join('\n\n')
+          : '';
       const fileRow = fileRowLabel(kind, readFiles(part.toolCall));
       items.push({
         id,
@@ -811,10 +859,11 @@ export const timelineItems = (
           formatToolTitle(title),
         status: timelineStatus(status),
         file: fileRow?.file,
-        details: hasOutput ? (
-          <pre className={styles['timeline-output']}>
-            {stripCodeFence(output)}
-          </pre>
+        ...(part.toolCall.outsideWorkspace && outsideWorkspaceLabel
+          ? { outsideLabel: outsideWorkspaceLabel }
+          : {}),
+        details: body ? (
+          <pre className={styles['timeline-output']}>{body}</pre>
         ) : undefined,
       });
     }

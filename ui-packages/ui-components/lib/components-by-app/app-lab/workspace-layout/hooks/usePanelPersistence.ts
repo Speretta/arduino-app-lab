@@ -1,8 +1,11 @@
-import { debounce } from 'lodash';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { debounce } from 'lodash-es';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface UsePanelPersistence {
-  storedSize: number | undefined;
+  /** For `defaultSize`: a registration prop, so it must not move. */
+  sizeAtMount: number | undefined;
+  /** For a panel that remounts mid-session; `sizeAtMount` reopens it stale. */
+  getLatestSize: () => number | undefined;
   setStoredSize: (sizePx: number) => void;
 }
 
@@ -35,7 +38,8 @@ const write = (storageKey: string, px: number): void => {
 export const usePanelPersistence = (
   storageKey: string,
 ): UsePanelPersistence => {
-  const [storedSize] = useState<number | undefined>(() => read(storageKey));
+  const [sizeAtMount] = useState<number | undefined>(() => read(storageKey));
+  const latestSize = useRef<number | undefined>(sizeAtMount);
 
   const persist = useMemo(
     () =>
@@ -47,12 +51,18 @@ export const usePanelPersistence = (
 
   useEffect(() => (): void => persist.cancel(), [persist]);
 
+  const getLatestSize = useCallback(
+    (): number | undefined => latestSize.current,
+    [],
+  );
+
   const setStoredSize = useCallback(
     (sizePx: number): void => {
+      latestSize.current = sizePx;
       persist(sizePx);
     },
     [persist],
   );
 
-  return { storedSize, setStoredSize };
+  return { sizeAtMount, getLatestSize, setStoredSize };
 };

@@ -8,18 +8,32 @@ import {
   start,
   validateAuth,
 } from '../../services';
-import { useAiAssistantStore, useChatStore } from '../../store';
+import type { AgentDownReason } from '../../store';
+import {
+  useAiAssistantStore,
+  useBoardSwitchStore,
+  useChatStore,
+} from '../../store';
 
 // A validation is trusted this long, so the usual Editor<->Agent toggle skips the loader.
 const AUTH_FRESH_MS = 900_000; // 15 minutes
+
+// Why the agent is being restarted: the user pressed Reconnect, or a board switch they confirmed did it.
+type ReviveMode = 'manual' | 'auto';
+
+// The host names its deliberate teardowns on the restart event; anything else was a crash.
+const teardownReason = (reason?: string): AgentDownReason =>
+  reason === 'board-changed' || reason === 'board-flashed' ? reason : 'crashed';
 
 export interface AiAssistantPanelLogic {
   loading: boolean;
   authenticated: boolean;
   agentDown: boolean;
-  agentDownReason?: 'crashed' | 'board-changed';
+  agentDownReason?: AgentDownReason;
   reconnecting: boolean;
   reconnect: VoidFunction;
+  // Reviving on its own after a board switch the user confirmed — no prompt, just the loader.
+  reviving: boolean;
 }
 
 // Picks the panel's screen (loader, reconnect, chat/connect) from the credential and agent liveness.
@@ -33,7 +47,7 @@ export const useAiAssistantPanelLogic = (): AiAssistantPanelLogic => {
   const agentDown = useAiAssistantStore((s) => s.agentDown);
   const agentDownReason = useAiAssistantStore((s) => s.agentDownReason);
   const setAgentDown = useAiAssistantStore((s) => s.setAgentDown);
-  const [reconnecting, setReconnecting] = useState(false);
+  const [reviving, setReviving] = useState<ReviveMode>();
 
   const freshOnMount = useMemo(() => {
     const { auth: a, lastValidatedAt } = useAiAssistantStore.getState();
@@ -46,6 +60,31 @@ export const useAiAssistantPanelLogic = (): AiAssistantPanelLogic => {
 
   const [validating, setValidating] = useState(!freshOnMount);
 
+  // Clearing agentDown remounts the chat, which replays the last session. The mode is what the panel
+  // shows meanwhile: the prompt with a spinner, or the loader on its own.
+  const revive = useCallback(
+    (mode: ReviveMode): void => {
+      void (async (): Promise<void> => {
+        const { auth: current } = useAiAssistantStore.getState();
+        if (!current.authenticated) {
+          return;
+        }
+        setReviving(mode);
+        try {
+          await start(current.agentId);
+          setAgentDown(false);
+        } catch {
+          // Still down: clearing the mode drops back to the prompt so the user can retry.
+        } finally {
+          setReviving(undefined);
+        }
+      })();
+    },
+    [setAgentDown],
+  );
+
+  const reconnect = useCallback((): void => revive('manual'), [revive]);
+
   // Only the give-up matters: the earlier events fire before each relaunch, so they say nothing yet.
   useEffect(
     () =>
@@ -53,33 +92,30 @@ export const useAiAssistantPanelLogic = (): AiAssistantPanelLogic => {
         if (!restart.gaveUp) {
           return;
         }
-        useChatStore.getState().resetLoadedSessions(); // the replacement process has none loaded
-        setAgentDown(
-          true,
-          restart.reason === 'board-changed' ? 'board-changed' : 'crashed',
-        );
-      }),
-    [setAgentDown],
-  );
+        const reason = teardownReason(restart.reason);
+        // A crash comes back to the same board, so the session to reopen survives. A board switch does not:
+        // the list is scoped to the board and app ids repeat across them, so a kept pointer reopens another
+        // board's chat under a row this sidebar no longer has. A flash leaves the board in place but takes
+        // its apps, so those pointers are just as dead.
+        if (reason === 'crashed') {
+          useChatStore.getState().resetLoadedSessions(); // the replacement process has none loaded
+        } else {
+          useChatStore.getState().reset();
+        }
+        setAgentDown(true, reason);
 
-  // Clearing agentDown remounts the chat, which replays the last session.
-  const reconnect = useCallback((): void => {
-    void (async (): Promise<void> => {
-      const { auth: current } = useAiAssistantStore.getState();
-      if (!current.authenticated) {
-        return;
-      }
-      setReconnecting(true);
-      try {
-        await start(current.agentId);
-        setAgentDown(false);
-      } catch {
-        // Still down: the prompt stays put so the user can retry.
-      } finally {
-        setReconnecting(false);
-      }
-    })();
-  }, [setAgentDown]);
+        // A confirmed switch already answered "yes, interrupt it", so revive straight away instead of
+        // asking again. A crash, a flash, or a switch nobody was asked about, still stops at the prompt:
+        // after a flash the board is still rebooting, so there is nothing to revive onto yet.
+        if (
+          reason === 'board-changed' &&
+          useBoardSwitchStore.getState().consumeConfirmed()
+        ) {
+          revive('auto');
+        }
+      }),
+    [setAgentDown, revive],
+  );
 
   // Re-probes on every mount, so an expired/revoked token is caught before the chat opens.
   useEffect(() => {
@@ -161,7 +197,8 @@ export const useAiAssistantPanelLogic = (): AiAssistantPanelLogic => {
     authenticated: auth.authenticated,
     agentDown: agentDown && auth.authenticated,
     agentDownReason,
-    reconnecting,
+    reconnecting: reviving !== undefined,
     reconnect,
+    reviving: reviving === 'auto',
   };
 };

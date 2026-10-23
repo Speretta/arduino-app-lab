@@ -1,9 +1,11 @@
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
+
 .description {
   margin: 14px 0;
 }
 
 .device-link {
-  color: #008184;
+  color: var(--text-link);
   font-weight: bold;
   text-decoration: none;
 }

@@ -1,6 +1,6 @@
-import errorSvgRaw from '../../../../../images/assets/error.svg?raw';
-import infoSvgRaw from '../../../../../images/assets/info-icon-outline.svg?raw';
-import warningSvgRaw from '../../../../../images/assets/warning.svg?raw';
+import errorSvgRaw from '../../../../../images/assets/attention-exclamation-icon.svg?raw';
+import infoSvgRaw from '../../../../../images/assets/info-setup.svg?raw';
+import warningSvgRaw from '../../../../../images/assets/triangle-sharp-outline.svg?raw';
 
 const svgMaskUrl = (svg: string): string => {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
@@ -9,6 +9,10 @@ const svgMaskUrl = (svg: string): string => {
 const ERROR_ICON_MASK = svgMaskUrl(errorSvgRaw);
 const WARNING_ICON_MASK = svgMaskUrl(warningSvgRaw);
 const INFO_ICON_MASK = svgMaskUrl(infoSvgRaw);
+
+const TOOLTIP_PADDING_Y = '6px';
+const TOOLTIP_PADDING_X = '8px';
+const TOOLTIP_PADDING = `${TOOLTIP_PADDING_Y} ${TOOLTIP_PADDING_X}`;
 
 const hoverStyles = {
   '.cm-tooltip.cm-tooltip-hover': {
@@ -23,7 +27,7 @@ const hoverStyles = {
 
   '.cm-tooltip.cm-tooltip-hover .cm-lsp-hover-tooltip': {
     color: 'var(--text-default, #FFF)',
-    padding: '4px 8px',
+    padding: TOOLTIP_PADDING,
     overflowWrap: 'break-word',
     wordBreak: 'break-word',
   },
@@ -47,20 +51,27 @@ const hoverStyles = {
     cursor: 'pointer',
   },
 
+  '.cm-tooltip.cm-tooltip-hover .cm-tooltip-lint': {
+    padding: `${TOOLTIP_PADDING_Y} 0`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+
   '.cm-diagnostic': {
-    padding: '4px 8px',
+    padding: `0 ${TOOLTIP_PADDING_X}`,
     marginLeft: '0',
     borderLeft: 'none',
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
+    gap: '4px',
   },
 
   '.cm-diagnostic::before': {
     content: '""',
     display: 'inline-block',
-    width: '14px',
-    height: '14px',
+    width: '16px',
+    height: '16px',
     flexShrink: '0',
     backgroundColor: 'currentColor',
     maskSize: 'contain',
@@ -99,9 +110,18 @@ const hoverStyles = {
   '.cm-diagnostic-hint::before': {
     maskImage: INFO_ICON_MASK,
   },
+};
 
-  '.cm-tooltip.cm-tooltip-hover .cm-lsp-hover-tooltip a': {
+const documentationStyles = {
+  '.cm-tooltip .cm-lsp-documentation a': {
     color: 'var(--text-accent, #25C2C7)',
+    fontWeight: '600',
+  },
+
+  '.cm-tooltip .cm-lsp-documentation hr': {
+    border: 'none',
+    borderTop: '1px solid var(--border-default, #434F54)',
+    margin: '6px -8px',
   },
 };
 
@@ -116,6 +136,9 @@ const autoCompleteStyles = {
 
   // autocomplete list items
   '.cm-tooltip.cm-tooltip-autocomplete ul li': {
+    display: 'flex',
+    alignItems: 'center',
+    height: '20px',
     padding: '0 8px',
     color: 'var(--text-default, #FFF)',
   },
@@ -163,6 +186,8 @@ const autoCompleteStyles = {
   },
 };
 
+const RENAME_ROW_GUTTER = '8px';
+
 const renameStyles = {
   '.cm-panel.cm-lsp-rename-panel': {
     position: 'fixed',
@@ -170,7 +195,7 @@ const renameStyles = {
     backgroundColor: 'var(--surface-bg-baseline, #232B2E)',
     borderRadius: '8px',
     border: '1px solid var(--border-default, #434F54)',
-    padding: '8px 24px 8px 16px',
+    padding: '6px 0 4px',
   },
 
   // Input above the hint/validation message (see lsp-rename-panel.ts).
@@ -184,7 +209,10 @@ const renameStyles = {
     backgroundColor: 'transparent',
     border: '1px solid transparent',
     borderRadius: '4px',
-    padding: '4px 12px',
+    boxSizing: 'border-box',
+    height: '18px',
+    margin: `2px ${RENAME_ROW_GUTTER}`,
+    padding: '0 4px',
     fontSize: '12px',
   },
 
@@ -197,9 +225,11 @@ const renameStyles = {
     },
 
   '.cm-panel.cm-lsp-rename-panel .cm-lsp-rename-message': {
-    fontSize: '11px',
+    fontSize: '10px',
+    lineHeight: '1.6',
     color: 'var(--text-subtle, #c9d2d2)',
-    marginTop: '6px',
+    marginTop: '2px',
+    padding: `0 ${RENAME_ROW_GUTTER}`,
     maxWidth: '280px',
   },
 
@@ -213,86 +243,7 @@ const renameStyles = {
   },
 
   '.cm-panel.cm-lsp-rename-panel .cm-dialog-close': {
-    color: 'var(--text-subtle, #c9d2d2)',
-    cursor: 'pointer',
-    position: 'absolute',
-    right: '8px',
-  },
-};
-
-const referenceStyles = {
-  // The library renders the panel via CodeMirror's showPanel, which adds a
-  // .cm-panels-bottom container (sticky, dark background, top border) to the
-  // editor's DOM. The reference panel itself is positioned fixed so it floats
-  // to the top-right, but the container strip remains visible at the bottom.
-  // This rule collapses the container so no dark strip appears.
-  '.cm-panels': {
-    borderTop: 'none',
-  },
-
-  '.cm-lsp-reference-panel': {
-    position: 'fixed',
-    top: '120px',
-    right: '24px',
-    width: '25%',
-    height: '60%',
-    maxHeight: 'unset',
-
-    zIndex: 99999,
-    backgroundColor: 'var(--surface-bg-below-2, #090F11)',
-    borderLeft: '1px solid var(--border-inverted, #232B2E)',
-    borderTop: '1px solid var(--border-inverted, #232B2E)',
-    padding: '8px',
-    whiteSpace: 'pre-wrap',
-    overflowY: 'auto',
-    fontSize: '12px',
-  },
-
-  '.cm-lsp-reference-panel .cm-lsp-reference-file': {
-    color: 'var(--text-default, #FFF)',
-    fontWeight: '600',
-    marginTop: '8px',
-    marginBottom: '4px',
-  },
-
-  '.cm-lsp-reference-panel .cm-lsp-reference': {
-    cursor: 'pointer',
-    borderRadius: '4px',
-    padding: '4px 6px',
-    color: 'var(--text-default, #FFF)',
-  },
-
-  '.cm-lsp-reference-panel .cm-lsp-reference strong': {
-    color: 'var(--text-accent, #25C2C7)',
-  },
-
-  '.cm-lsp-reference-panel .cm-lsp-reference[aria-selected]': {
-    backgroundColor: 'var(--tealscale-sapphire-20, rgba(37, 194, 199, 0.20))',
-  },
-
-  '.cm-lsp-reference-panel .cm-lsp-reference:hover': {
-    backgroundColor: 'var(--surface-bg-baseline, #232B2E)',
-  },
-
-  '.cm-lsp-reference-panel .cm-lsp-reference-line': {
-    color: 'var(--text-inverted-subtle, #5D6A6B)',
-  },
-
-  // The close button is position:absolute relative to .cm-panels-bottom (sticky,
-  // at the bottom of the editor), so it ends up invisible. Reposition it fixed
-  // so it sits in the top-right corner of the floating reference panel.
-  '.cm-panel:has(.cm-lsp-reference-panel) .cm-dialog-close': {
-    position: 'fixed',
-    top: '124px',
-    right: '28px',
-    zIndex: 100000,
-    cursor: 'pointer',
-    color: 'var(--text-subtle, #c9d2d2)',
-    fontSize: '16px',
-    padding: '4px',
-    lineHeight: '1',
-    backgroundColor: 'transparent',
-    border: 'none',
+    display: 'none',
   },
 };
 
@@ -365,13 +316,23 @@ const tooltipSignatureStyles = {
     borderRadius: '8px',
     fontSize: '12px',
     color: 'var(--text-default, #FFF)',
-    padding: '4px 8px',
+    padding: TOOLTIP_PADDING,
     maxWidth: '500px',
     maxHeight: '300px',
     overflowY: 'auto', // override the library default "scroll" which always forces a visible scrollbar
     overflowWrap: 'break-word',
     wordBreak: 'break-word',
     zIndex: 99999,
+  },
+
+  // The library's own theme shrinks documentation inside a signature tooltip to 80%
+  '.cm-tooltip.cm-lsp-signature-tooltip .cm-lsp-documentation': {
+    fontSize: 'inherit',
+  },
+
+  '.cm-tooltip.cm-lsp-signature-tooltip .cm-lsp-active-parameter': {
+    fontWeight: 'inherit',
+    color: 'var(--editor-syntax-highlight-string, #00AB75)',
   },
 
   // Markdown documentation can render code blocks as <pre>, which default to
@@ -390,7 +351,7 @@ const tooltipFeedbackStyles = {
     borderRadius: '8px',
     fontSize: '12px',
     color: 'var(--text-default, #FFF)',
-    padding: '4px 8px',
+    padding: TOOLTIP_PADDING,
     pointerEvents: 'none',
     zIndex: 99999,
   },
@@ -449,9 +410,9 @@ const completionIconStyles = {
 
 export const lspStyles = {
   ...hoverStyles,
+  ...documentationStyles,
   ...autoCompleteStyles,
   ...renameStyles,
-  ...referenceStyles,
   ...codeActionStyles,
   ...documentHighlightStyles,
   ...navigationFeaturesStyles,

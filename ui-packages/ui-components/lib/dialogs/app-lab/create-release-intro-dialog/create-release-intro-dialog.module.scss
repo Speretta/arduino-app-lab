@@ -1,0 +1,68 @@
+.root {
+  .body,
+  .content {
+    width: 100%;
+    height: 100%;
+  }
+
+  .body {
+    padding: 16px !important;
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+    max-width: 720px;
+    min-height: 299px;
+  }
+
+  // The image carries its own rounded background, so the column has none.
+  .image {
+    flex: 0 0 284px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    img {
+      width: 238px;
+    }
+  }
+
+  .container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .description {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    flex: 1;
+  }
+
+  .title {
+    font-weight: 700;
+  }
+
+  .footer {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.points {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-default);
+
+  strong {
+    font-weight: 600;
+  }
+}

@@ -153,7 +153,7 @@ const FilesListItem: React.FC<FilesListItemProps> = ({
         ) : (
           <XSmall className={styles['file-label']}>{item.fileFullName}</XSmall>
         )}
-        {item.tags.length > 0 &&
+        {item.tags?.length > 0 &&
           item.tags.map((tag) => (
             <div className={styles['file-tag']} key={tag}>
               <XXSmall className={styles['file-tag-text']}>{tag}</XXSmall>

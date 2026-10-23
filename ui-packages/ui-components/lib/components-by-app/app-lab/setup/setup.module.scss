@@ -94,7 +94,7 @@
         font-weight: 700;
 
         &::before {
-          content: url(css-images.$check);
+          content: url("#{css-images.$check}");
           background: #25c2c7;
           outline: none;
           width: 22px;

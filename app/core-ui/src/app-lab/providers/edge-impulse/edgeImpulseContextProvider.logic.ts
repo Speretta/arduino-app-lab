@@ -7,56 +7,64 @@ import {
   retrieveEIUser as retrieveUser,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 import { EdgeImpulseContextValue } from './edgeImpulseContext';
 
 export function useEdgeImpulse(): EdgeImpulseContextValue {
   const queryClient = useQueryClient();
 
-  const { data: eiClient } = useQuery(['ei-auth-init'], getEIAuthClient);
+  const { data: eiClient } = useQuery({
+    queryKey: ['ei-auth-init'],
+    queryFn: getEIAuthClient,
+  });
 
-  const { data: token } = useQuery(
-    ['ei-token'],
-    async () => {
+  const { data: token } = useQuery({
+    queryKey: ['ei-token'],
+
+    queryFn: async () => {
       try {
         return await getAccessToken();
       } catch (e) {
         return null;
       }
     },
-    {
-      enabled: !!eiClient,
-      refetchOnWindowFocus: true,
-      retry: false,
-    },
-  );
+
+    enabled: !!eiClient,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
 
   const getTokenDone = Boolean(token || token === '');
 
-  const { data: userIsAuthenticated } = useQuery(
-    ['ei-auth-check'],
-    isAuthenticatedEI,
-    {
-      enabled: getTokenDone,
-    },
-  );
+  const { data: userIsAuthenticated } = useQuery({
+    queryKey: ['ei-auth-check'],
+    queryFn: isAuthenticatedEI,
+    enabled: getTokenDone,
+  });
 
-  const { data: user } = useQuery(
-    ['ei-user', token],
-    async () => {
+  const { data: user } = useQuery({
+    queryKey: ['ei-user', token],
+
+    queryFn: async () => {
       return retrieveUser();
     },
-    {
-      enabled: getTokenDone && userIsAuthenticated === true,
-    },
-  );
 
-  const { mutateAsync: login, isLoading: isLoginLoading } = useMutation({
+    enabled: getTokenDone && userIsAuthenticated === true,
+  });
+
+  const { mutateAsync: login, isPending: isLoginLoading } = useMutation({
     mutationFn: () => loginWithBrowser(),
     onSuccess: async () => {
-      queryClient.invalidateQueries(['ei-token']);
-      queryClient.invalidateQueries(['ei-user']);
-      queryClient.invalidateQueries(['ei-auth-check']);
+      queryClient.invalidateQueries({
+        queryKey: ['ei-token'],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['ei-user'],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['ei-auth-check'],
+      });
     },
   });
 
@@ -71,11 +79,16 @@ export function useEdgeImpulse(): EdgeImpulseContextValue {
     },
   });
 
-  return {
-    user,
-    login,
-    isLoginLoading,
-    logout,
-    isAuthenticated: !!userIsAuthenticated,
-  };
+  const isAuthenticated = !!userIsAuthenticated;
+
+  return useMemo(
+    () => ({
+      user,
+      login,
+      isLoginLoading,
+      logout,
+      isAuthenticated,
+    }),
+    [user, login, isLoginLoading, logout, isAuthenticated],
+  );
 }

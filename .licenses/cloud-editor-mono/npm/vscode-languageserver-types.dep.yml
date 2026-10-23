@@ -1,6 +1,6 @@
 ---
 name: vscode-languageserver-types
-version: 3.17.5
+version: 3.18.3
 type: npm
 summary: Types used by the Language server for node
 homepage:

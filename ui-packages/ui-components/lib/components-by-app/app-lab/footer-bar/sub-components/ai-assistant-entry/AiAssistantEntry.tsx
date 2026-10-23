@@ -34,7 +34,7 @@ export const AiAssistantEntry: React.FC<AiAssistantEntryProps> = ({
   return (
     <Button
       variant={ButtonVariant.Secondary}
-      size={ButtonSize.XXSmall}
+      size={ButtonSize.XSmall}
       classes={{
         button: clsx(styles['entry'], { [styles['shine']]: shine }),
       }}

@@ -1,3 +1,4 @@
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
 @use "@cloud-editor-mono/arduino-sass";
 
 .title-skeleton {
@@ -12,10 +13,6 @@
   }
 }
 
-.warning {
-  color: arduino-sass.$notifyerror;
-}
-
 .read-only-header {
   display: flex;
   justify-content: space-between;
@@ -23,7 +20,8 @@
   height: 60px;
   padding-left: 40px;
   padding-right: 40px;
-  border: 1px solid rgb(218 227 227);
+  background-color: var(--surface-bg-baseline);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .logo-container {
@@ -44,4 +42,17 @@
 
 .user-avatar {
   border-radius: 50%;
+}
+
+.sketch-link {
+  text-decoration: none;
+  font-weight: 400;
+}
+
+.dropdown-trigger {
+  div {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 }

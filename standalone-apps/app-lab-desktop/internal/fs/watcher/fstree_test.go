@@ -118,71 +118,6 @@ func TestIsQuotedSafeName(t *testing.T) {
 	}
 }
 
-func TestIsCreatableName(t *testing.T) {
-	tests := []struct {
-		name string
-		path string
-		want bool
-	}{
-		// Ordinary names.
-		{name: "simple name", path: "ArduinoApps", want: true},
-		{name: "underscore", path: "My_App", want: true},
-		{name: "dash", path: "My-App", want: true},
-		{name: "internal dot", path: "app.yaml", want: true},
-		{name: "internal dots", path: "Arduino.App", want: true},
-
-		// Allowed because conn.ReadFile/WriteFile quote the path: these are
-		// inert inside the double quotes the transports apply, and they are the
-		// names users actually type.
-		{name: "space", path: "my notes.txt", want: true},
-		{name: "space in folder name", path: "Arduino Apps", want: true},
-		{name: "parentheses and space", path: "notes (draft) v2.md", want: true},
-		{name: "semicolon", path: "Arduino;rm", want: true},
-		{name: "ampersand", path: "Arduino&rm", want: true},
-		{name: "single quote", path: "it's mine.txt", want: true},
-		{name: "tilde", path: "Arduino~rm", want: true},
-		{name: "hash", path: "issue #12.md", want: true},
-		{name: "exclamation", path: "Arduino!rm", want: true},
-		{name: "braces", path: "Arduino{rm}", want: true},
-		{name: "brackets", path: "Arduino[rm]", want: true},
-
-		// Expand even inside double quotes, so these two must not reach a path.
-		{name: "dollar - expands inside double quotes", path: "Arduino$rm", want: false},
-		{name: "dollar sigil alone", path: "$HOME.txt", want: false},
-		{name: "backtick - substitutes inside double quotes", path: "Arduino`rm", want: false},
-
-		// Windows host rules: the LSP mirror writes these names to the host.
-		{name: "angle bracket (Windows)", path: "Arduino<App", want: false},
-		{name: "colon (Windows)", path: "Arduino:App", want: false},
-		{name: "double quote (Windows)", path: "Arduino\"App", want: false},
-		{name: "pipe (Windows)", path: "Arduino|rm", want: false},
-		{name: "asterisk (Windows)", path: "Arduino*rm", want: false},
-		{name: "question mark (Windows)", path: "Arduino?rm", want: false},
-		{name: "backslash (Windows separator)", path: "Arduino\\rm", want: false},
-		{name: "trailing dot (Windows)", path: "Arduino.", want: false},
-		{name: "trailing space (Windows)", path: "Arduino ", want: false},
-		{name: "trailing dot and space (Windows)", path: "Arduino. ", want: false},
-		{name: "reserved con (Windows)", path: "con", want: false},
-		{name: "reserved prn (Windows)", path: "prn", want: false},
-		{name: "reserved aux (Windows)", path: "aux", want: false},
-		{name: "reserved con with extension (Windows)", path: "con.txt", want: false},
-		{name: "reserved CON uppercase (Windows)", path: "CON", want: false},
-
-		// Not usable as a name anywhere.
-		{name: "path separator", path: "Arduino/Apps", want: false},
-		{name: "null byte", path: "Arduino\x00rm", want: false},
-		{name: "control character", path: "Arduino\x07rm", want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := IsCreatableName(tt.path); got != tt.want {
-				t.Errorf("IsCreatableName(%q) = %v, want %v", tt.path, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestShellUnsafeCharacterClass(t *testing.T) {
 	// isShellSafePath is shellUnsafe's only consumer; on a single component it
 	// exercises the character class directly.
@@ -201,11 +136,5 @@ func TestShellUnsafeCharacterClass(t *testing.T) {
 		if isShellSafePath("a" + ch + "b") {
 			t.Errorf("isShellSafePath(%q) = true, want false (character class under-matches)", "a"+ch+"b")
 		}
-	}
-}
-
-func TestIsCreatableNameRejectsEmpty(t *testing.T) {
-	if IsCreatableName("") {
-		t.Error(`IsCreatableName("") = true, want false`)
 	}
 }

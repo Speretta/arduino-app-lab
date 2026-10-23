@@ -13,8 +13,13 @@ import { useI18n } from '../../../i18n/useI18n';
 import { XSmall, XXSmall } from '../../../typography';
 import styles from './ai-model.module.scss';
 import { AiModelProps } from './AiModel.type';
-import { canDownloadModel, getAiModelCardState } from './helpers';
+import {
+  canDownloadModel,
+  getAiModelCardState,
+  getModelDisplayName,
+} from './helpers';
 import { messages } from './messages';
+import { AiModelDetailsSkeleton } from './subcomponents/ai-model-details-skeleton/AiModelDetailsSkeleton';
 import { AiModelEdgeImpulseActions } from './subcomponents/ai-model-edge-impulse/AiModelEdgeImpulseActions';
 import { useEdgeImpulseModel } from './subcomponents/ai-model-edge-impulse/useEdgeImpulseModel';
 import { AiModelStandardActions } from './subcomponents/ai-model-standard-actions/AiModelStandardActions';
@@ -65,6 +70,8 @@ export const AiModel: React.FC<AiModelProps> = (props: AiModelProps) => {
     impulseInUse,
   });
 
+  const displayName = getModelDisplayName(model);
+
   const isDownloading = !!modelDownloadInfo?.isDownloading;
   const isUninstallingModel = !!isUninstalling?.(model.id);
   const hideRadio = readOnly; // brick list view
@@ -72,7 +79,9 @@ export const AiModel: React.FC<AiModelProps> = (props: AiModelProps) => {
   const showMenu =
     allowsInstallActions && !isUninstallingModel && !isDownloading;
   const showStandardActions =
-    allowsInstallActions && (canDownloadModel(model) || isUninstallingModel);
+    !isEdgeImpulse &&
+    allowsInstallActions &&
+    (canDownloadModel(model) || !!model.isPlaceholder || isUninstallingModel);
   const showEdgeImpulseActions = isEdgeImpulse && allowsInstallActions;
 
   const { props: tooltipProps, renderTooltip } = useTooltip({
@@ -92,7 +101,6 @@ export const AiModel: React.FC<AiModelProps> = (props: AiModelProps) => {
         [styles['selectable']]: isSelectable,
         [styles['selected']]: isModelInUse || isModelSelected,
         [styles['disabled']]: isDisabled,
-        [styles['disabled-radio-only']]: readOnly || isExample,
       })}
       {...(isSelectable &&
         onModelSelect && {
@@ -116,7 +124,9 @@ export const AiModel: React.FC<AiModelProps> = (props: AiModelProps) => {
         ) : null}
         <div className={styles['ai-model-details']}>
           <div className={styles['ai-model-header']}>
-            <XSmall className={styles['ai-model-name']}>{model.name}</XSmall>
+            <XSmall className={styles['ai-model-name']}>
+              {displayName.title}
+            </XSmall>
             {isModelInUse && isModelInstalled && (
               <Badge
                 size={BadgeSize.Small}
@@ -143,16 +153,22 @@ export const AiModel: React.FC<AiModelProps> = (props: AiModelProps) => {
               </Badge>
             ) : null}
           </div>
-          <div className={styles['ai-model-description-container']}>
-            <XXSmall truncate className={styles['ai-model-description']}>
-              {model.description}
-            </XXSmall>
-          </div>
-          <AiModelTags
-            model={model}
-            selectedImpulseId={selectedImpulse?.id}
-            openModelPage={openModelPage}
-          />
+          {model.isPlaceholder ? (
+            <AiModelDetailsSkeleton />
+          ) : (
+            <>
+              <div className={styles['ai-model-description-container']}>
+                <XXSmall truncate className={styles['ai-model-description']}>
+                  {model.description || displayName.repository}
+                </XXSmall>
+              </div>
+              <AiModelTags
+                model={model}
+                selectedImpulseId={selectedImpulse?.id}
+                openModelPage={openModelPage}
+              />
+            </>
+          )}
         </div>
         {showMenu ? (
           <AiModelMenu
@@ -161,7 +177,7 @@ export const AiModel: React.FC<AiModelProps> = (props: AiModelProps) => {
             selectedImpulse={selectedImpulse}
             openModelPage={openModelPage}
             removeModel={removeModel}
-            forceRemove={isModelInUse || isModelSelected || !!isInstalledInApp}
+            forceRemove={isModelInUse || !!isInstalledInApp}
             openForceRemoveDialog={(): void =>
               setIsModelUninstallDialogOpen(true)
             }

@@ -1,7 +1,10 @@
+@use "../../../public/shared.module.scss";
+
 .input-container {
   display: flex;
   align-items: center;
   position: relative;
+  color: var(--text-subtle);
 
   &.rounded {
     .input {
@@ -23,7 +26,9 @@
 }
 
 .input {
-  border: 1px solid #bdc7c7;
+  border: 1px solid var(--border-default);
+  background-color: var(--component-bg-baseline);
+
   border-radius: 3px;
   height: 30px;
   padding: 0 28px;

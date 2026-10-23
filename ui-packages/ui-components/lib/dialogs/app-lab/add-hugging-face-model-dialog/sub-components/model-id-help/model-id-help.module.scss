@@ -1,0 +1,79 @@
+@use "@cloud-editor-mono/arduino-sass/src/typography" as typography;
+
+$icon-size: 16px;
+
+.model-id-help {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  &-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    align-self: flex-start;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-accent);
+    cursor: pointer;
+  }
+
+  &-caret {
+    width: $icon-size;
+    height: $icon-size;
+  }
+
+  &-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 4px 0 16px 16px;
+    color: var(--text-subtle);
+  }
+
+  &-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &-list {
+    margin: 0;
+    padding-left: 18px;
+
+    li::marker {
+      font-size: typography.$font-size-xx-small;
+    }
+  }
+
+  &-link {
+    color: var(--text-accent);
+    text-decoration: underline;
+  }
+
+  &-example {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+    border-radius: 4px;
+    background: var(--surface-bg-below-1);
+    color: var(--text-default);
+
+    &-owner {
+      color: var(--text-inverted-subtle);
+    }
+
+    &-icon {
+      width: $icon-size;
+      height: $icon-size;
+      color: var(--yellow-harvest);
+    }
+
+    &-pointer {
+      margin-left: auto;
+      color: var(--yellow-harvest);
+    }
+  }
+}

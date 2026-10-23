@@ -16,7 +16,7 @@ const BrickList: React.FC = () => {
 
   const {
     bricks,
-    isLoading: bricksLoading,
+    isPending: bricksLoading,
     selectedBrick,
     brickDetailLogic,
     setSelectedBrick,
@@ -25,13 +25,13 @@ const BrickList: React.FC = () => {
   } = useBrickListLogic({ brickId, tab });
 
   return (
-    <PageLayout header={<TopBar pathItems={['bricks']} />}>
+    <PageLayout flushTop header={<TopBar pathItems={['bricks']} />}>
       <div className={styles['container']}>
         {/* Loading state */}
         {bricksLoading ? <BrickListItem variant="skeleton" /> : null}
         {!bricksLoading && selectedBrick && (
           <div className={styles['split']}>
-            <div className={(styles['split-item'], styles['split-item-left'])}>
+            <div className={clsx(styles['split-item'], styles['split-item-left'])}>
               <BricksList
                 bricks={bricks}
                 selectedBrick={selectedBrick}

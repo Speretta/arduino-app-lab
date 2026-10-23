@@ -13,25 +13,29 @@ import {
   httpPut,
   httpPutRaw,
 } from '../fetch';
+import { finalPart, multipartBoundary } from '../fetch/multipart';
 import {
   EventSourceHandlers,
   getEventSource,
   postEventSource,
   putEventSource,
+  SERVER_CLOSED_ERROR_CODE,
 } from '../fetch-event-source';
 import { getWebSocket, WebSocketHandlers } from '../websocket';
 import {
   AIModelItem,
   AIModelsListResult,
+  AppBrickDetails,
   AppDetailedInfo,
   AppPort,
   BrickCreateUpdateRequest,
   BrickDetails,
-  BrickInstance,
   CloneAppRequest,
   CloneAppResult,
   CreateAppRequest,
   CreateAppResult,
+  DownloadAIModelRequest,
+  ErrorData,
   ExampleCatalogResult,
   GetConfigResult,
   LibraryListResponse,
@@ -41,6 +45,9 @@ import {
   ListAppResult,
   ListBrickResult,
   ListLibrariesParams,
+  ReleaseBuildRequest,
+  ReleaseInstallResult,
+  StreamEventType,
   SystemPropertyKeysResponse,
   SystemPropertyValue,
   UpdateAppDetailRequest,
@@ -182,14 +189,44 @@ export async function deleteAppV1Request(
   return response?.status === 200;
 }
 
+const responseBlob = (
+  response: Response | void,
+  endpoint: string,
+): Promise<Blob> => {
+  if (!response) {
+    throw new Error(
+      `Call to "${endpoint}" did not respond with the expected result`,
+    );
+  }
+  return response.blob();
+};
+
+export async function exportAppArchiveV1Request(
+  id: string,
+  includeData: boolean,
+  abortController?: AbortController,
+  origin: string = Config.ORCHESTRATOR_API_URL,
+): Promise<Blob> {
+  const endpoint = `/v1/apps/${id}/export`;
+
+  const response = await httpGetRaw({
+    url: origin,
+    endpoint,
+    abortController,
+    params: { include_data: includeData.toString() },
+  });
+
+  return responseBlob(response, endpoint);
+}
+
 export async function getAppBrickInstanceV1Request(
   appId: string,
   brickId: string,
   origin: string = Config.ORCHESTRATOR_API_URL,
-): Promise<BrickInstance> {
+): Promise<AppBrickDetails> {
   const endpoint = `/v1/apps/${appId}/bricks/${brickId}`;
 
-  const response = await httpGet<BrickInstance>({ url: origin, endpoint });
+  const response = await httpGet<AppBrickDetails>({ url: origin, endpoint });
 
   if (!response) {
     throw new Error(
@@ -208,7 +245,11 @@ export async function addAppBrickV1Request(
 ): Promise<boolean> {
   const endpoint = `/v1/apps/${appId}/bricks/${brickId}`;
 
-  const response = await httpPutRaw({ url: origin, endpoint, body: params });
+  const response = await httpPutRaw({
+    url: origin,
+    endpoint,
+    body: params,
+  });
 
   return response?.status === 200;
 }
@@ -233,7 +274,11 @@ export async function updateAppBrickV1Request(
 ): Promise<boolean> {
   const endpoint = `/v1/apps/${appId}/bricks/${brickId}`;
 
-  const response = await httpPatchRaw({ url: origin, endpoint, body: params });
+  const response = await httpPatchRaw({
+    url: origin,
+    endpoint,
+    body: params,
+  });
 
   return response?.status === 200;
 }
@@ -272,12 +317,16 @@ export async function renameAppCustomBrickV1Request(
   brickId: string,
   params: { name: string },
   origin: string = Config.ORCHESTRATOR_API_URL,
-): Promise<boolean> {
+): Promise<string | null> {
   const endpoint = `/v1/apps/${appId}/bricks/${brickId}/rename`;
 
-  const response = await httpPostRaw({ url: origin, endpoint, body: params });
+  const response = await httpPost<{ id: string }>({
+    url: origin,
+    endpoint,
+    body: params,
+  });
 
-  return response?.status === 200;
+  return response?.id ?? null;
 }
 
 export async function cloneAppV1Request(
@@ -295,6 +344,125 @@ export async function cloneAppV1Request(
   });
 
   return response?.id;
+}
+
+// The build response is multipart/mixed: heartbeat and progress parts while
+// the build runs, then the archive or the build error as the last part.
+const buildResponseArchive = async (
+  response: Response | void,
+  endpoint: string,
+): Promise<Blob> => {
+  if (!response) {
+    throw new Error(
+      `Call to "${endpoint}" did not respond with the expected result`,
+    );
+  }
+  const boundary = multipartBoundary(response.headers.get('Content-Type'));
+  // A daemon that predates the multipart response sends the archive as the body.
+  if (!boundary) return response.blob();
+
+  const part = finalPart(
+    new Uint8Array(await response.arrayBuffer()),
+    boundary,
+  );
+  if (!part) {
+    throw new Error(
+      `Call to "${endpoint}" ended before the release archive was complete`,
+    );
+  }
+  if (part.contentType === 'application/json') {
+    const error = JSON.parse(new TextDecoder().decode(part.content)) as {
+      details?: string;
+    };
+    if (error.details) throw new Error(error.details);
+  }
+  if (part.contentType !== 'application/gzip') {
+    throw new Error(
+      `Call to "${endpoint}" ended before the release archive was complete`,
+    );
+  }
+  return new Blob([part.content], { type: part.contentType });
+};
+
+// Resolves with the release archive when the build is over: it is the last
+// part of the response. Progress is on the build events stream.
+export async function createAppBuildV1Request(
+  id: string,
+  body: ReleaseBuildRequest,
+  abortController?: AbortController,
+  origin: string = Config.ORCHESTRATOR_API_URL,
+): Promise<Blob> {
+  const endpoint = `/v1/apps/${id}/build`;
+
+  const response = await httpPostRaw({
+    url: origin,
+    endpoint,
+    body,
+    abortController,
+    handleError: handleOrchestratorError,
+  });
+
+  return buildResponseArchive(response, endpoint);
+}
+
+// The response is the progress stream. It resolves with the `done` payload and
+// rejects with the daemon's message on `error`. It does not retry: a second
+// upload of the same archive only fails as already installed.
+export async function installAppReleaseV1Request(
+  archive: Blob,
+  fileName: string,
+  abortController: AbortController = new AbortController(),
+  origin: string = Config.ORCHESTRATOR_API_URL,
+): Promise<ReleaseInstallResult> {
+  const sseUrl = `${origin}/v1/apps/install?prepare=false`;
+  const body = new FormData();
+  body.append('file', archive, fileName);
+
+  let result: ReleaseInstallResult | undefined;
+  let failure: Error | undefined;
+
+  const handlers: EventSourceHandlers = {
+    onopen: undefined,
+    onclose: undefined,
+    onerror: (error: Error): void => {
+      throw error;
+    },
+    onmessage: (event) => {
+      if (result || failure || !event.data) return;
+      if (event.event === StreamEventType.Done) {
+        result = JSON.parse(event.data) as ReleaseInstallResult;
+        abortController.abort();
+      } else if (event.event === StreamEventType.Error) {
+        const data = JSON.parse(event.data) as ErrorData;
+        if (data.code === SERVER_CLOSED_ERROR_CODE) return;
+        failure = new Error(data.message || data.code);
+        abortController.abort();
+      }
+    },
+  };
+
+  try {
+    await putEventSource({ url: sseUrl, handlers, body, abortController });
+  } catch (error) {
+    if (!result && !failure) throw error;
+  }
+
+  if (failure) throw failure;
+  if (!result) throw new Error('The release install ended without a result');
+  return result;
+}
+
+// The response itself is the progress stream; `done` carries the prepared app.
+export async function prepareAppV1Request(
+  id: string,
+  handlers: EventSourceHandlers,
+  abortController?: AbortController,
+  origin = Config.ORCHESTRATOR_API_URL,
+): Promise<void> {
+  const endpoint = `/v1/apps/${id}/prepare`;
+  const sseUrl = `${origin}${endpoint}`;
+
+  return putEventSource({ url: sseUrl, handlers, abortController });
 }
 
 export async function getBricksV1Request(
@@ -374,13 +542,7 @@ export async function postAppStartStreamV1Request(
   const endpoint = `/v1/apps/${id}/start`;
   const sseUrl = `${origin}${endpoint}`;
 
-  return postEventSource(
-    sseUrl,
-    handlers,
-    undefined,
-    undefined,
-    abortController,
-  );
+  return postEventSource({ url: sseUrl, handlers, abortController });
 }
 
 export async function postAppStopStreamV1Request(
@@ -392,13 +554,7 @@ export async function postAppStopStreamV1Request(
   const endpoint = `/v1/apps/${id}/stop`;
   const sseUrl = `${origin}${endpoint}`;
 
-  return postEventSource(
-    sseUrl,
-    handlers,
-    undefined,
-    undefined,
-    abortController,
-  );
+  return postEventSource({ url: sseUrl, handlers, abortController });
 }
 
 export async function getAppStatusStreamV1Request(
@@ -409,7 +565,7 @@ export async function getAppStatusStreamV1Request(
   const endpoint = `/v1/apps/events`;
   const sseUrl = `${origin}${endpoint}`;
 
-  return getEventSource(sseUrl, handlers, undefined, abortController);
+  return getEventSource({ url: sseUrl, handlers, abortController });
 }
 
 export async function getAppLogsStreamV1Request(
@@ -418,10 +574,24 @@ export async function getAppLogsStreamV1Request(
   abortController?: AbortController,
   origin = Config.ORCHESTRATOR_API_URL,
 ): Promise<void> {
-  const endpoint = `/v1/apps/${id}/logs?tail=0`;
+  // `app` is the legacy alias of `main`, kept for backward compatibility.
+  const endpoint = `/v1/apps/${id}/logs?tail=1000&filter=main,bricks,app`;
   const sseUrl = `${origin}${endpoint}`;
 
-  return getEventSource(sseUrl, handlers, undefined, abortController);
+  return getEventSource({ url: sseUrl, handlers, abortController });
+}
+
+// One stream for every build of every app. Each payload names its `build_id`,
+// and the daemon drops events for a subscriber that falls behind, so the build
+// request finishing is what ends a build.
+export async function getAppBuildEventsStreamV1Request(
+  handlers: EventSourceHandlers,
+  abortController?: AbortController,
+  origin = Config.ORCHESTRATOR_API_URL,
+): Promise<void> {
+  const sseUrl = `${origin}/v1/apps/build/events`;
+
+  return getEventSource({ url: sseUrl, handlers, abortController });
 }
 
 export async function getSerialMonitorLogsStreamV1Request(
@@ -442,7 +612,7 @@ export async function getSystemResourcesStreamV1Request(
   const endpoint = '/v1/system/resources';
   const sseUrl = `${origin}${endpoint}`;
 
-  return getEventSource(sseUrl, handlers, undefined, abortController);
+  return getEventSource({ url: sseUrl, handlers, abortController });
 }
 
 export async function checkBoardUpdateV1Request(
@@ -478,7 +648,7 @@ export async function getBoardUpdateLogsStreamV1Request(
   const endpoint = `/v1/system/update/events`;
   const sseUrl = `${origin}${endpoint}`;
 
-  return getEventSource(sseUrl, handlers, undefined, abortController);
+  return getEventSource({ url: sseUrl, handlers, abortController });
 }
 
 /**
@@ -687,11 +857,9 @@ export async function deleteAppSketchLibraryV1Request(
 }
 
 export async function getAIModelsV1Request(
-  source?: 'arduino' | 'edgeimpulse',
   origin: string = Config.ORCHESTRATOR_API_URL,
 ): Promise<AIModelsListResult> {
-  const qs = source ? `?source=${source}` : '';
-  const endpoint = `/v1/models${qs}`;
+  const endpoint = `/v1/models`;
 
   const response = await httpGet<AIModelsListResult>({
     url: origin,
@@ -769,7 +937,8 @@ export async function deleteAIModelV1Request(
   }
 }
 
-export async function uploadAIModelV1Request(
+// Installs a model the board's own list declares, naming it by id.
+export async function installAIModelV1Request(
   id: string,
   handlers: EventSourceHandlers,
   abortController?: AbortController,
@@ -778,11 +947,24 @@ export async function uploadAIModelV1Request(
   const endpoint = `/v1/models/${id}`;
   const sseUrl = `${origin}${endpoint}`;
 
-  return putEventSource(
-    sseUrl,
-    handlers,
-    undefined,
-    undefined,
-    abortController,
-  );
+  return putEventSource({ url: sseUrl, handlers, abortController });
+}
+
+// Downloads a model the board's list does not declare, from a Hugging Face source.
+export async function downloadAIModelV1Request(
+  source: string,
+  handlers: EventSourceHandlers,
+  abortController?: AbortController,
+  origin = Config.ORCHESTRATOR_API_URL,
+  mmprojUrl?: string,
+): Promise<void> {
+  const endpoint = `/v1/models`;
+  const sseUrl = `${origin}${endpoint}`;
+
+  const body: DownloadAIModelRequest = {
+    model_url: source,
+    mmproj_url: mmprojUrl,
+  };
+
+  return postEventSource({ url: sseUrl, handlers, body, abortController });
 }

@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
-import { get } from 'idb-keyval';
 
 import { AUTO_SELECT_BOARD_SERIAL, BOARD_APP_MAPPING } from '../constants';
+import { get } from '../services/persistentStore';
 
 export const Route = createFileRoute('/')({
   loader: async () => {

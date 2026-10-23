@@ -13,7 +13,7 @@ export const messages = defineMessages({
   },
   configurationStepImageVersionLabel: {
     id: 'app-lab.flasher.configuration-step-image-version-label',
-    defaultMessage: 'Build Version',
+    defaultMessage: 'Build version',
     description: 'Label for the image selection field',
   },
   configurationStepImageVersionAction: {
@@ -54,16 +54,18 @@ export const messages = defineMessages({
     defaultMessage: 'Ready to flash your board? The action can’t be stopped',
     description: 'Label beside the action button to start flashing',
   },
-  configurationStepActionError: {
-    id: 'app-lab.flasher.configuration-step-action-error',
-    defaultMessage: 'An error occurred, please try again.',
-    description: 'Error message shown when flashing process fails',
-  },
   configurationStepActionWarning: {
     id: 'app-lab.flasher.configuration-step-action-warning',
     defaultMessage:
       'Not enough disk space in your computer. This update needs 10 GB. Free up some space and try again.',
     description: 'Warning message shown during the flashing process',
+  },
+  configurationStepNoImagesTooltip: {
+    id: 'app-lab.flasher.configuration-step-no-images-tooltip',
+    defaultMessage:
+      'No images are available for this board. This may be caused by an unreachable index online. Please check your connection and try again.',
+    description:
+      'Tooltip explaining why flashing cannot start when no images are available',
   },
   preparationStepTitle: {
     id: 'app-lab.flasher.preparation-step-title',
@@ -80,13 +82,6 @@ export const messages = defineMessages({
     id: 'app-lab.flasher.preparation-step-instruction-1',
     defaultMessage: '<bold>Disconnect from power source</bold>',
     description: 'First instruction shown during the preparation step',
-  },
-  preparationStepInstruction1Alternative: {
-    id: 'app-lab.flasher.preparation-step-instruction-1-alternative',
-    defaultMessage:
-      '<bold>Disconnect the USB cable  it from your computer</bold>',
-    description:
-      'Alternative first instruction shown during the preparation step',
   },
   preparationStepInstruction2: {
     id: 'app-lab.flasher.preparation-step-instruction-2',
@@ -155,12 +150,12 @@ export const messages = defineMessages({
   },
   flashingStepShowLogsButton: {
     id: 'app-lab.flasher.flashing-step-logs-button',
-    defaultMessage: 'Show Logs',
+    defaultMessage: 'Show logs',
     description: 'Button label to show flashing logs',
   },
   flashingStepHideLogsButton: {
     id: 'app-lab.flasher.flashing-step-hide-logs-button',
-    defaultMessage: 'Hide Logs',
+    defaultMessage: 'Hide logs',
     description: 'Button label to hide flashing logs',
   },
   flashingStepSucceededInstructions: {
@@ -194,7 +189,7 @@ export const messages = defineMessages({
   },
   flashingStepSucceededDoneButton: {
     id: 'app-lab.flasher.flashing-step-succeeded-done-button',
-    defaultMessage: 'Ok, done',
+    defaultMessage: 'OK, done',
     description: 'Button label to close flashing after success',
   },
   flashingStepFailedDescription1: {

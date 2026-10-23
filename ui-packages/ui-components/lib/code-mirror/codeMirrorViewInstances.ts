@@ -64,18 +64,18 @@ export function createSplitSyncExtension(viewId: ViewInstances): Extension {
     if (update.transactions.some((tr) => tr.annotation(splitSyncAnnotation)))
       return;
     // Do not mirror programmatic content swaps (e.g. file-tab loads). Without
-    // this guard, switching files in the source pane would dispatch the new
-    // file's content to the peer pane and clobber whatever was there.
+    // this guard, switching files in the source panel would dispatch the new
+    // file's content to the peer panel and clobber whatever was there.
     if (update.transactions.some((tr) => tr.annotation(codeMirrorAnnotation)))
       return;
     const peer = getSplitSyncPeer(viewId);
     if (!peer) return;
     try {
       if (!peer.state.doc.eq(update.startState.doc)) {
-        // Panes diverged — a prior mirror was skipped or failed. Re-seed
+        // Panels diverged — a prior mirror was skipped or failed. Re-seed
         // the peer from the actively-edited document so the views
-        // re-converge: without this, both panes keep writing the shared
-        // code subject and a save silently persists whichever pane was
+        // re-converge: without this, both panels keep writing the shared
+        // code subject and a save silently persists whichever panel was
         // typed in last, discarding the other's version.
         peer.dispatch({
           changes: {
@@ -201,6 +201,16 @@ export const viewInstances: ViewInstancesDictionary = {
     valueInstanceId: undefined,
   },
 };
+
+// The live editor view of a panel: panel B's view is rebuilt on every file switch, so a reference kept elsewhere goes stale.
+export const getPanelEditorView = (panel: 'A' | 'B'): EditorView | null =>
+  viewInstances[panel === 'A' ? ViewInstances.Editor : ViewInstances.Editor2]
+    .instance;
+
+export const viewInstanceIdOf = (view: EditorView): ViewInstances | null =>
+  (Object.keys(viewInstances).map(Number) as ViewInstances[]).find(
+    (id) => viewInstances[id].instance === view,
+  ) ?? null;
 
 function createExtMetadataObj(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -328,7 +338,7 @@ export const viewInstanceStateMaps = {
 };
 
 /**
- * Drops every cached per-file EditorState for the two editor panes. Call
+ * Drops every cached per-file EditorState for the two editor panels. Call
  * on app exit: the cached states hold full document copies and are only
  * pruned while an editor with `useCodeMirrorStateCleanup` is mounted, so
  * without this they outlive the app that produced them.

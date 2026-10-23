@@ -1,6 +1,6 @@
 ---
 name: "@codemirror/lsp-client"
-version: 6.2.5
+version: 6.3.0
 type: npm
 summary: Language server protocol client for CodeMirror
 homepage:

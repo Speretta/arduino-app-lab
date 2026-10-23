@@ -1,0 +1,99 @@
+@use "@cloud-editor-mono/arduino-sass/src/fonts" as fonts;
+@use "@cloud-editor-mono/arduino-sass/src/variables" as variables;
+
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-family: variables.$font-sans;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 8px 16px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border-inverted);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.title-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-right: 8px;
+  color: var(--text-default);
+  font-size: 14px;
+  font-weight: fonts.$font-weight-semibold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.history-menu {
+  min-width: 220px;
+  max-width: 280px;
+}
+
+.history-trigger {
+  position: relative;
+  display: inline-flex;
+}
+
+.unread-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--feedback-warning-default, #c1ab15);
+  border: 1.5px solid var(--surface-bg-below-2, #090f11);
+  pointer-events: none;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 0 24px;
+  text-align: center;
+}
+
+.empty-state-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--icon-inverted-subtle);
+}
+
+.empty-state-text {
+  margin: 0;
+  color: var(--text-inverted-subtle);
+  font-size: 12px;
+  font-weight: fonts.$font-weight-semibold;
+}

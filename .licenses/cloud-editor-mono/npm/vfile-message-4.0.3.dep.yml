@@ -1,0 +1,90 @@
+---
+name: vfile-message
+version: 4.0.3
+type: npm
+summary: vfile utility to create a virtual message
+homepage:
+license: mit
+licenses:
+- sources: license
+  text: |
+    (The MIT License)
+
+    Copyright (c) Titus Wormer <tituswormer@gmail.com>
+
+    Permission is hereby granted, free of charge, to any person obtaining
+    a copy of this software and associated documentation files (the
+    'Software'), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be
+    included in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+- sources: readme.md
+  text: |-
+    [MIT][file-license] © [Titus Wormer][wooorm]
+
+    <!-- Definitions -->
+
+    [api-options]: #options
+
+    [api-vfile-message]: #vfilemessagereason-options
+
+    [badge-build-image]: https://github.com/vfile/vfile-message/workflows/main/badge.svg
+
+    [badge-build-url]: https://github.com/vfile/vfile-message/actions
+
+    [badge-coverage-image]: https://img.shields.io/codecov/c/github/vfile/vfile-message.svg
+
+    [badge-coverage-url]: https://codecov.io/github/vfile/vfile-message
+
+    [badge-downloads-image]: https://img.shields.io/npm/dm/vfile-message.svg
+
+    [badge-downloads-url]: https://www.npmjs.com/package/vfile-message
+
+    [badge-size-image]: https://img.shields.io/bundlejs/size/vfile-message
+
+    [badge-size-url]: https://bundlejs.com/?q=vfile-message
+
+    [developer-mozilla-error]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error
+
+    [esmsh]: https://esm.sh
+
+    [file-license]: license
+
+    [github-gist-esm]: https://gist.github.com/sindresorhus/a39789f98801d908bbc7ff3ecc99d99c
+
+    [github-unist-node]: https://github.com/syntax-tree/unist#node
+
+    [github-unist-point]: https://github.com/syntax-tree/unist#point
+
+    [github-unist-position]: https://github.com/syntax-tree/unist#position
+
+    [github-vfile]: https://github.com/vfile/vfile
+
+    [github-vfile-util]: https://github.com/vfile/vfile#utilities
+
+    [health]: https://github.com/vfile/.github
+
+    [health-coc]: https://github.com/vfile/.github/blob/main/code-of-conduct.md
+
+    [health-contributing]: https://github.com/vfile/.github/blob/main/contributing.md
+
+    [health-support]: https://github.com/vfile/.github/blob/main/support.md
+
+    [npmjs-install]: https://docs.npmjs.com/cli/install
+
+    [typescript]: https://www.typescriptlang.org
+
+    [wooorm]: https://wooorm.com
+notices: []

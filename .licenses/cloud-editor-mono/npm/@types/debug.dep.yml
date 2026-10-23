@@ -1,6 +1,6 @@
 ---
 name: "@types/debug"
-version: 4.1.12
+version: 4.1.13
 type: npm
 summary: TypeScript definitions for debug
 homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/debug

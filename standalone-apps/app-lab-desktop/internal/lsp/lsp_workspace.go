@@ -2,8 +2,10 @@ package lsp
 
 import (
 	"app-lab-desktop/internal/board"
+	"errors"
 	"fmt"
 	"io"
+	iofs "io/fs"
 	"log/slog"
 	"net/url"
 	"os"
@@ -72,6 +74,11 @@ func arduinoDirBaseName() string {
 // Exported so callers test for it with the same string FileURIToLocalPath strips.
 const FileScheme = "file://"
 
+// Must match LSP_LANGS in
+// ui-packages/ui-components/lib/code-mirror/extensions/lsp/lsp-consts.ts,
+// plus SYNC_ONLY_EXTENSIONS in
+// standalone-apps/app-lab-desktop/frontend/src/services/lspFileExtensions.test.ts,
+// which fails when the two lists differ.
 var LspFileExtensions = []string{
 	".ino", ".yaml", ".c", ".cpp", ".h", ".hpp",
 	".py", ".pyi", ".js", ".ts", ".mjs", ".cjs", ".jsx", ".tsx", ".html", ".css", ".scss",
@@ -223,10 +230,22 @@ func isLspFile(filePath string) bool {
 }
 
 func ShouldSyncRemoteFileToLspWorkspace(filePath string) bool {
-	return isLspFile(filePath) && !board.IsSBC()
+	return isLspFile(filePath) && SyncsRemoteWorkspace()
+}
+
+// SyncsRemoteWorkspace reports whether the LSP workspace is a local copy of the
+// board's app that changes must be mirrored into. On the board the servers read
+// the app folder itself.
+func SyncsRemoteWorkspace() bool {
+	return !board.IsSBC()
 }
 
 func getWorkspaceFilePathFromRemoteFilePath(filePath string) (string, error) {
+	return workspacePathIn(GetLspTempWorkspaceAppDir(), filePath)
+}
+
+// workspacePathIn maps a board app path to its copy under appDir.
+func workspacePathIn(appDir, filePath string) (string, error) {
 	slog.Info("getWorkspaceFilePathFromRemoteFilePath", "filePath", filePath)
 
 	// strip the "<boardAppsRootDir>/<appName>/" prefix
@@ -234,7 +253,6 @@ func getWorkspaceFilePathFromRemoteFilePath(filePath string) (string, error) {
 	rel = strings.TrimPrefix(rel, "/")
 	_, subPath, _ := strings.Cut(rel, "/")
 
-	appDir := GetLspTempWorkspaceAppDir()
 	fullPath := filepath.Join(appDir, subPath)
 
 	// prevent path traversal ("..") from escaping the workspace app dir
@@ -243,6 +261,26 @@ func getWorkspaceFilePathFromRemoteFilePath(filePath string) (string, error) {
 	}
 
 	return fullPath, nil
+}
+
+// appSubPathIn maps a board path to its copy strictly inside appDir: false for
+// a path outside the board apps root, outside appDir, or naming appDir itself
+// (the app folder, or the apps root), which no single change may replace or
+// remove.
+func appSubPathIn(appDir, filePath string) (string, bool) {
+	// avoid app example / host files not under the board apps root
+	if !strings.HasPrefix(filePath, boardAppsRootDir) {
+		return "", false
+	}
+	workspacePath, err := workspacePathIn(appDir, filePath)
+	if err != nil {
+		slog.Error("failed to resolve lsp workspace path", "path", filePath, "err", err)
+		return "", false
+	}
+	if filepath.Clean(workspacePath) == filepath.Clean(appDir) {
+		return "", false
+	}
+	return workspacePath, true
 }
 
 // isWithinDir reports whether target resolves to a location inside dir.
@@ -261,18 +299,21 @@ func isWithinDir(target, dir string) bool {
 
 // IsAllowedLspFilePath confines LSP file reads to the known workspace roots
 // (app workspace, bundled resources / library data / python stubs, and the
-// SBC board apps dir) to prevent arbitrary file reads via the exposed API.
+// SBC board's app file roots) to prevent arbitrary file reads via the exposed
+// API.
 func IsAllowedLspFilePath(filePath string) bool {
 	roots := []string{
 		getTempWorkspaceBase(),
 		getPersistentWorkspaceBase(),
 	}
-	// The board apps dir is only ours when we are the board. Off-board that is
-	// just a path that could exist on the user's machine, and remote app files
-	// are synced into the temp workspace anyway
-	// (see ShouldSyncRemoteFileToLspWorkspace).
+	// The board's app dirs are only ours when we are the board. Off-board they
+	// are just paths that could exist on the user's machine, and remote app
+	// files are synced into the temp workspace anyway
+	// (see ShouldSyncRemoteFileToLspWorkspace). On the board an example is
+	// opened in place, so its folder under the data dir must be readable too.
 	if board.IsSBC() {
 		roots = append(roots, boardAppsRootDir)
+		roots = append(roots, board.OwnAppFileRoots()...)
 	}
 	for _, root := range roots {
 		if isWithinDir(filePath, root) {
@@ -391,48 +432,254 @@ func GetLspWorkspaceFile(fileURI string) (string, error) {
 	return string(content), nil
 }
 
-func RemoveWorkspaceFile(filePath string) {
-
-	// avoid app example / host files not under the board apps root
-	if !strings.HasPrefix(filePath, boardAppsRootDir) {
-		return
+// ListLspSketchFiles lists the sketch files in sketchDir the Arduino LS must
+// have open, as slash-separated paths relative to it. It follows arduino-cli's
+// sketch rules (see walkLspFiles), so each file has a build copy the server can
+// map back to. A missing sketchDir has no files.
+func ListLspSketchFiles(sketchDir string) ([]string, error) {
+	sketchDir = filepath.Clean(sketchDir)
+	if !IsAllowedLspFilePath(sketchDir) {
+		slog.Error("list dir denied: path outside allowed workspace roots", "path", sketchDir)
+		return nil, fmt.Errorf("access denied: path outside allowed workspace roots")
 	}
 
 	workspaceMu.Lock()
 	defer workspaceMu.Unlock()
 
-	workspaceFileName, err := getWorkspaceFilePathFromRemoteFilePath(filePath)
+	return listLspFilesRelativeTo(sketchDir, sketchDir, sketchDir)
+}
+
+// ListLspFiles lists the LSP files under relDir of workspaceDir, as
+// slash-separated paths relative to workspaceDir. The client announces them
+// when a folder appears in one step (an import, a folder rename, a folder moved
+// in from a terminal), because the watcher reports only the folder and
+// basedpyright ignores a Created event for a folder. A missing relDir, or one
+// that names a file, has no files.
+func ListLspFiles(workspaceDir, relDir string) ([]string, error) {
+	workspaceDir = filepath.Clean(workspaceDir)
+	root := filepath.Join(workspaceDir, filepath.FromSlash(relDir))
+	if !IsAllowedLspFilePath(workspaceDir) || !isWithinDir(root, workspaceDir) {
+		slog.Error("list dir denied: path outside allowed workspace roots", "path", root)
+		return nil, fmt.Errorf("access denied: path outside allowed workspace roots")
+	}
+
+	workspaceMu.Lock()
+	defer workspaceMu.Unlock()
+
+	return listLspFilesRelativeTo(root, filepath.Join(workspaceDir, sketchDirName), workspaceDir)
+}
+
+// listLspFilesRelativeTo walks root (see walkLspFiles) and returns each file
+// relative to base. Must hold workspaceMu.
+func listLspFilesRelativeTo(root, sketchDir, base string) ([]string, error) {
+	if _, err := os.Stat(root); errors.Is(err, iofs.ErrNotExist) {
+		return []string{}, nil
+	}
+
+	files := []string{}
+	err := walkLspFiles(root, sketchDir, func(p string) error {
+		rel, err := filepath.Rel(base, p)
+		if err != nil {
+			return err
+		}
+		files = append(files, filepath.ToSlash(rel))
+		return nil
+	})
 	if err != nil {
-		slog.Error("failed to resolve lsp workspace path", "path", filePath, "err", err)
+		slog.Error("list lsp files failed", "path", root, "err", err)
+		return nil, err
+	}
+
+	return files, nil
+}
+
+// walkLspFiles calls visit for every LSP file under root the language servers
+// may be given. It skips dot entries and build output (build/ at the sketch
+// root, or any folder holding build.options.json), and keeps .ino files only
+// directly in sketchDir: arduino-cli merges .ino files from the sketch root
+// only, and the Arduino LS maps every .ino it is given onto that merged file.
+// Unreadable entries below root are skipped.
+func walkLspFiles(root, sketchDir string, visit func(p string) error) error {
+	return filepath.WalkDir(root, func(p string, d iofs.DirEntry, err error) error {
+		if err != nil {
+			if p == root {
+				return err
+			}
+			slog.Warn("skipping entry in LSP file listing", "path", p, "err", err)
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if p == root {
+			return nil
+		}
+		if strings.HasPrefix(d.Name(), ".") {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		inSketchRoot := filepath.Dir(p) == sketchDir
+		if d.IsDir() {
+			if inSketchRoot && d.Name() == "build" {
+				return filepath.SkipDir
+			}
+			if _, err := os.Stat(filepath.Join(p, "build.options.json")); err == nil {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !isLspFile(p) {
+			return nil
+		}
+		if filepath.Ext(p) == ".ino" && !inSketchRoot {
+			return nil
+		}
+		return visit(p)
+	})
+}
+
+// RemoveWorkspacePath removes a file or a folder from the temp workspace copy.
+// The app folder itself is never removed this way.
+func RemoveWorkspacePath(filePath string) {
+	workspaceMu.Lock()
+	defer workspaceMu.Unlock()
+
+	removeWorkspacePathIn(GetLspTempWorkspaceAppDir(), filePath)
+}
+
+// removeWorkspacePathIn is RemoveWorkspacePath for the copy under appDir. Must
+// hold workspaceMu.
+func removeWorkspacePathIn(appDir, filePath string) {
+	workspacePath, ok := appSubPathIn(appDir, filePath)
+	if !ok {
 		return
 	}
 
-	if err := os.Remove(workspaceFileName); err != nil && !os.IsNotExist(err) {
-		slog.Error("failed to remove from lsp workspace", "path", workspaceFileName, "err", err)
+	if err := os.RemoveAll(workspacePath); err != nil {
+		slog.Error("failed to remove from lsp workspace", "path", workspacePath, "err", err)
 	}
 }
 
-func RenameWorkspaceFile(prevPath, newPath string) {
+// RenameWorkspacePath moves a file or a folder in the temp workspace copy. A
+// source that was never copied (a folder with no LSP files) is not an error.
+func RenameWorkspacePath(prevPath, newPath string) {
 
-	slog.Info("Renaming workspace file", "prevPath", prevPath, "newPath", newPath)
+	slog.Info("Renaming workspace path", "prevPath", prevPath, "newPath", newPath)
 
 	workspaceMu.Lock()
 	defer workspaceMu.Unlock()
 
-	prevName, err := getWorkspaceFilePathFromRemoteFilePath(prevPath)
-	if err != nil {
-		slog.Error("failed to resolve lsp workspace path", "path", prevPath, "err", err)
+	renameWorkspacePathIn(GetLspTempWorkspaceAppDir(), prevPath, newPath)
+}
+
+// renameWorkspacePathIn is RenameWorkspacePath for the copy under appDir. Must
+// hold workspaceMu.
+func renameWorkspacePathIn(appDir, prevPath, newPath string) {
+	prevName, ok := appSubPathIn(appDir, prevPath)
+	if !ok {
 		return
 	}
-	newName, err := getWorkspaceFilePathFromRemoteFilePath(newPath)
-	if err != nil {
-		slog.Error("failed to resolve lsp workspace path", "path", newPath, "err", err)
+	newName, ok := appSubPathIn(appDir, newPath)
+	if !ok {
 		return
 	}
 
+	if _, err := os.Stat(prevName); errors.Is(err, iofs.ErrNotExist) {
+		return
+	}
+	// Only folders holding LSP files are copied, so the destination's parent
+	// may not exist yet.
+	if err := os.MkdirAll(filepath.Dir(newName), 0o755); err != nil {
+		slog.Error("failed to create lsp workspace folder", "path", filepath.Dir(newName), "err", err)
+		return
+	}
 	if err := os.Rename(prevName, newName); err != nil {
 		slog.Error("failed to rename in lsp workspace", "from", prevName, "to", newName, "err", err)
 	}
+}
+
+// SyncRemoteDirToLspWorkspace copies the LSP files of a board folder into the
+// temp workspace copy, for a folder that appeared in one step.
+func SyncRemoteDirToLspWorkspace(conn remote.RemoteConn, remoteDir string) {
+	workspaceMu.Lock()
+	defer workspaceMu.Unlock()
+
+	dst, ok := appSubPathIn(GetLspTempWorkspaceAppDir(), remoteDir)
+	if !ok {
+		return
+	}
+	// A folder replaced in one step (`mv sub x && mkdir sub`) arrives as this
+	// one create, so what the copy held before is not part of it.
+	if err := os.RemoveAll(dst); err != nil {
+		slog.Error("failed to clear folder in lsp workspace", "path", dst, "err", err)
+		return
+	}
+	if _, err := copyRemoteLspTree(conn, remoteDir, dst); err != nil {
+		slog.Error("failed to copy folder into lsp workspace", "path", remoteDir, "err", err)
+	}
+}
+
+// SyncLocalPathToLspWorkspace copies an imported host file or folder into the
+// temp workspace copy at remotePath, the place the import created on the board.
+// The import source is read because the board copy is the same content and a
+// second transfer would cost a board round trip per file.
+func SyncLocalPathToLspWorkspace(localPath, remotePath string) {
+	workspaceMu.Lock()
+	defer workspaceMu.Unlock()
+
+	dst, ok := appSubPathIn(GetLspTempWorkspaceAppDir(), remotePath)
+	if !ok {
+		return
+	}
+
+	copyFile := func(src, dst string) {
+		f, err := os.Open(src)
+		if err != nil {
+			slog.Warn("skipping file in LSP workspace mirror", "file", src, "err", err)
+			return
+		}
+		defer f.Close()
+		if err := writeWorkspaceFile(dst, f); err != nil {
+			slog.Warn("skipping file in LSP workspace mirror", "file", src, "err", err)
+		}
+	}
+
+	info, err := os.Stat(localPath)
+	if err != nil {
+		slog.Error("failed to stat imported path", "path", localPath, "err", err)
+		return
+	}
+	if !info.IsDir() {
+		if isLspFile(remotePath) {
+			copyFile(localPath, dst)
+		}
+		return
+	}
+	_ = filepath.WalkDir(localPath, func(p string, d iofs.DirEntry, err error) error {
+		if err != nil {
+			if d != nil && d.IsDir() && p != localPath {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if p != localPath && strings.HasPrefix(d.Name(), ".") {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() || !isLspFile(p) {
+			return nil
+		}
+		rel, err := filepath.Rel(localPath, p)
+		if err != nil {
+			return nil
+		}
+		copyFile(p, filepath.Join(dst, rel))
+		return nil
+	})
 }
 
 func InitLspWorkspace(conn remote.RemoteConn, appPath string) error {
@@ -454,79 +701,7 @@ func InitLspWorkspace(conn remote.RemoteConn, appPath string) error {
 		return err
 	}
 
-	var copyRecursive func(src, dst string) (bool, error)
-
-	copyRecursive = func(src, dst string) (bool, error) {
-
-		entries, err := conn.List(src)
-		if err != nil {
-			slog.Error("failed to read dir", "src", src, "err", err)
-			return false, err
-		}
-
-		var copiedAny bool
-
-		for _, entry := range entries {
-			srcEntry := path.Join(src, entry.Name)
-			dstEntry := filepath.Join(dst, entry.Name)
-
-			if entry.IsDir {
-				// Skip hidden directories
-				if strings.HasPrefix(entry.Name, ".") {
-					continue
-				}
-				ok, err := copyRecursive(srcEntry, dstEntry)
-				if err != nil {
-					// Same reasoning as the per-file skip below: one unreadable or
-					// unmirrorable subtree should not cost LSP for the whole app.
-					slog.Warn("skipping subtree in LSP workspace mirror", "dir", srcEntry, "err", err)
-					continue
-				}
-				if ok {
-					copiedAny = true
-				}
-				continue
-			}
-
-			if !isLspFile(srcEntry) {
-				continue
-			}
-
-			// Use an inline function to safely defer reader.Close() and manage errors
-			copyErr := func() error {
-				reader, err := conn.ReadFile(srcEntry)
-				if err != nil {
-					slog.Error("failed to read file", "file", srcEntry, "err", err)
-					return err
-				}
-				defer reader.Close()
-
-				if err := writeWorkspaceFile(dstEntry, reader); err != nil {
-					slog.Error("failed to write file", "file", dstEntry, "err", err)
-					return err
-				}
-
-				return nil
-			}()
-
-			// A single unmirrorable file must not take the whole workspace down.
-			// Names are validated on create/rename, but a board can already hold
-			// files this host cannot write — a name that is legal on the board's
-			// Debian filesystem but not on Windows (e.g. "log:2026.txt"), or one
-			// created outside App Lab entirely. Skipping loses LSP for that file
-			// only; aborting lost it for every file in the app.
-			if copyErr != nil {
-				slog.Warn("skipping file in LSP workspace mirror", "file", srcEntry, "err", copyErr)
-				continue
-			}
-
-			copiedAny = true
-		}
-
-		return copiedAny, nil
-	}
-
-	ok, err := copyRecursive(appPath, dstPath)
+	ok, err := copyRemoteLspTree(conn, appPath, dstPath)
 	if err != nil {
 		slog.Error("copy app workspace failed", "err", err)
 		return err
@@ -540,6 +715,80 @@ func InitLspWorkspace(conn remote.RemoteConn, appPath string) error {
 
 	slog.Info("copy app workspace completed", "dst", dstPath)
 	return nil
+}
+
+// copyRemoteLspTree copies the LSP files under the board folder src into dst,
+// skipping hidden folders, and reports whether it copied any. Must hold
+// workspaceMu.
+func copyRemoteLspTree(conn remote.RemoteConn, src, dst string) (bool, error) {
+
+	entries, err := conn.List(src)
+	if err != nil {
+		slog.Error("failed to read dir", "src", src, "err", err)
+		return false, err
+	}
+
+	var copiedAny bool
+
+	for _, entry := range entries {
+		srcEntry := path.Join(src, entry.Name)
+		dstEntry := filepath.Join(dst, entry.Name)
+
+		if entry.IsDir {
+			// Skip hidden directories
+			if strings.HasPrefix(entry.Name, ".") {
+				continue
+			}
+			ok, err := copyRemoteLspTree(conn, srcEntry, dstEntry)
+			if err != nil {
+				// Same reasoning as the per-file skip below: one unreadable or
+				// unmirrorable subtree should not cost LSP for the whole app.
+				slog.Warn("skipping subtree in LSP workspace mirror", "dir", srcEntry, "err", err)
+				continue
+			}
+			if ok {
+				copiedAny = true
+			}
+			continue
+		}
+
+		if !isLspFile(srcEntry) {
+			continue
+		}
+
+		// Use an inline function to safely defer reader.Close() and manage errors
+		copyErr := func() error {
+			reader, err := conn.ReadFile(srcEntry)
+			if err != nil {
+				slog.Error("failed to read file", "file", srcEntry, "err", err)
+				return err
+			}
+			defer reader.Close()
+
+			if err := writeWorkspaceFile(dstEntry, reader); err != nil {
+				slog.Error("failed to write file", "file", dstEntry, "err", err)
+				return err
+			}
+
+			return nil
+		}()
+
+		// A single unmirrorable file must not take the whole workspace down.
+		// The board (Linux) allows names this host cannot write — a name that
+		// is legal on the board's Debian filesystem but not on Windows (e.g.
+		// "log:2026.txt" or "COM"), or one created outside App Lab entirely.
+		// There is no name validation on create/rename, so such files do reach
+		// here; skipping loses LSP for that file only, whereas aborting lost it
+		// for every file in the app.
+		if copyErr != nil {
+			slog.Warn("skipping file in LSP workspace mirror", "file", srcEntry, "err", copyErr)
+			continue
+		}
+
+		copiedAny = true
+	}
+
+	return copiedAny, nil
 }
 
 func writeWorkspaceFile(path string, r io.Reader) error {

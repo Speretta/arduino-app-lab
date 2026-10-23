@@ -1,9 +1,9 @@
 ---
 name: "@internationalized/string"
-version: 3.2.5
+version: 3.2.10
 type: npm
 summary: Internationalized string formatting and locale negotiation
-homepage: 
+homepage:
 license: apache-2.0
 licenses:
 - sources: LICENSE

@@ -10,13 +10,11 @@ type UseShowUserSettings = (enabled: boolean) => {
 export const useShowUserSettings: UseShowUserSettings = function (
   enabled: boolean,
 ): ReturnType<UseShowUserSettings> {
-  const { data, isLoading } = useQuery(
-    ['show-user-settings'],
-    showUserSettings,
-    {
-      enabled,
-    },
-  );
+  const { data, isLoading } = useQuery<GetSettings_Response>({
+    queryKey: ['show-user-settings'],
+    queryFn: showUserSettings,
+    enabled,
+  });
 
   return { data, isLoading };
 };

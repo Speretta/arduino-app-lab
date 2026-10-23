@@ -1,7 +1,6 @@
 export enum BoardScopedQuery {
   // apps
   LIST_MY_APPS = 'list-my-apps',
-  GET_DEFAULT_APP = 'get-default-app',
   CHECK_APPS_TO_REDIRECT = 'check-apps-to-redirect',
   // bricks
   LIST_BRICKS = 'list-bricks',
@@ -11,7 +10,8 @@ export enum BoardScopedQuery {
   GET_BRICK_INSTANCE = 'get-brick-instance',
   APP_BRICKS = 'app-bricks',
   // files / libraries living on the board
-  APP_FILES = 'app-files',
+  APP_DIR = 'app-dir',
+  APP_DEFAULT_FILE = 'app-default-file',
   APP_SKETCH_LIBRARIES = 'app-sketch-libraries',
   LIST_SKETCH_LIBRARIES = 'list-sketch-libraries',
   // board identity / config / system
@@ -21,8 +21,9 @@ export enum BoardScopedQuery {
   GET_KEYBOARD_LAYOUT = 'get-keyboard-layout',
   LIST_KEYBOARD_LAYOUTS = 'list-keyboard-layouts',
   // hardware / carriers
-  CARRIERS = 'carriers',
-  CARRIERS_STATUS = 'carriers-status',
+  HARDWARE_SUPPORTED = 'hardware-supported',
+  HARDWARE_LIST = 'hardware-list',
+  HARDWARE_STATUS = 'hardware-status',
   // OS / network settings reported by the board
   NETWORK_MODE_ENABLED = 'network-mode-enabled',
   CONNECTION_NAME = 'connection-name',
@@ -30,9 +31,7 @@ export enum BoardScopedQuery {
   OS_IMAGE_VERSION = 'os-image-version',
   KERNEL_VERSION = 'kernel-version',
   LINUX_DISTRIBUTION = 'linux-distribution',
-  WIFI_STATUS = 'wifi-status',
-  ETHERNET_STATUS = 'ethernet-status',
-  INTERNET_STATUS = 'internet-status',
+  NETWORK_STATUS = 'network-status',
   NETWORK_LIST = 'networkList',
   // board firmware / image update state
   BOARD_UPDATE_CHECK = 'board-update-check',

@@ -1,6 +1,6 @@
 ---
 name: "@floating-ui/core"
-version: 1.6.9
+version: 1.8.0
 type: npm
 summary: 'Positioning library for floating elements: tooltips, popovers, dropdowns,
   and more'

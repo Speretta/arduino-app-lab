@@ -3,16 +3,16 @@ import { ArduinoAppFilesService } from '@cloud-editor-mono/domain/src/services/s
 import {
   CreateFolder,
   GetFileContent,
-  GetFileTree,
   ImportFileToAppFromPath,
   ImportFolderToAppFromPath,
-  IsDirectory,
   IsLocalDirectory,
+  ListDirectory,
   RemoveFile,
   RenameFile,
   RenameFolder,
   SelectFilesDialog,
   SelectFolderDialog,
+  StatPath,
   UnwatchAll,
   UnwatchApp,
   UnwatchAppsDir,
@@ -21,7 +21,7 @@ import {
   WriteFileContent,
 } from '../../wailsjs/go/app/App';
 import { EventsOn, OnFileDrop } from '../../wailsjs/runtime';
-import { mapFSNode, mapFSNodeToFlat } from './orchestratorService.mapper';
+import { mapFSNode } from './orchestratorService.mapper';
 
 type DroppedItem = { path: string; isFolder: boolean };
 type DropHandler = (items: DroppedItem[]) => void;
@@ -43,13 +43,13 @@ type DropHandler = (items: DroppedItem[]) => void;
  *  - Listening to `host-file-drop` also means the paths cannot arrive before
  *    the backend has recorded them.
  *
- * One consumer is active at a time, first to subscribe: `OnFileDrop` behaved
- * that way already, and letting every subscriber see the same drop would run
- * two imports for it.
+ * One consumer is active at a time: the most recently subscribed one still
+ * present. Letting every subscriber see the same drop would run two imports
+ * for it.
  */
 const HOST_FILE_DROP_EVENT = 'host-file-drop';
 
-let activeDropHandler: DropHandler | null = null;
+const dropHandlerStack: DropHandler[] = [];
 let dropBridgeInstalled = false;
 
 const installDropBridge = (): void => {
@@ -67,13 +67,14 @@ const installDropBridge = (): void => {
   EventsOn(
     HOST_FILE_DROP_EVENT,
     async (x: number, y: number, paths: string[]) => {
-      const handler = activeDropHandler;
+      const handler = dropHandlerStack[dropHandlerStack.length - 1];
       if (!handler) {
         return;
       }
 
       const element = document.elementFromPoint(x, y);
-      if (!element || !element.closest('[data-native-dropzone="true"]')) {
+      const dropzone = element?.closest('[data-native-dropzone="true"]');
+      if (!element || !dropzone) {
         return;
       }
 
@@ -94,29 +95,32 @@ const installDropBridge = (): void => {
   );
 };
 
-export const getAppFileTree: ArduinoAppFilesService['getAppFileTree'] =
-  async function (id: string) {
-    console.log('getAppFileTree');
-
-    const file = await GetFileTree(id);
-    return [mapFSNode(file)];
-  };
-
-export const getAppFiles: ArduinoAppFilesService['getAppFiles'] =
-  async function (path: string) {
-    const fileTree = await GetFileTree(path);
-
-    const flatFiles = mapFSNodeToFlat(fileTree);
-
-    return {
-      filesList: flatFiles,
-      fileTree: [mapFSNode(fileTree)],
-    };
-  };
-
 export const getAppFileContent: ArduinoAppFilesService['getAppFileContent'] =
   async function (path: string) {
     return GetFileContent(path);
+  };
+
+export const listAppDirectory: ArduinoAppFilesService['listAppDirectory'] =
+  async function (appPath: string, relDirPath = '') {
+    const entries = await ListDirectory(
+      relDirPath ? `${appPath}/${relDirPath}` : appPath,
+    );
+
+    return entries.map((entry) => {
+      const node = mapFSNode(entry);
+      const path = relDirPath ? `${relDirPath}/${entry.name}` : entry.name;
+      // A shallow listing says nothing about a subfolder's contents, whereas
+      // mapFSNode reports the absent children as an empty folder.
+      return node.type === 'folder'
+        ? { ...node, path, children: null }
+        : { ...node, path };
+    });
+  };
+
+export const statAppPath: ArduinoAppFilesService['statAppPath'] =
+  async function (path: string) {
+    const node = await StatPath(path);
+    return node ? { isDir: node.isDir } : null;
   };
 
 export const saveAppFile: ArduinoAppFilesService['saveAppFile'] =
@@ -141,28 +145,6 @@ export const renameAppFile: ArduinoAppFilesService['renameAppFile'] =
     } else {
       return RenameFile(path, newName, suppressWatch);
     }
-  };
-
-const directoryCache = new Map<string, boolean>();
-
-export const moveAppFile: ArduinoAppFilesService['moveAppFile'] =
-  async function (fromPath: string, toPath: string, suppressWatch = true) {
-    // Check cache first
-    let isDirectory = directoryCache.get(fromPath);
-
-    if (isDirectory === undefined) {
-      try {
-        isDirectory = await IsDirectory(fromPath);
-        // Cache the result for future use
-        directoryCache.set(fromPath, isDirectory);
-      } catch (error) {
-        console.error('Error determining file type:', error);
-      }
-    }
-
-    return isDirectory
-      ? RenameFolder(fromPath, toPath, suppressWatch)
-      : RenameFile(fromPath, toPath, suppressWatch);
   };
 
 export const removeAppFile: ArduinoAppFilesService['removeAppFile'] =
@@ -209,14 +191,12 @@ export const importDroppedResourceToApp: ArduinoAppFilesService['importDroppedRe
   function (callback) {
     installDropBridge();
 
-    if (activeDropHandler) {
-      return () => undefined;
-    }
-    activeDropHandler = callback;
+    dropHandlerStack.push(callback);
 
     return () => {
-      if (activeDropHandler === callback) {
-        activeDropHandler = null;
+      const index = dropHandlerStack.indexOf(callback);
+      if (index !== -1) {
+        dropHandlerStack.splice(index, 1);
       }
     };
   };

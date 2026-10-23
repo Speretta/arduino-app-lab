@@ -1,6 +1,6 @@
 ---
 name: "@lezer/lr"
-version: 1.4.7
+version: 1.4.10
 type: npm
 summary: Incremental parser
 homepage:

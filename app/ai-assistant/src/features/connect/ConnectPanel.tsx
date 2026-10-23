@@ -7,7 +7,7 @@ import { useCallback } from 'react';
 
 import { messages } from '../../messages';
 import { useAiAssistantStore } from '../../store';
-import { AgentAction, AgentCard, Header, Text, Toast } from '../../ui';
+import { AgentAction, AgentCard, Text, Toast } from '../../ui';
 import { AgentAuthFlow } from './AgentAuthFlow';
 import styles from './connect-panel.module.scss';
 import { useConnectPanelLogic } from './ConnectPanel.logic';
@@ -67,7 +67,7 @@ export const ConnectPanel: React.FC = () => {
   );
 
   return (
-    <PageLayout header={<Header title={formatMessage(messages.headerTitle)} />}>
+    <PageLayout>
       <div className={styles['inner']}>
         <Text size={TextSize.XSmall} className={styles['label']}>
           {formatMessage(messages.connectTitle)}

@@ -6,4 +6,9 @@ export const messages = defineMessages({
     defaultMessage: 'Split view',
     description: 'Button tooltip to toggle split editor view',
   },
+  agentPanelButton: {
+    id: 'editor-panel.agent-panel-button',
+    defaultMessage: 'Agent panel (⌘L)',
+    description: 'Button tooltip to toggle the agent side panel',
+  },
 });

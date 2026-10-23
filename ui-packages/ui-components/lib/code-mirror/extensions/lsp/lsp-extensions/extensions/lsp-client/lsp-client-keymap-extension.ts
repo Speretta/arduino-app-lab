@@ -11,15 +11,18 @@ import {
   lspGoToTypeDefinition,
   lspRename,
 } from '../../../lsp-client/lsp-client-commands';
-import { closeReferencePanel, closeRenamePanel } from '../lsp-panel-helpers';
+import { LspReferencesPanelActions } from '../../../lsp-references/lsp-references-types';
+import { closeRenamePanel } from '../lsp-rename-panel/lsp-rename-panel';
 
 export const getLspClientKeymapExtension = ({
   formatMessage,
   readOnly = false,
+  showLspReferences,
+  closeLspReferences,
 }: {
   formatMessage: FormatMessage;
   readOnly?: boolean;
-}): Extension => {
+} & LspReferencesPanelActions): Extension => {
   // Content-modifying shortcuts (rename, format) are omitted for read-only
   // files (external files + example apps).
   const editKeymaps = readOnly
@@ -28,7 +31,7 @@ export const getLspClientKeymapExtension = ({
         {
           key: 'F2',
           run: (view: EditorView): boolean => {
-            closeReferencePanel(view);
+            closeLspReferences?.();
             return lspRename(view, formatMessage);
           },
           preventDefault: true,
@@ -46,7 +49,7 @@ export const getLspClientKeymapExtension = ({
       key: 'Shift-F12',
       run: (view: EditorView): boolean => {
         closeRenamePanel(view);
-        return lspFindAllReferences(view, formatMessage);
+        return lspFindAllReferences(view, formatMessage, showLspReferences);
       },
       preventDefault: true,
     },
@@ -70,7 +73,7 @@ export const getLspClientKeymapExtension = ({
     },
     {
       key: 'Escape',
-      run: closeReferencePanel,
+      run: (): boolean => closeLspReferences?.() ?? false,
     },
     ...signatureKeymap,
   ]);

@@ -1,11 +1,11 @@
-import { FeatureFlagService } from './featureFlagsService.type';
+import { FeatureFlag, FeatureFlagService } from './featureFlagsService.type';
 
 export let getFeatureFlags: FeatureFlagService['getFeatureFlags'] =
   function () {
     throw new Error('getFeatureFlags service not implemented');
   };
 
-const flags: string[] = [];
+const flags: FeatureFlag[] = [];
 
 export const setFeatureFlagService = async (
   service: Omit<FeatureFlagService, 'getFeatureFlagsSync' | 'isFFEnabled'>,
@@ -14,9 +14,7 @@ export const setFeatureFlagService = async (
 
   try {
     const fetchedFlags = await getFeatureFlags();
-    fetchedFlags.forEach((flag) => {
-      flags.push(flag);
-    });
+    flags.push(...(fetchedFlags as FeatureFlag[]));
   } catch (error) {
     console.error('Error fetching feature flags:', error);
   }

@@ -1,6 +1,6 @@
 @use "../../../../public/shared.module.scss";
 
-$fontColor: #434f54; // use correct variable when available
+$fontColor: var(--text-subtle);
 
 .share-sketch-button-wrapper {
   display: block;
@@ -20,8 +20,9 @@ $fontColor: #434f54; // use correct variable when available
   width: 260px;
   top: 6px;
   left: -260px;
-  background-color: shared.theme-var(--dropdown-background);
-  box-shadow: 0px 4px 20px rgb(0 0 0 / 25%);
+  background: var(--surface-bg-above);
+  color: var(--text-default);
+  box-shadow: 0px 4px 20px rgb(0 0 0 / 25%); // TODO: Create suitable variable
   pointer-events: auto;
   display: grid;
   padding: 12px 20px 24px 20px;
@@ -32,7 +33,7 @@ $fontColor: #434f54; // use correct variable when available
   display: grid;
   grid-auto-flow: column;
   justify-content: space-between;
-  color: shared.theme-var(--header-title-label);
+  color: var(--text-default);
 }
 
 .share-sketch-toggle-button-container {
@@ -64,6 +65,7 @@ $fontColor: #434f54; // use correct variable when available
 
 .url-input {
   padding: unset;
+  color: var(--text-default, unset);
 
   > div {
     background-color: unset !important;
@@ -107,6 +109,6 @@ $fontColor: #434f54; // use correct variable when available
   height: 18px;
 
   path {
-    fill: shared.theme-var(--texts-icons-links);
+    fill: var(--text-link);
   }
 }

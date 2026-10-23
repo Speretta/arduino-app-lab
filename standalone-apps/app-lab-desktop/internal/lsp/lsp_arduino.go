@@ -21,54 +21,16 @@ import (
 const boardArduino15Dir = "/home/arduino/.arduino15"
 const boardArduinoCliPath = "/usr/bin/arduino-cli"
 
-// pinnedCore describes a specific arduino-cli core release that must be
-// installed from a non-default (staging) package index for a given board.
-type pinnedCore struct {
-	version       string
-	additionalURL string
-}
-
-// lspPinnedCores maps a board FQBN to a pinned core release for the Arduino
-// language server. ventunoq is only published in the arduino:zephyr staging
-// index (not the public board manager), so its core must be installed from
-// there at a pinned version; otherwise the language server cannot build a
-// compilation database and hangs at 0%.
-// TODO: remove once ventunoq ships in the public arduino:zephyr core.
-var lspPinnedCores = map[string]pinnedCore{
-	board.FQBNVentunoQ: {
-		version:       "0.56.3-0.head.monza-1.0.1.62+fcf3e1ab",
-		additionalURL: "https://downloads.arduino.cc/packages/package_zephyr_staging_index.json",
-	},
-}
-
-// pinnedCoreURLs is the set of package indexes that only exist to serve a
-// pinned core. They are registered while a pinned board is selected and
-// de-registered otherwise: pinned releases are semver pre-releases that
-// outrank the public ones, so leaving a staging index registered makes it the
-// "latest" version for every board sharing the same core.
-var pinnedCoreURLs = func() []string {
-	seen := map[string]bool{}
-	urls := []string{}
-	for _, p := range lspPinnedCores {
-		if p.additionalURL != "" && !seen[p.additionalURL] {
-			seen[p.additionalURL] = true
-			urls = append(urls, p.additionalURL)
-		}
-	}
-	return urls
-}()
-
-// lookupPinnedCore resolves the pin for an FQBN, ignoring any trailing menu
-// options (`vendor:arch:board:opt=value`) so a configured board still matches.
-func lookupPinnedCore(fqbn string) (pinnedCore, bool) {
-	if p, ok := lspPinnedCores[fqbn]; ok {
-		return p, true
-	}
-	if parts := strings.Split(fqbn, ":"); len(parts) > 3 {
-		p, ok := lspPinnedCores[strings.Join(parts[:3], ":")]
-		return p, ok
-	}
-	return pinnedCore{}, false
+// staleIndexURLs are package indexes earlier versions registered to reach a
+// core that the public board manager did not carry yet. They are removed from
+// every install: they publish semver pre-releases that outrank the public
+// releases, so one left registered decides the "latest" version for every
+// board sharing that core.
+//
+// ventunoq needed the zephyr staging index until arduino:zephyr 1.0.0, which
+// carries it in the public index.
+var staleIndexURLs = []string{
+	"https://downloads.arduino.cc/packages/package_zephyr_staging_index.json",
 }
 
 func (h *LSPHandler) initArduinoCliConfig() error {
@@ -94,9 +56,10 @@ func (h *LSPHandler) initArduinoCliConfig() error {
 	ensureArduinoCliLocale(arduinoCliPath, arduinoCliConfigPath)
 
 	if created {
-		if err := updateArduinoCliCoreIndex(arduinoCliPath, arduinoCliConfigPath); err != nil {
+		if err := updateArduinoCliCoreIndex(context.Background(), arduinoCliPath, arduinoCliConfigPath); err != nil {
 			return fmt.Errorf("failed to update arduino-cli core index: %w", err)
 		}
+		h.coreIndexRefreshed = true
 	}
 
 	return nil
@@ -168,13 +131,13 @@ func ensureArduinoCliLocale(arduinoCliPath, arduinoCliConfigPath string) {
 	}
 }
 
-func updateArduinoCliCoreIndex(arduinoCliPath, arduinoCliConfigPath string) error {
+func updateArduinoCliCoreIndex(ctx context.Context, arduinoCliPath, arduinoCliConfigPath string) error {
 	slog.Info("updating arduino-cli core index")
 	updateIndexCmd, err := paths.NewProcess(nil, arduinoCliPath, "core", "update-index", "--config-file", arduinoCliConfigPath)
 	if err != nil {
 		return err
 	}
-	if out, err := updateIndexCmd.RunAndCaptureCombinedOutput(context.Background()); err != nil {
+	if out, err := updateIndexCmd.RunAndCaptureCombinedOutput(ctx); err != nil {
 		slog.Error("failed to update arduino-cli core index", "error", err, "output", string(out))
 		return err
 	}
@@ -378,37 +341,23 @@ func (h *LSPHandler) InstallArduinoCliCore() error {
 	arduinoCliPath := getArduinoCliPath()
 
 	coreID := "arduino:zephyr"
-	fqbn := ""
 
 	// get coreID from FQBN
 	if b := h.boardProvider(); b != nil && b.Info.FQBN != "" {
-		fqbn = b.Info.FQBN
-		slog.Info("detecting core from board FQBN", "fqbn", fqbn)
-		parts := strings.Split(fqbn, ":")
+		slog.Info("detecting core from board FQBN", "fqbn", b.Info.FQBN)
+		parts := strings.Split(b.Info.FQBN, ":")
 		if len(parts) >= 2 {
 			coreID = parts[0] + ":" + parts[1]
 		}
 	}
 
-	// Some boards are only published in a non-default (staging) package index
-	// and must be installed at a pinned version. Register that index only while
-	// such a board is selected, and drop it again for every other board —
-	// otherwise the staging pre-release keeps outranking the public releases
-	// and "latest" resolves back to the pinned version.
-	pinned, isPinned := lookupPinnedCore(fqbn)
-	wantURL := ""
-	if isPinned {
-		wantURL = pinned.additionalURL
+	// The removal warns rather than returns: it only has work to do on an
+	// install an earlier version touched, and arduino-cli ignores an index once
+	// its URL is gone, so no index update has to follow it.
+	if err := removeStaleArduinoCliAdditionalURLs(arduinoCliPath, arduinoCliConfigPath); err != nil {
+		slog.Warn("failed to clean up board manager urls", "error", err)
 	}
-	urlsChanged, err := syncArduinoCliAdditionalURLs(arduinoCliPath, arduinoCliConfigPath, wantURL)
-	if err != nil {
-		return fmt.Errorf("failed to sync board manager urls: %w", err)
-	}
-	if urlsChanged {
-		if err := updateArduinoCliCoreIndex(arduinoCliPath, arduinoCliConfigPath); err != nil {
-			return fmt.Errorf("failed to update core index after board manager url change: %w", err)
-		}
-	}
+	h.refreshArduinoCliCoreIndex(arduinoCliPath, arduinoCliConfigPath)
 
 	// check installed cores. `--all` so a not-yet-installed platform still
 	// reports its latest available version, which we need to install an
@@ -447,33 +396,26 @@ func (h *LSPHandler) InstallArduinoCliCore() error {
 		}
 	}
 
-	// Pinned boards target their exact staging version; everything else tracks
-	// the latest published version as before.
-	targetVersion := latestVersion
-	if isPinned {
-		targetVersion = pinned.version
-	}
-
 	shouldInstall := !isInstalled
-	if isInstalled && targetVersion != "" && version != targetVersion {
-		slog.Info("core version change required", "core", coreID, "current", version, "target", targetVersion)
+	if isInstalled && latestVersion != "" && version != latestVersion {
+		slog.Info("core version change required", "core", coreID, "current", version, "target", latestVersion)
 		shouldInstall = true
 	}
 
 	// install
 	if shouldInstall {
-		logVersion := targetVersion
+		logVersion := latestVersion
 		if logVersion == "" {
 			logVersion = "latest"
 		}
 		slog.Info("install core", "core", coreID, "version", logVersion)
 
 		// Always install an explicit version when we know one. `core upgrade`
-		// can only move forward, so it cannot walk the pinned pre-release back
-		// down to the public release when switching from ventunoq to unoq.
+		// can only move forward, so it cannot replace a pre-release left by an
+		// earlier version with the public release that supersedes it.
 		spec := coreID
-		if targetVersion != "" {
-			spec = coreID + "@" + targetVersion
+		if latestVersion != "" {
+			spec = coreID + "@" + latestVersion
 		}
 		args := []string{"core", "install", spec, "--config-file", arduinoCliConfigPath}
 
@@ -492,21 +434,46 @@ func (h *LSPHandler) InstallArduinoCliCore() error {
 	return nil
 }
 
-// syncArduinoCliAdditionalURLs makes board_manager.additional_urls contain
-// keepURL (when non-empty) and none of the other pinned-core staging indexes,
-// reporting whether anything changed so the caller can refresh the core index.
+// coreIndexRefreshTimeout bounds the per-launch index refresh. A firewall that
+// drops packets instead of rejecting them makes `core update-index` run for
+// over two minutes, and nothing starts the language server until it returns.
+// A var so tests can shorten it.
+var coreIndexRefreshTimeout = 30 * time.Second
+
+// refreshArduinoCliCoreIndex runs `core update-index` once per launch. Caller
+// holds initArduinoCliConfigMu.
 //
-// Registration has to be reversible: a staging index stays in the config file
-// forever otherwise, and its pre-release versions then win the "latest"
-// resolution for every board sharing that core.
-func syncArduinoCliAdditionalURLs(arduinoCliPath, arduinoCliConfigPath, keepURL string) (bool, error) {
+// The config file is persistent, so without the refresh the index stays at
+// whatever it was when the config was created and `core list` keeps reporting
+// that as the latest version. The fetch is time-boxed and best effort: a host
+// that cannot reach the index keeps the cached one and the installed core.
+func (h *LSPHandler) refreshArduinoCliCoreIndex(arduinoCliPath, arduinoCliConfigPath string) {
+	if h.coreIndexRefreshed {
+		return
+	}
+	// Set before the fetch: a failure must not be retried until the next launch.
+	h.coreIndexRefreshed = true
+
+	ctx, cancel := context.WithTimeout(context.Background(), coreIndexRefreshTimeout)
+	defer cancel()
+	if err := updateArduinoCliCoreIndex(ctx, arduinoCliPath, arduinoCliConfigPath); err != nil {
+		slog.Warn("continuing with the cached arduino-cli core index", "error", err)
+	}
+}
+
+// removeStaleArduinoCliAdditionalURLs drops every staleIndexURLs entry from
+// board_manager.additional_urls.
+//
+// The config file is persistent, so an index an earlier version registered
+// stays there until it is removed.
+func removeStaleArduinoCliAdditionalURLs(arduinoCliPath, arduinoCliConfigPath string) error {
 	dumpCmd, err := paths.NewProcess(nil, arduinoCliPath, "config", "dump", "--json", "--config-file", arduinoCliConfigPath)
 	if err != nil {
-		return false, fmt.Errorf("failed to create arduino-cli config dump process: %w", err)
+		return fmt.Errorf("failed to create arduino-cli config dump process: %w", err)
 	}
 	out, _, err := dumpCmd.RunAndCaptureOutput(context.Background())
 	if err != nil {
-		return false, fmt.Errorf("failed to dump arduino-cli config: %w", err)
+		return fmt.Errorf("failed to dump arduino-cli config: %w", err)
 	}
 
 	var dump struct {
@@ -517,42 +484,26 @@ func syncArduinoCliAdditionalURLs(arduinoCliPath, arduinoCliConfigPath, keepURL 
 		} `json:"config"`
 	}
 	if err := json.Unmarshal(out, &dump); err != nil {
-		return false, fmt.Errorf("failed to parse arduino-cli config: %w", err)
+		return fmt.Errorf("failed to parse arduino-cli config: %w", err)
 	}
 	current := dump.Config.BoardManager.AdditionalURLs
 
-	changed := false
-
-	// Drop every staging index we own that isn't wanted for this board. URLs
-	// added by the user (or by other features) are left untouched.
-	for _, url := range pinnedCoreURLs {
-		if url == keepURL || !slices.Contains(current, url) {
+	// URLs added by the user (or by other features) are left untouched.
+	for _, url := range staleIndexURLs {
+		if !slices.Contains(current, url) {
 			continue
 		}
 		rmCmd, err := paths.NewProcess(nil, arduinoCliPath, "config", "remove", "board_manager.additional_urls", url, "--config-file", arduinoCliConfigPath)
 		if err != nil {
-			return changed, fmt.Errorf("failed to create board manager url removal process: %w", err)
+			return fmt.Errorf("failed to create board manager url removal process: %w", err)
 		}
 		if out, err := rmCmd.RunAndCaptureCombinedOutput(context.Background()); err != nil {
-			return changed, fmt.Errorf("failed to remove board manager url %q: %w (%s)", url, err, string(out))
+			return fmt.Errorf("failed to remove board manager url %q: %w (%s)", url, err, string(out))
 		}
 		slog.Info("removed board manager url", "url", url)
-		changed = true
 	}
 
-	if keepURL != "" && !slices.Contains(current, keepURL) {
-		addCmd, err := paths.NewProcess(nil, arduinoCliPath, "config", "add", "board_manager.additional_urls", keepURL, "--config-file", arduinoCliConfigPath)
-		if err != nil {
-			return changed, fmt.Errorf("failed to create board manager url process: %w", err)
-		}
-		if out, err := addCmd.RunAndCaptureCombinedOutput(context.Background()); err != nil {
-			return changed, fmt.Errorf("failed to add board manager url %q: %w (%s)", keepURL, err, string(out))
-		}
-		slog.Info("added board manager url", "url", keepURL)
-		changed = true
-	}
-
-	return changed, nil
+	return nil
 }
 
 func getArduino15Path() string {

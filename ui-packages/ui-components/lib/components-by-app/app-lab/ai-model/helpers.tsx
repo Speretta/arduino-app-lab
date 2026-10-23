@@ -4,30 +4,49 @@ import {
   IconTechnologyLinearAccelerationArrowNormal,
 } from '@arduino/react-icons';
 import { MicroSD } from '@cloud-editor-mono/images/assets/icons';
+
+import { formatBytes } from '../../../utils';
 import {
+  AiModelImpulse,
   BrickDetailModel,
-  BrickDetailModelImpulse,
-  formatBytes,
-} from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+  EDGE_IMPULSE_SOURCE,
+  HUGGING_FACE_HOST,
+  HUGGING_FACE_SOURCE,
+  KnownModelSource,
+  ModelSource,
+  QUALCOMM_AI_HUB_SOURCE,
+} from './AiModel.type';
 
-/** Value of `metadata.source` used by Edge Impulse models. */
-export const EDGE_IMPULSE_SOURCE = 'edgeimpulse';
+const MODEL_FILE_EXTENSION = '.gguf';
 
-/** Maps a raw `source` value to its human-readable provider name. */
-function makeLabelReadable(label: string): string {
-  switch (label) {
-    case 'edgeimpulse':
-      return 'Edge Impulse';
-    case 'qualcomm-ai-hub':
-      return 'Qualcomm AI Hub';
-    case 'huggingface':
-      return 'Hugging Face';
-    default:
-      return label;
-  }
-}
+const HUGGING_FACE_REPO_SEGMENTS = 2;
 
-export interface AiModelMetadataTag {
+// Mark a url naming a file inside a repository, not the repository itself.
+const HUGGING_FACE_FILE_MARKERS = ['resolve', 'blob'];
+
+const MODEL_KEY_SEPARATOR = ':';
+
+export const HUGGING_FACE_ORIGIN = `https://${HUGGING_FACE_HOST}`;
+
+const KNOWN_MODEL_SOURCE_LABELS: Record<KnownModelSource, string> = {
+  [EDGE_IMPULSE_SOURCE]: 'Edge Impulse',
+  [HUGGING_FACE_SOURCE]: 'Hugging Face',
+  [QUALCOMM_AI_HUB_SOURCE]: 'Qualcomm AI Hub',
+};
+
+const isKnownModelSource = (
+  source: ModelSource,
+): source is KnownModelSource => {
+  return source in KNOWN_MODEL_SOURCE_LABELS;
+};
+
+const getModelSourceLabel = (source: ModelSource): string => {
+  return isKnownModelSource(source)
+    ? KNOWN_MODEL_SOURCE_LABELS[source]
+    : source;
+};
+
+interface AiModelMetadataTag {
   order: number;
   label: string;
   path: string;
@@ -43,7 +62,7 @@ export const allowedMetadataTags: Record<string, AiModelMetadataTag> = {
     label: 'Source',
     path: 'source',
     className: 'source',
-    formatFn: (value: string): string => makeLabelReadable(value),
+    formatFn: (value: string): string => getModelSourceLabel(value),
     icon: <IconFileArchiveOutNormal />,
   },
   runtime: {
@@ -70,51 +89,217 @@ export const allowedMetadataTags: Record<string, AiModelMetadataTag> = {
     formatFn: (value: string): string => value,
     icon: <IconFileArchiveOutNormal />,
   },
-  model_size_mb: {
+  size: {
     order: 5,
     label: 'Size',
-    path: 'metadata.model_size_mb',
-    className: 'model_size_mb',
-    formatFn: (value: string): string => formatBytes(+value * 1024 * 1024),
+    path: 'size',
+    className: 'size',
+    formatFn: (value: string): string => formatBytes(+value),
     icon: <MicroSD />,
   },
 };
 
-/** A model is an Edge Impulse model when it carries `edgeImpulseProps`. */
-export function isEdgeImpulseModel(model: BrickDetailModel): boolean {
+// Mirrors is_hf_url in the hf-handler downloader: any scheme makes a url, so a
+// mistyped ftp:// url is not read as a key naming a repository "ftp".
+const URL_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
+
+const isUrl = (source: string): boolean => {
+  return URL_SCHEME_PATTERN.test(source);
+};
+
+const parseUrl = (source: string): URL | undefined => {
+  try {
+    return new URL(source);
+  } catch {
+    return undefined;
+  }
+};
+
+const stripModelFileExtension = (name: string): string | undefined => {
+  return name.toLowerCase().endsWith(MODEL_FILE_EXTENSION)
+    ? name.slice(0, -MODEL_FILE_EXTENSION.length)
+    : undefined;
+};
+
+// Keeps the whole repository on the card's repository line when no file is named.
+const getRepoPlaceholderName = (repoPath: string): string => {
+  return `${repoPath}/${repoPath.split('/').pop()}`;
+};
+
+// Mirrors parse_model_key in the hf-handler downloader:
+// [<model_type>:]<repo_id>[:<quantization>[:<mmproj_quantization>]]
+const parseModelKey = (
+  key: string,
+): {
+  repoId: string;
+  quantization?: string;
+} => {
+  const parts = key.split(MODEL_KEY_SEPARATOR);
+  const [repoId, quantization] = parts.length > 2 ? parts.slice(1) : parts;
+
+  return { repoId, quantization };
+};
+
+const getHuggingFaceModelKeyPlaceholderName = (key: string): string => {
+  const { repoId, quantization } = parseModelKey(key);
+  const repoName = getRepoPlaceholderName(repoId);
+
+  if (!quantization) {
+    return repoName;
+  }
+
+  const fileName = stripModelFileExtension(quantization);
+
+  if (fileName) {
+    return `${repoId}/${fileName}`;
+  }
+
+  return `${repoName}${MODEL_KEY_SEPARATOR}${quantization}`;
+};
+
+const getHuggingFaceModelUrlPlaceholderName = (source: string): string => {
+  const parsed = parseUrl(source);
+
+  if (!parsed) {
+    return source;
+  }
+
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  const lastSegment = segments[segments.length - 1] ?? source;
+  const fileName = stripModelFileExtension(lastSegment);
+
+  if (segments.length >= HUGGING_FACE_REPO_SEGMENTS) {
+    const repoPath = segments.slice(0, HUGGING_FACE_REPO_SEGMENTS).join('/');
+
+    return fileName
+      ? `${repoPath}/${fileName}`
+      : getRepoPlaceholderName(repoPath);
+  }
+
+  return fileName ?? lastSegment;
+};
+
+// Once the download names its file, the board names the model
+// `<repo>/<file stem>`, so the file replaces the last path segment.
+export const getHuggingFaceModelPlaceholderName = (
+  source: string,
+  fileName?: string,
+): string => {
+  const placeholderName = isUrl(source)
+    ? getHuggingFaceModelUrlPlaceholderName(source)
+    : getHuggingFaceModelKeyPlaceholderName(source);
+  const modelFileName = fileName && stripModelFileExtension(fileName);
+
+  if (!modelFileName) {
+    return placeholderName;
+  }
+
+  const separator = placeholderName.lastIndexOf('/');
+
+  return separator === -1
+    ? modelFileName
+    : `${placeholderName.slice(0, separator)}/${modelFileName}`;
+};
+
+// A user model is named by the path it was downloaded from; every other model
+// keeps its name whole, slashes included ("Arduino / gesture v2" is a name).
+export const getModelDisplayName = (
+  model: BrickDetailModel,
+): {
+  title: string;
+  repository?: string;
+} => {
+  const separator = model.name.lastIndexOf('/');
+
+  return separator === -1 || model.origin !== 'user'
+    ? { title: model.name }
+    : {
+        title: model.name.slice(separator + 1),
+        repository: model.name.slice(0, separator),
+      };
+};
+
+export const isEdgeImpulseModel = (
+  model: BrickDetailModel,
+): model is BrickDetailModel & {
+  edgeImpulseProps: NonNullable<BrickDetailModel['edgeImpulseProps']>;
+} => {
   return !!model.edgeImpulseProps;
-}
+};
+
+const getModelKeyPageUrl = (key: string): string => {
+  if (!key) {
+    return key;
+  }
+
+  return `${HUGGING_FACE_ORIGIN}/${parseModelKey(key).repoId}`;
+};
+
+// A Hugging Face file url reduces to its repository page; anything else is
+// already a page.
+const getModelUrlPageUrl = (url: string): string => {
+  const parsed = parseUrl(url);
+
+  if (!parsed) {
+    return url;
+  }
+
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  const isFileUrl = HUGGING_FACE_FILE_MARKERS.includes(
+    segments[HUGGING_FACE_REPO_SEGMENTS],
+  );
+
+  if (parsed.hostname !== HUGGING_FACE_HOST || !isFileUrl) {
+    return url;
+  }
+
+  return `${HUGGING_FACE_ORIGIN}/${segments
+    .slice(0, HUGGING_FACE_REPO_SEGMENTS)
+    .join('/')}`;
+};
+
+export const getModelPageUrl = (source: string): string => {
+  return isUrl(source)
+    ? getModelUrlPageUrl(source)
+    : getModelKeyPageUrl(source);
+};
 
 /**
- * Returns the downloadable source URL for non-Edge-Impulse models, or
- * `undefined` when the model is not a generic downloadable model.
+ * Returns the downloadable source URL the board's list declares for the model,
+ * or `undefined` when it declares none.
  */
-export function getDownloadableSourceUrl(
+export const getDownloadableSourceUrl = (
   model: BrickDetailModel,
-): string | undefined {
-  const sourceModelUrl = model.metadata?.['source-model-url'];
-  return sourceModelUrl && model.metadata?.source !== EDGE_IMPULSE_SOURCE
-    ? sourceModelUrl
-    : undefined;
-}
+): string | undefined => {
+  return model.metadata?.['source-model-url'];
+};
 
 /**
  * A generic (non-Edge-Impulse) model can be downloaded when it exposes a
- * downloadable source and is not installed yet.
+ * downloadable source and is not installed yet. An Edge Impulse card is
+ * excluded here rather than by the url: it acts on a chosen impulse.
  */
-export function canDownloadModel(model: BrickDetailModel): boolean {
-  return !model.isInstalled && !!getDownloadableSourceUrl(model);
-}
+export const canDownloadModel = (model: BrickDetailModel): boolean => {
+  return (
+    !isEdgeImpulseModel(model) &&
+    !model.isInstalled &&
+    !!getDownloadableSourceUrl(model)
+  );
+};
 
 /**
  * A generic (non-Edge-Impulse) downloadable model that is installed, and can
  * therefore be uninstalled.
  */
-export function isInstalledDownloadableModel(model: BrickDetailModel): boolean {
-  return !!model.isInstalled && !!getDownloadableSourceUrl(model);
-}
+export const canUninstallModel = (model: BrickDetailModel): boolean => {
+  return (
+    !isEdgeImpulseModel(model) &&
+    !!model.isInstalled &&
+    !!getDownloadableSourceUrl(model)
+  );
+};
 
-export interface AiModelCardStateParams {
+interface AiModelCardStateParams {
   model: BrickDetailModel;
   /** The model configured on the brick instance (`brickInstance.model`). */
   inUseModelId?: string;
@@ -124,12 +309,12 @@ export interface AiModelCardStateParams {
   isExample?: boolean;
   /** Brick list view: no app context, selection is hidden. */
   readOnly?: boolean;
-  impulses: BrickDetailModelImpulse[];
-  selectedImpulse?: BrickDetailModelImpulse;
-  impulseInUse?: BrickDetailModelImpulse;
+  impulses: AiModelImpulse[];
+  selectedImpulse?: AiModelImpulse;
+  impulseInUse?: AiModelImpulse;
 }
 
-export interface AiModelCardState {
+interface AiModelCardState {
   isEdgeImpulse: boolean;
   /**
    * Whether what the card currently shows is installed: built-in models ship
@@ -161,7 +346,7 @@ export interface AiModelCardState {
  * the brick list, built-in models cannot be uninstalled while all other
  * models can be installed/uninstalled freely.
  */
-export function getAiModelCardState({
+export const getAiModelCardState = ({
   model,
   inUseModelId,
   selectedModelId,
@@ -170,7 +355,7 @@ export function getAiModelCardState({
   impulses,
   selectedImpulse,
   impulseInUse,
-}: AiModelCardStateParams): AiModelCardState {
+}: AiModelCardStateParams): AiModelCardState => {
   const isEdgeImpulse = isEdgeImpulseModel(model);
 
   const isModelInstalled =
@@ -229,4 +414,4 @@ export function getAiModelCardState({
     isDisabled,
     allowsInstallActions,
   };
-}
+};

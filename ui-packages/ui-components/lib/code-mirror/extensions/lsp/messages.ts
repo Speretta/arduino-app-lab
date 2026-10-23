@@ -19,6 +19,12 @@ export const messages = defineMessages({
     description:
       'Feedback tooltip when the LSP server finds no references at the cursor',
   },
+  findReferencesFailed: {
+    id: 'lsp.findReferencesFailed',
+    defaultMessage: 'Could not list references',
+    description:
+      'Feedback tooltip when the references the LSP server returned could not be resolved into the panel',
+  },
   goToDefinitionNotSupported: {
     id: 'lsp.goToDefinitionNotSupported',
     defaultMessage: 'Go to definition not supported',

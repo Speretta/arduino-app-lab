@@ -34,7 +34,7 @@ All you need to do is:
 
 #### Verify
 Once you've confirmed you have direnv and you've setup your environment after doing `direnv allow`, you can verify that node and yarn are isolated for your environment by typing in the shell `which node`, `node -v`, `which yarn` and `yarn -v`.
-You should receive paths inside the project and respectively the version of node 18.15.0 and yarn 3.5.0.
+You should receive paths inside the project and respectively the version of node 26.1.0 and yarn 4.18.0
 
 
 ## Building (local machine)

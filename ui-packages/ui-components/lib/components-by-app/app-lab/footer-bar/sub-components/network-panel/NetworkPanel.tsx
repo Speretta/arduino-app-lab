@@ -28,16 +28,18 @@ const NetworkPanel = forwardRef<HTMLDivElement, NetworkPanelProps>(
         triggerRef={triggerRef}
         title={formatMessage(messages.networkPanelTitle)}
         action={
-          <Button
-            variant={ButtonVariant.Secondary}
-            onClick={onChange}
-            classes={{
-              button: styles['network-button'],
-              textButtonText: styles['network-button-text'],
-            }}
-          >
-            {formatMessage(messages.networkPanelChangeButton)}
-          </Button>
+          onChange && (
+            <Button
+              variant={ButtonVariant.Secondary}
+              onClick={onChange}
+              classes={{
+                button: styles['network-button'],
+                textButtonText: styles['network-button-text'],
+              }}
+            >
+              {formatMessage(messages.networkPanelChangeButton)}
+            </Button>
+          )
         }
         icon={<Wifi />}
         classes={{

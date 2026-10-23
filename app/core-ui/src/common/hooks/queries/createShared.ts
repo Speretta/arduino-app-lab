@@ -24,16 +24,14 @@ export const useRetrieveSketches: UseRetrieveSketches = function (
 ): ReturnType<UseRetrieveSketches> {
   const {
     data: sketchesData,
-    isLoading: getSketchesIsLoading,
+    isPending: getSketchesIsLoading,
     refetch,
-  } = useQuery(
-    [SketchDataBaseQueryKey.GET_SKETCHES_QUERY_KEY, queryKey],
-    () => retrieveSketches(search),
-    {
-      enabled,
-      cacheTime,
-    },
-  );
+  } = useQuery({
+    queryKey: [SketchDataBaseQueryKey.GET_SKETCHES_QUERY_KEY, queryKey],
+    queryFn: () => retrieveSketches(search),
+    enabled,
+    gcTime: cacheTime,
+  });
 
   return {
     refetch,

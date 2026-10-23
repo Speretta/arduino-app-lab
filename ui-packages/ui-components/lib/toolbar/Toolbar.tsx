@@ -58,7 +58,6 @@ const Toolbar: React.FC<ToolbarProps> = (props: ToolbarProps) => {
     switchToAltPort,
     notificationElement,
     useChromeOsDeviceAssociation,
-    deviceSetupLink,
     shareSketchLogic,
     shareToClassroomLogic,
   } = toolbarLogic();
@@ -142,7 +141,6 @@ const Toolbar: React.FC<ToolbarProps> = (props: ToolbarProps) => {
         selectedBoardHasAltPort={selectedBoardHasAltPort}
         isOtaCompatible={currentDeviceSupportsOta}
         switchToAltPort={switchToAltPort}
-        deviceSetupLink={deviceSetupLink}
         classes={{
           'button-container': styles['associated-device-info-button-container'],
           button: styles['associated-device-info-button'],
@@ -160,7 +158,6 @@ const Toolbar: React.FC<ToolbarProps> = (props: ToolbarProps) => {
       selectedBoardHasAltPort,
       selectedBoardIsIot,
       selectedPort,
-      deviceSetupLink,
       switchToAltPort,
     ],
   );
@@ -228,17 +225,7 @@ const Toolbar: React.FC<ToolbarProps> = (props: ToolbarProps) => {
         key={'toolbar-no-upload-popover'}
         role="tooltip"
       >
-        <div
-          className={clsx(styles['upload-info-popover'], {
-            [styles['upload-info-popover-container-smaller']]:
-              !canUpload.popover.link,
-            [styles['upload-info-popover-container-smallest']]:
-              canUpload.reason === ToolbarActionBlockingReasons.MissingInfo ||
-              canUpload.reason === ToolbarActionBlockingReasons.PortBusy ||
-              canUpload.reason ===
-                ToolbarActionBlockingReasons.OTAInProgressUnknown,
-          })}
-        >
+        <div className={clsx(styles['upload-info-popover'])}>
           <Text size={TextSize.Small} bold={true}>
             {formatMessage(canUpload.popover.title)}
           </Text>

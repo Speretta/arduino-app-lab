@@ -1,47 +1,114 @@
-import { Preferences } from '@cloud-editor-mono/ui-components/lib/sidenav/sections/settings/settings.type';
-import { Themes } from '@cloud-editor-mono/ui-components/themes/theme.type';
-import clsx from 'clsx';
-import { useEffect, useState } from 'react';
-import { useMedia } from 'react-use';
+import { ThemeProvider as ARTThemeProvider } from '@bcmi-labs/art-ui';
+import {
+  getAccessToken,
+  getAuthClient,
+  getSpace,
+  getSpaceStorageInstance,
+} from '@cloud-editor-mono/domain';
+import {
+  deploymentPath,
+  getCustomizableColorsRequest,
+} from '@cloud-editor-mono/infrastructure';
+import { useContext, useLayoutEffect } from 'react';
 
-import { usePreferenceObservable } from '../../hooks/preferences';
+import { AuthContext } from '../auth/authContext';
+import { themeManagerInstance } from './instances';
 import styles from './theme-provider.module.scss';
-import { ThemeContext } from './themeContext';
+
+// Builds the custom-color palette argument expected by `setPalette`.
+const toHexPalette = (data: {
+  color?: string;
+  readability?: boolean;
+}): { hex: `#${string}`; useClosestAccessibleColor: boolean } => ({
+  hex: data.color as `#${string}`,
+  useClosestAccessibleColor: data.readability ?? false,
+});
+
+// Syncs the palette with the given space, falling back to the default palette when the space has none.
+const setPaletteBySpaceId = async (spaceId: string): Promise<void> => {
+  try {
+    const token = await getAccessToken();
+    const colors = await getCustomizableColorsRequest(spaceId, token);
+    themeManagerInstance.setPalette(
+      colors?.color ? toHexPalette(colors) : 'mkr',
+    );
+  } catch {
+    themeManagerInstance.setPalette('mkr');
+  }
+};
 
 interface ThemeProviderProps {
   children?: React.ReactNode;
 }
 
-const ThemeProvider: React.FC<ThemeProviderProps> = (
-  props: ThemeProviderProps,
-) => {
-  const { children } = props;
+const ThemeProvider: React.FC<ThemeProviderProps> = ({
+  children,
+}: ThemeProviderProps) => {
+  // Auth is injected only when the editor runs as the consumed component instead of as its own app.
+  const { isAuthInjected } = useContext(AuthContext);
 
-  const isDarkModeOs = useMedia('(prefers-color-scheme:dark)');
+  // Palette resolution depends on the component environment, so it must run after mount instead of at module scope.
+  useLayoutEffect(() => {
+    // Whitelabel environments resolve the palette from the auth-client customization.
+    if (deploymentPath.customKey) {
+      // Unlike cloud-website there is no top-level-await client instance here, so resolve the same customization through the async client.
+      getAuthClient()
+        .then(async (client) => {
+          const customization = client.getCustomization();
 
-  const preferredTheme = usePreferenceObservable(Preferences.Theme);
-  const isAutoTheme = usePreferenceObservable(Preferences.AutoTheme);
+          if (!customization?.organization_id) {
+            themeManagerInstance.setPalette('mkr');
+            return;
+          }
 
-  const initialTheme = isAutoTheme
-    ? isDarkModeOs
-      ? Themes.DarkTheme
-      : Themes.LightTheme
-    : preferredTheme ?? Themes.LightTheme;
+          // The component must skip the cached customization colors and wait for the fetched palette, otherwise a stale cache can break the palette.
+          if (isAuthInjected) {
+            await setPaletteBySpaceId(customization.organization_id);
+            return;
+          }
 
-  const [theme, setTheme] = useState(String(initialTheme));
+          themeManagerInstance.setPalette(
+            customization.colors?.color
+              ? toHexPalette(customization.colors)
+              : 'mkr',
+          );
 
-  useEffect(() => {
-    const body = document.getElementById('al-body');
-    if (body) {
-      body.classList.remove(Themes.LightTheme, Themes.DarkTheme);
-      body.classList.add(theme);
+          // Not awaited: awaiting would delay the first paint on every custom domain, even those without a color palette.
+          setPaletteBySpaceId(customization.organization_id);
+        })
+        .catch(() => undefined);
+      return;
     }
-  }, [theme]);
+
+    const resolveSpacePalette = async (): Promise<void> => {
+      const orgId = getSpace(); // undefined for the personal space ('my-cloud')
+
+      if (!orgId) {
+        themeManagerInstance.setPalette('mkr');
+        return;
+      }
+
+      await setPaletteBySpaceId(orgId);
+    };
+
+    resolveSpacePalette();
+
+    const storage = getSpaceStorageInstance();
+    const listener = (_: string, key: string): void => {
+      if (key !== 'space-id') return;
+
+      resolveSpacePalette();
+    };
+
+    storage.subscribe(listener);
+
+    return () => storage.unsubscribe(listener);
+  }, [isAuthInjected]);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, isDarkModeOs }}>
-      <div className={clsx(theme, styles.themeContainer)}>{children}</div>
-    </ThemeContext.Provider>
+    <ARTThemeProvider themeManager={themeManagerInstance}>
+      <div className={styles.themeContainer}>{children}</div>
+    </ARTThemeProvider>
   );
 };
 

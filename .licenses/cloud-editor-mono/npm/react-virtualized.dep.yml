@@ -1,6 +1,6 @@
 ---
 name: react-virtualized
-version: 9.22.5
+version: 9.22.6
 type: npm
 summary: React components for efficiently rendering large, scrollable lists and tabular
   data
@@ -34,3 +34,4 @@ licenses:
 - sources: README.md
   text: _react-virtualized_ is available under the MIT License.
 notices: []
+...

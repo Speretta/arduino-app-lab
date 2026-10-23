@@ -1,10 +1,10 @@
 import clsx from 'clsx';
 
+import { SessionDotState } from '../../utils';
 import styles from './session-state-icon.module.scss';
-import { SessionState } from './sessionState.type';
 
 export interface SessionStateIconProps {
-  state: SessionState;
+  state: SessionDotState;
 }
 
 export const SessionStateIcon = ({

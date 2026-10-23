@@ -1,0 +1,137 @@
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+
+  // 24px under the name row, 16px between the other rows.
+  > :first-child:not(:last-child) {
+    margin-bottom: 8px;
+  }
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.icon {
+  flex: 0 0 auto;
+  font-size: 20px;
+  line-height: 24px;
+}
+
+.title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label {
+  color: var(--text-default);
+}
+
+// A caller sets the width to line the values up with a column of its own.
+.value {
+  flex: 0 0 auto;
+  width: var(--release-summary-value-width, auto);
+  color: var(--text-default);
+}
+
+.note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note-box {
+  max-height: var(--release-summary-note-max-height, 240px);
+  overflow-y: auto;
+  padding: 4px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  background: var(--component-bg-baseline);
+}
+
+.note-reader {
+  color: var(--text-subtle);
+
+  // The reader's block margins would add space inside the box, on top of its padding.
+  > :first-child {
+    margin-top: 0;
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+}
+
+// The reader colours headings, links and `summary` itself. `.note-box` raises the
+// specificity above those rules. Code keeps its colours: its rules are more specific.
+.note-box .note-reader * {
+  color: inherit;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  color: var(--text-default);
+
+  svg {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+  }
+}
+
+// The typography classes load after this module and win at equal specificity.
+.badge-text {
+  font-weight: 700 !important;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The tooltip trigger fills the row, so hovering anywhere on it shows the reason.
+.disabled-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 200px;
+}
+
+.disabled-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.disabled-item-tooltip {
+  max-width: 260px;
+}

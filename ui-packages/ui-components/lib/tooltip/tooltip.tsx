@@ -18,6 +18,11 @@ interface UseTooltipParams {
   timeout?: number;
   triggerType?: 'hover' | 'click';
   renderDelay?: number;
+  // 'dialog' for a popover that holds a control: a tooltip must not.
+  role?: 'tooltip' | 'dialog';
+  ariaLabel?: string;
+  // While true, the pointer leaving does not close it (focus is inside).
+  keepOpen?: boolean;
 
   /**
    * @deprecated to be removed, now the tooltip will automatically determine the best direction to open based on available space.
@@ -49,6 +54,9 @@ export const useTooltip: UseTooltip = ({
   renderDelay = 0,
   tooltipType = 'tooltip',
   triggerType = 'hover',
+  role = 'tooltip',
+  ariaLabel,
+  keepOpen = false,
 }: UseTooltipParams) => {
   const [showTooltip, setShowTooltip] = useState(false);
   const [position, setPosition] = useState<{
@@ -62,6 +70,10 @@ export const useTooltip: UseTooltip = ({
   const triggerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [id, setId] = useState<string>();
+  const keepOpenRef = useRef(keepOpen);
+  useEffect(() => {
+    keepOpenRef.current = keepOpen;
+  }, [keepOpen]);
 
   useEffect(() => {
     setId(`tooltip-${uniqueId()}`);
@@ -160,6 +172,7 @@ export const useTooltip: UseTooltip = ({
     if (tooltipTimeoutId.current) {
       window.clearTimeout(tooltipTimeoutId.current);
     }
+    if (keepOpenRef.current) return;
 
     tooltipTimeoutId.current = window.setTimeout(() => {
       setShowTooltip(false);
@@ -171,7 +184,8 @@ export const useTooltip: UseTooltip = ({
       const tooltipContent = (
         <div
           ref={tooltipRef}
-          role="tooltip"
+          role={role}
+          aria-label={ariaLabel}
           id={id}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
@@ -206,6 +220,8 @@ export const useTooltip: UseTooltip = ({
       handleMouseEnter,
       handleMouseLeave,
       id,
+      role,
+      ariaLabel,
       position,
       showTooltip,
       title,

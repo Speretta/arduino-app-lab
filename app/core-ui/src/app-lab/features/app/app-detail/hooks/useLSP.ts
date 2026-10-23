@@ -7,13 +7,16 @@ import {
   getLspWorkspaceFile,
   initLspWorkspace,
   isLspEnabled,
+  listLspFiles,
+  listLspSketchFiles,
   sendLspMessage,
-  startLSP,
+  startLSP as apiStartLSP,
   stopAllLSP,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import {
   Board,
   dismissSnackbar,
+  fileNameFromUri,
   isLspDebugEnabled,
   LSP_FAILED_EVENT,
   LSP_LANGS,
@@ -26,10 +29,13 @@ import {
   LspLang,
   LspLogLine,
   LspMessage,
+  LspReferenceRow,
+  LspReferencesResult,
   LspState,
   NodeType,
   setLspDebug,
   snackbar,
+  toDocOffset,
   useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -38,6 +44,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 
 import { useIsBoard } from '../../../../hooks/useIsBoard';
 import { LanguageServerContext } from '../../../../providers/language-server/languageServerContext';
+import { useLspReferencesStore } from '../../../../store/lspReferences';
 import { messages } from '../messages';
 
 const LSP_INITIALIZING_STATE_DEBOUNCE_MS = 500;
@@ -66,7 +73,6 @@ type ReturnType = {
     newPath: string,
     nodeType?: NodeType,
   ) => void;
-  moveLspNode: (oldPath: string, newPath: string, nodeType?: NodeType) => void;
   syncLspWatchedChange: (path: string, op: 'create' | 'remove') => void;
   startLSP: (lspId: LspId, workspaceDir: string) => Promise<void>;
   sendLspMessage: (lspId: LspId, message: LspMessage) => Promise<void>;
@@ -78,6 +84,10 @@ type ReturnType = {
   reloadLspFile: (path: string) => Promise<void>;
   lspState: LspState;
   onLspStateChange: (lspId: LspId, state: LspState) => void;
+  lspReferencesResult: LspReferencesResult | null;
+  showLspReferences: (result: LspReferencesResult) => void;
+  closeLspReferences: () => boolean;
+  lspGoToReference: (row: LspReferenceRow) => void;
 };
 
 export type UseLSP =
@@ -99,7 +109,7 @@ export const useLSP = (appId: string, selectedBoard?: Board): UseLSP => {
     queryKey: ['is-lsp-enabled', selectedBoard?.fqbn],
     queryFn: isLspEnabled,
     staleTime: Infinity,
-    cacheTime: Infinity,
+    gcTime: Infinity,
   });
 
   const { data: appDetail } = useQuery({
@@ -112,7 +122,7 @@ export const useLSP = (appId: string, selectedBoard?: Board): UseLSP => {
     queryFn: getLspTempWorkspaceAppDir,
     enabled: enabled && isBoard === false,
     staleTime: Infinity,
-    cacheTime: Infinity,
+    gcTime: Infinity,
   });
 
   const workspaceDir = isBoard ? appDetail?.path : tempWorkspaceAppDir;
@@ -139,6 +149,38 @@ export const useLSP = (appId: string, selectedBoard?: Board): UseLSP => {
     return getLspWorkspaceFile(fileUri);
   }, []);
 
+  // The Arduino LS maps a clangd result back to a sketch file only if that file
+  // was didOpen'd, and it shuts itself down when it cannot. The editor opens
+  // files lazily, so without this a go-to-definition into a sketch file nobody
+  // opened crashes the server. Catches its own errors: a failed listing must
+  // not read as a failed LSP start.
+  const trackSketchFiles = useCallback(async (dir: string): Promise<void> => {
+    try {
+      await workspaceReadyRef.current;
+      const files = await listLspSketchFiles(`${dir}/sketch`);
+      clientsRef.current
+        .get('arduino')
+        ?.client.workspace.trackFilesFromDisk(
+          files.map((file) => `sketch/${file}`),
+        );
+    } catch (error) {
+      console.error('LSP sketch files tracking error', error);
+    }
+  }, []);
+
+  // Resolves as soon as the server is up, without waiting for trackSketchFiles:
+  // the client connects only after this promise resolves. By then the client
+  // has registered itself in clientsRef, in the same tick as the start call.
+  const startLSP = useCallback(
+    async (lspId: LspId, dir: string): Promise<void> => {
+      await apiStartLSP(lspId, dir);
+      if (lspId === 'arduino') {
+        void trackSketchFiles(dir);
+      }
+    },
+    [trackSketchFiles],
+  );
+
   const subscribeLspMessages = useCallback(
     (lspId: LspId, onMessage: (message: LspMessage) => void): (() => void) =>
       eventsOn(`lsp-events-${lspId}`, onMessage),
@@ -163,6 +205,7 @@ export const useLSP = (appId: string, selectedBoard?: Board): UseLSP => {
     return () => {
       stop();
       resetLspState();
+      useLspReferencesStore.getState().close();
       // The notice is about the app open on this page, so it leaves with it
       // instead of trailing into whatever the user opens next.
       dismissSnackbar(LSP_ERROR_SNACKBAR_ID);
@@ -251,6 +294,89 @@ export const useLSP = (appId: string, selectedBoard?: Board): UseLSP => {
     [getClientWorkspace, appDetail?.path],
   );
 
+  const {
+    result: lspReferencesResult,
+    show: showLspReferences,
+    close: closeLspReferences,
+  } = useLspReferencesStore();
+
+  const lspGoToReference = useCallback(
+    (row: LspReferenceRow): void => {
+      const { result } = useLspReferencesStore.getState();
+      const client = result && clientsRef.current.get(result.lspId)?.client;
+      if (!client) {
+        return;
+      }
+      void client.workspace.displayFile(row.fileUri).then((view) => {
+        if (!view) {
+          snackbar({
+            message: formatMessage(messages.lspReferenceNotOpened, {
+              fileName: fileNameFromUri(row.fileUri),
+            }),
+            variant: 'warning',
+          });
+          return;
+        }
+        view.dispatch({
+          selection: {
+            anchor: toDocOffset(view.state.doc, row.range.start),
+            head: toDocOffset(view.state.doc, row.range.end),
+          },
+          scrollIntoView: true,
+        });
+        view.focus();
+      });
+    },
+    [formatMessage],
+  );
+
+  // Workspace-relative paths of the LSP files under `path` in the LSP
+  // workspace, for a folder whose files nothing reports one by one. Empty for a
+  // file, a missing path, or a failed listing.
+  const listLspFilesUnder = useCallback(
+    async (path: string): Promise<string[]> => {
+      if (!workspaceDir) {
+        return [];
+      }
+      try {
+        await workspaceReadyRef.current;
+        return await listLspFiles(workspaceDir, path);
+      } catch (error) {
+        console.error('LSP file listing error', path, error);
+        return [];
+      }
+    },
+    [workspaceDir],
+  );
+
+  const announceFilesUnder = useCallback(
+    (path: string): void => {
+      void listLspFilesUnder(path).then((paths) => {
+        if (paths.length === 0) {
+          return;
+        }
+        clientsRef.current.forEach((clientRef) =>
+          clientRef.client.workspace.createNodeFiles(paths),
+        );
+      });
+    },
+    [listLspFilesUnder],
+  );
+
+  // A references result names its files by uri, so after a file at or under
+  // `path` moves or goes away a row would open a file that no longer exists.
+  const closeLspReferencesUnder = useCallback((path: string): void => {
+    const { result, close } = useLspReferencesStore.getState();
+    const workspace =
+      result && clientsRef.current.get(result.lspId)?.client.workspace;
+    if (
+      workspace &&
+      result.groups.some((group) => workspace.containsUri(path, group.fileUri))
+    ) {
+      close();
+    }
+  }, []);
+
   const dispatchNodeAction = useCallback(
     ({
       path,
@@ -292,6 +418,7 @@ export const useLSP = (appId: string, selectedBoard?: Board): UseLSP => {
 
   const deleteNode = useCallback(
     (path: string, nodeType?: NodeType) => {
+      closeLspReferencesUnder(path);
       dispatchNodeAction({
         path,
         nodeType,
@@ -299,19 +426,32 @@ export const useLSP = (appId: string, selectedBoard?: Board): UseLSP => {
         folderAction: (ws) => ws.deleteNodeFolder(path),
       });
     },
-    [dispatchNodeAction],
+    [dispatchNodeAction, closeLspReferencesUnder],
   );
 
   const renameOrMoveNode = useCallback(
     (oldPath: string, newPath: string, nodeType?: NodeType) => {
-      dispatchNodeAction({
-        path: oldPath,
-        nodeType,
-        fileAction: (ws) => ws.renameOrMoveNodeFile(oldPath, newPath),
-        folderAction: (ws) => ws.renameOrMoveNodeFolder(oldPath, newPath),
-      });
+      closeLspReferencesUnder(oldPath);
+      if (nodeType === 'folder') {
+        // The tracked files move at once, before the editor reopens them at
+        // their new paths; the untracked ones follow when the listing returns.
+        clientsRef.current.forEach((clientRef) =>
+          clientRef.client.workspace.renameOrMoveNodeFolder(oldPath, newPath),
+        );
+        announceFilesUnder(newPath);
+        return;
+      }
+      const oldWorkspace = getClientWorkspace(oldPath);
+      const newWorkspace = getClientWorkspace(newPath);
+      if (oldWorkspace === newWorkspace) {
+        oldWorkspace?.renameOrMoveNodeFile(oldPath, newPath);
+        return;
+      }
+      // A new extension moves the file to another server, or to none.
+      oldWorkspace?.deleteNodeFile(oldPath);
+      newWorkspace?.createNodeFile(newPath);
     },
-    [dispatchNodeAction],
+    [getClientWorkspace, announceFilesUnder, closeLspReferencesUnder],
   );
 
   // A structural change detected by the file watcher (e.g. a terminal `mv`)
@@ -320,26 +460,45 @@ export const useLSP = (appId: string, selectedBoard?: Board): UseLSP => {
   // every LS so cross-file resolution recovers the same way a UI op does:
   //   - create: announce the new path (server drops its negative-resolution
   //     cache and re-resolves references from other files, reading the moved
-  //     doc from the mirror-updated disk).
+  //     doc from the mirror-updated disk). A folder's files get no events of
+  //     their own, so they are listed and announced too.
   //   - remove: close every tracked doc at or under the path (folder + exact
   //     file) so no stale didOpen lingers, then announce the deletion.
+  // Imports call this too: the backend suppresses their watcher events.
   // Broadcast to all clients because the path may be a folder spanning
   // languages; each server ignores paths it doesn't handle. No restart/re-lint
   // is needed here because the client never sent the didClose/didOpen that
   // desyncs the arduino LS — its own index rebuild from disk suffices.
   const syncLspWatchedChange = useCallback(
     (path: string, op: 'create' | 'remove') => {
+      if (op === 'remove') {
+        closeLspReferencesUnder(path);
+      }
       clientsRef.current.forEach((clientRef) => {
         const { workspace } = clientRef.client;
         if (op === 'create') {
-          workspace.createNodeFile(path);
+          // A create of a file this server already has open is an atomic
+          // replace (write a temp file, rename it over the file). useFileWatch
+          // reloads it like an in-place write, and the reload sends the new
+          // text as a didChange. Announcing the create would also restart the
+          // Arduino LS. The restarted LS gives clangd each open .h/.cpp from
+          // disk, which already has the new text, so the reload's didChange
+          // (a diff from the old text) then corrupts clangd's copy.
+          if (!workspace.isTracked(path)) {
+            workspace.createNodeFile(path);
+          }
         } else {
           workspace.deleteNodeFolder(path);
-          workspace.deleteNodeFile(path);
         }
       });
+      // A path with an LSP extension is a file, which createNodeFile above
+      // already tracks; any other path may be a folder.
+      const lang = path.split('.').pop();
+      if (op === 'create' && !LSP_LANGS[lang as LspLang]) {
+        announceFilesUnder(path);
+      }
     },
-    [],
+    [announceFilesUnder, closeLspReferencesUnder],
   );
 
   const onLspStateChange = useMemo(() => {
@@ -399,13 +558,16 @@ export const useLSP = (appId: string, selectedBoard?: Board): UseLSP => {
     createLspNode: createNode,
     deleteLspNode: deleteNode,
     renameLspNode: renameOrMoveNode,
-    moveLspNode: renameOrMoveNode,
     syncLspWatchedChange,
     startLSP,
     sendLspMessage,
     subscribeLspMessages,
     getLspWorkspaceFile: getLspWsFile,
     reloadLspFile,
+    lspReferencesResult,
+    showLspReferences,
+    closeLspReferences,
+    lspGoToReference,
     lspState,
     onLspStateChange,
   };

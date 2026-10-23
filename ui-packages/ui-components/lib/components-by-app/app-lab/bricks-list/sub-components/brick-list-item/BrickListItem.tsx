@@ -4,7 +4,7 @@ import { forwardRef } from 'react';
 
 import { Skeleton } from '../../../../../skeleton';
 import { XSmall, XXSmall } from '../../../../../typography';
-import { AiBadge } from '../../../brick-detail/sub-components/ai-badge/AiBadge';
+import { AiBadge } from '../../../ai-badge';
 import BrickIcon from '../../../brick-icon/BrickIcon';
 import styles from './brick-list-item.module.scss';
 import { BricksListItemProps } from './BrickListItem.type';

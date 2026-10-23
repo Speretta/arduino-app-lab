@@ -1,7 +1,7 @@
-import { get, set } from 'idb-keyval';
 import { useCallback } from 'react';
 
 import { AGENT_MODE_SEEN } from '../constants';
+import { get, set } from '../services/persistentStore';
 
 // One-time hints introducing agent mode: the side-panel promo banner, the two footer tooltips
 // (one on the first entry into agent mode, one on the first way back to the IDE) and the shine

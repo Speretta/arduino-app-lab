@@ -37,6 +37,22 @@ export const forwardNonUIPort: AppUIService['forwardNonUIPort'] =
     return ForwardNonUIPort(port);
   };
 
+// Wails event from the board MCP when the agent proposes a Wi-Fi network; the caller opens the dialog on that SSID.
+export const onAgentWifiRequest: AppUIService['onAgentWifiRequest'] = (cb) =>
+  EventsOn('wifi:agent-connect', (ssid) => {
+    if (typeof ssid === 'string') {
+      cb(ssid);
+    }
+  });
+
+// Wails event from the board MCP when the agent asks for a custom model; the caller opens the brick's model picker.
+export const onAgentModelImport: AppUIService['onAgentModelImport'] = (cb) =>
+  EventsOn('models:agent-import', (appId, brickId) => {
+    if (typeof appId === 'string' && typeof brickId === 'string') {
+      cb(appId, brickId);
+    }
+  });
+
 // Wails event from the board MCP when the agent starts an app; the caller opens its web UI once running.
 export const onAgentStartedApp: AppUIService['onAgentStartedApp'] = (cb) =>
   EventsOn('app:agent-started', (appId) => {

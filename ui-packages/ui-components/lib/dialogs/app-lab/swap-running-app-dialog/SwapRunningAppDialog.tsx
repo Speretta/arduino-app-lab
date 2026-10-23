@@ -1,4 +1,4 @@
-import { TriangleSharp } from '@cloud-editor-mono/images/assets/icons';
+import { Play } from '@cloud-editor-mono/images/assets/icons';
 
 import {
   AppLabDialog,
@@ -22,13 +22,34 @@ export const SwapRunningAppDialog: React.FC<SwapRunningAppDialogProps> = ({
   logic,
 }: SwapRunningAppDialogProps) => {
   const { formatMessage } = useI18n();
-  const { open, setOpen, handleSwap } = logic();
+  const {
+    open,
+    setOpen,
+    runningAppName,
+    newAppName,
+    runningAppIsDefault,
+    handleSwap,
+  } = logic();
+
+  const nameTags = (className: string): Record<string, () => JSX.Element> => ({
+    running: () => (
+      <span className={className} title={runningAppName}>
+        {runningAppName}
+      </span>
+    ),
+    new: () => (
+      <span className={className} title={newAppName}>
+        {newAppName}
+      </span>
+    ),
+  });
+  const values = { runningAppName, newAppName };
 
   return (
     <AppLabDialog
       open={open}
       onOpenChange={setOpen}
-      title="Swap Running App"
+      title={formatMessage(messages.dialogTitle)}
       footer={
         <>
           <Button
@@ -42,16 +63,34 @@ export const SwapRunningAppDialog: React.FC<SwapRunningAppDialogProps> = ({
           </Button>
         </>
       }
+      classes={{
+        root: styles['root'],
+        content: styles['content'],
+        body: styles['body'],
+      }}
     >
-      <>
-        <TriangleSharp className={styles['body-icon']} />
-        <Medium className={styles['body-title']}>
-          {formatMessage(messages.dialogBodyTitle)}
-        </Medium>
-        <XXSmall className={styles['body-description']}>
-          {formatMessage(messages.dialogBodyDescription)}
-        </XXSmall>
-      </>
+      <Play className={styles['body-icon']} />
+      <Medium className={styles['body-title']}>
+        {formatMessage(messages.dialogBodyTitle, {
+          ...values,
+          ...nameTags(styles['body-title-name']),
+        })}
+      </Medium>
+      <XXSmall className={styles['body-description']}>
+        {formatMessage(messages.dialogBodyDescription, {
+          ...values,
+          ...nameTags(styles['body-description-name']),
+        })}
+        {runningAppIsDefault ? (
+          <>
+            {' '}
+            {formatMessage(messages.defaultAppNote, {
+              ...values,
+              ...nameTags(styles['body-description-name']),
+            })}
+          </>
+        ) : null}
+      </XXSmall>
     </AppLabDialog>
   );
 };

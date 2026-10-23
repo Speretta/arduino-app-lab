@@ -75,12 +75,17 @@ export const IconButton = React.forwardRef(
             [styles['x-small']]: size === ButtonSize.XSmall,
             [styles['small']]: size === ButtonSize.Small,
             [styles['large']]: size === ButtonSize.Large,
-            [buttonStyles['disabled']]: buttonProps.disabled,
+            // `aria-disabled` keeps the button focusable, for a popover that
+            // explains why it is disabled.
+            [buttonStyles['disabled']]:
+              buttonProps.disabled ||
+              buttonProps['aria-disabled'] === true ||
+              buttonProps['aria-disabled'] === 'true',
           },
           classes?.button,
         )}
         aria-label={label}
-        aria-describedby={label}
+        aria-describedby={buttonProps['aria-describedby'] ?? label}
         onClick={(e): void => {
           buttonProps?.onClick?.(e);
           setShowTooltip(false);

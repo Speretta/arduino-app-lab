@@ -1,7 +1,7 @@
 import { NavigationGroup, Plus } from '@cloud-editor-mono/images/assets/icons';
 import {
   AppActionsMenu,
-  AppItem as Card,
+  AppItem,
   AppsSection,
   Button,
   ButtonSize,
@@ -11,6 +11,7 @@ import {
   EmptyState,
   ExportAppDialog,
   PageLayout,
+  ReleaseInfoDialog,
   RenameAppDialog,
   SearchField,
   TopBar,
@@ -19,6 +20,7 @@ import {
 import clsx from 'clsx';
 import React, { useState } from 'react';
 
+import { releaseBadge } from '../../release/releaseApp';
 import styles from './app-list.module.scss';
 import { useAppListLogic } from './appList.logic';
 import {
@@ -49,11 +51,13 @@ const AppList: React.FC<AppListProps> = ({ section, breadcrumbId }) => {
     openCreateAppDialog,
     openImportAppDialog,
     importedAppId,
+    resetImportedAppId,
     appActions,
     deleteAppDialogLogic,
     duplicateAppDialogLogic,
     renameAppDialogLogic,
     exportAppDialogLogic,
+    releaseInfoDialogLogic,
     defaultApp,
     handleAppClick,
   } = useAppListLogic(section, breadcrumbId);
@@ -82,11 +86,13 @@ const AppList: React.FC<AppListProps> = ({ section, breadcrumbId }) => {
     if (importedAppId) {
       setAnimatingAppId(importedAppId);
       // Reset after animation duration (3.3s)
+      // The id is in a global store: left set, every remount of the list replays the animation
       setTimeout(() => {
         setAnimatingAppId(null);
+        resetImportedAppId();
       }, 3300);
     }
-  }, [importedAppId]);
+  }, [importedAppId, resetImportedAppId]);
 
   return (
     <>
@@ -94,6 +100,7 @@ const AppList: React.FC<AppListProps> = ({ section, breadcrumbId }) => {
       <RenameAppDialog logic={renameAppDialogLogic} />
       <DeleteAppDialog logic={deleteAppDialogLogic} />
       <ExportAppDialog logic={exportAppDialogLogic} />
+      <ReleaseInfoDialog logic={releaseInfoDialogLogic} />
 
       <PageLayout
         header={
@@ -166,7 +173,7 @@ const AppList: React.FC<AppListProps> = ({ section, breadcrumbId }) => {
         )}
 
         <div className={styles['my-apps']}>
-          {appsLoading && <Card variant="skeleton" />}
+          {appsLoading && <AppItem variant="skeleton" />}
 
           {!appsLoading &&
             filteredApps.length > 0 &&
@@ -189,18 +196,30 @@ const AppList: React.FC<AppListProps> = ({ section, breadcrumbId }) => {
                   }
                 }}
               >
-                <Card
+                <AppItem
                   {...app}
                   {...(section === 'my-apps' && {
                     defaultApp,
-                    onRename: (): void => appActions.onRename(app),
                     onDuplicate: (): void => appActions.onDuplicate(app),
-                    onExport: (): void => appActions.onExport(app),
                     onSetAsDefault: (): void => appActions.onSetAsDefault(app),
                     onDelete: (): void => appActions.onDelete(app),
                     onMenuOpen: (isOpen: boolean): void =>
                       setMenuOpenAppId(isOpen ? app.id || null : null),
                     isAnimating: app.id === animatingAppId,
+                    ...(app.release
+                      ? {
+                          releaseBadge: releaseBadge(app),
+                          onReleaseInfo: (): void =>
+                            appActions.onReleaseInfo(app),
+                        }
+                      : {
+                          onRename: (): void => appActions.onRename(app),
+                          onExport: (): void => appActions.onExport(app),
+                          onCreateRelease: (): void =>
+                            appActions.onCreateRelease(app),
+                          createReleaseDisabledReason:
+                            appActions.createReleaseDisabledReason(app),
+                        }),
                   })}
                 />
               </div>

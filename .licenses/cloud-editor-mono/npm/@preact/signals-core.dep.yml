@@ -1,6 +1,6 @@
 ---
 name: "@preact/signals-core"
-version: 1.13.0
+version: 1.14.4
 type: npm
 summary: Manage state with style in every framework
 homepage: https://preactjs.com

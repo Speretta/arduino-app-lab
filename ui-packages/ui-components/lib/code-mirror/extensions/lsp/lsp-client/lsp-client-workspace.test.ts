@@ -79,7 +79,6 @@ const makeWorkspace = (
     lspId,
     WORKSPACE_URI,
     openEditorFile,
-    undefined,
     getLspWorkspaceFile,
     undefined,
     setFileValue,
@@ -216,7 +215,7 @@ describe('closeFile', () => {
     expect(workspace.getFile(FILE_URI)?.doc.toString()).toBe('one XYZ three');
   });
 
-  it('does not flush while another pane still shows the file', () => {
+  it('does not flush while another panel still shows the file', () => {
     const { workspace, client } = makeWorkspace();
     const doc = 'a';
     const pendingChange = (): ChangeSet =>
@@ -227,7 +226,7 @@ describe('closeFile', () => {
     workspace.openFile(FILE_URI, 'py', viewB);
     (client.notification as ReturnType<typeof vi.fn>).mockClear();
 
-    // Pane A closes; pane B's plugin still carries the same pending edit and
+    // Panel A closes; panel B's plugin still carries the same pending edit and
     // will sync it through the normal autoSync path.
     workspace.closeFile(FILE_URI, viewA);
 
@@ -269,6 +268,216 @@ describe('createNodeFile', () => {
     // ...but neither is opened as a document of this workspace.
     expect(getLspWorkspaceFile).not.toHaveBeenCalled();
     expect(client.didOpen).not.toHaveBeenCalled();
+  });
+});
+
+describe('trackFilesFromDisk', () => {
+  it('opens every file of this LSP from disk and skips the others', async () => {
+    const getLspWorkspaceFile = vi.fn(async () => 'int x;');
+    const { workspace, client } = makeWorkspace('arduino', getLspWorkspaceFile);
+
+    workspace.trackFilesFromDisk([
+      'sketch/sketch.ino',
+      'sketch/matrix_display.h',
+      'sketch/src/weather_bridge.cpp',
+      'sketch/notes.py',
+    ]);
+    await Promise.all(
+      [
+        'sketch/sketch.ino',
+        'sketch/matrix_display.h',
+        'sketch/src/weather_bridge.cpp',
+      ].map((path) => workspace.waitForPendingDiskOpen(path)),
+    );
+
+    expect(client.didOpen).toHaveBeenCalledTimes(3);
+    expect(workspace.isTracked('sketch/matrix_display.h')).toBe(true);
+    expect(workspace.isTracked('sketch/src/weather_bridge.cpp')).toBe(true);
+    expect(workspace.isTracked('sketch/notes.py')).toBe(false);
+  });
+
+  it('does not open a file twice', async () => {
+    const getLspWorkspaceFile = vi.fn(async () => 'int x;');
+    const { workspace, client } = makeWorkspace('arduino', getLspWorkspaceFile);
+
+    workspace.trackFilesFromDisk(['sketch/a.h']);
+    workspace.trackFilesFromDisk(['sketch/a.h']);
+    await workspace.waitForPendingDiskOpen('sketch/a.h');
+    workspace.trackFilesFromDisk(['sketch/a.h']);
+
+    expect(getLspWorkspaceFile).toHaveBeenCalledTimes(1);
+    expect(client.didOpen).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The client tracks only the files someone opened, so every structural change
+ * made in App Lab has to reach the server for the files it never opened too:
+ * the watcher does not report changes App Lab makes itself.
+ */
+describe('structural changes to files this client never opened', () => {
+  it('announces a file rename and tracks the file at its new path', async () => {
+    const getLspWorkspaceFile = vi.fn(async () => 'x = 1');
+    const { workspace, client } = makeWorkspace('python', getLspWorkspaceFile);
+
+    workspace.renameOrMoveNodeFile('utils.py', 'pkg/helpers.py');
+
+    expect(watchedFilesCalls(client)[0].changes).toEqual([
+      { uri: `${WORKSPACE_URI}/utils.py`, type: FileChangeType.Deleted },
+      { uri: `${WORKSPACE_URI}/pkg/helpers.py`, type: FileChangeType.Created },
+    ]);
+    await workspace.waitForPendingDiskOpen('pkg/helpers.py');
+    expect(workspace.isTracked('pkg/helpers.py')).toBe(true);
+  });
+
+  it('announces a folder rename by the folder paths', () => {
+    const { workspace, client } = makeWorkspace();
+
+    workspace.renameOrMoveNodeFolder('pkg', 'lib');
+
+    expect(watchedFilesCalls(client)[0].changes).toEqual([
+      { uri: `${WORKSPACE_URI}/pkg`, type: FileChangeType.Deleted },
+      { uri: `${WORKSPACE_URI}/lib`, type: FileChangeType.Created },
+    ]);
+  });
+
+  it('announces a folder delete by the folder path', () => {
+    const { workspace, client } = makeWorkspace();
+
+    workspace.deleteNodeFolder('pkg');
+
+    expect(watchedFilesCalls(client)[0].changes).toEqual([
+      { uri: `${WORKSPACE_URI}/pkg`, type: FileChangeType.Deleted },
+    ]);
+  });
+
+  it('announces a removed tracked file once', () => {
+    const { workspace, client } = makeWorkspace();
+    workspace.openFile(FILE_URI, 'py', makeView('a'));
+
+    workspace.deleteNodeFolder(FILE_PATH);
+
+    expect(watchedFilesCalls(client)[0].changes).toEqual([
+      { uri: FILE_URI, type: FileChangeType.Deleted },
+    ]);
+    expect(client.didClose).toHaveBeenCalledWith(FILE_URI);
+  });
+
+  it('announces the listed files of a folder that appeared', () => {
+    const getLspWorkspaceFile = vi.fn(async () => 'x = 1');
+    const { workspace, client } = makeWorkspace('python', getLspWorkspaceFile);
+    workspace.openFile(FILE_URI, 'py', makeView('a'));
+
+    workspace.createNodeFiles(['pkg/a.py', 'pkg/b.ino', FILE_PATH]);
+
+    expect(watchedFilesCalls(client)[0].changes).toEqual([
+      { uri: `${WORKSPACE_URI}/pkg/a.py`, type: FileChangeType.Created },
+    ]);
+    // basedpyright indexes the workspace itself; opening every file of a large
+    // folder would make it check each one as an open document.
+    expect(getLspWorkspaceFile).not.toHaveBeenCalled();
+  });
+
+  it('opens the listed sketch files for the Arduino LS', async () => {
+    const getLspWorkspaceFile = vi.fn(async () => 'int x;');
+    const { workspace } = makeWorkspace('arduino', getLspWorkspaceFile);
+
+    workspace.createNodeFiles(['sketch/src/a.h']);
+    await workspace.waitForPendingDiskOpen('sketch/src/a.h');
+
+    expect(workspace.isTracked('sketch/src/a.h')).toBe(true);
+  });
+
+  it('closes an .ino moved out of the sketch root instead of reopening it', () => {
+    const { workspace, client } = makeWorkspace('arduino');
+    const uri = `${WORKSPACE_URI}/sketch/sketch.ino`;
+    workspace.openFile(uri, 'ino', makeView('void setup() {}'));
+
+    workspace.renameOrMoveNodeFile(
+      'sketch/sketch.ino',
+      'sketch/src/sketch.ino',
+    );
+
+    expect(client.didClose).toHaveBeenCalledWith(uri);
+    expect(client.didOpen).toHaveBeenCalledTimes(1);
+    expect(workspace.isTracked('sketch/src/sketch.ino')).toBe(false);
+  });
+
+  it('keeps the entry an editor already opened at the new path of a move', () => {
+    const { workspace, client } = makeWorkspace();
+    const oldUri = `${WORKSPACE_URI}/a.py`;
+    const newUri = `${WORKSPACE_URI}/sub/a.py`;
+    workspace.openFile(oldUri, 'py', makeView('X = 1', { uri: oldUri }));
+    // The editor remounts at the new path before the tree reports the move.
+    const liveView = makeView('X = 1', { uri: newUri });
+    workspace.openFile(newUri, 'py', liveView);
+    const liveEntry = workspace.getFile(newUri);
+
+    workspace.renameOrMoveNodeFile('a.py', 'sub/a.py');
+
+    expect(workspace.getFile(newUri)).toBe(liveEntry);
+    expect(workspace.getFile(newUri)?.getView()).toBe(liveView);
+    expect(workspace.getFile(oldUri)).toBeNull();
+    expect(client.didClose).toHaveBeenCalledWith(oldUri);
+    expect(client.didClose).not.toHaveBeenCalledWith(newUri);
+  });
+
+  it('never gives the Arduino LS an .ino outside the sketch root', async () => {
+    const getLspWorkspaceFile = vi.fn(async () => 'void f() {}');
+    const { workspace } = makeWorkspace('arduino', getLspWorkspaceFile);
+
+    workspace.createNodeFiles(['sketch/src/old.ino', 'sketch/second.ino']);
+    workspace.createNodeFile('other.ino');
+    await workspace.waitForPendingDiskOpen('sketch/second.ino');
+
+    expect(workspace.isTracked('sketch/second.ino')).toBe(true);
+    expect(workspace.isTracked('sketch/src/old.ino')).toBe(false);
+    expect(workspace.isTracked('other.ino')).toBe(false);
+  });
+});
+
+describe('requestFile', () => {
+  it('tracks a file nobody opened, so its references are listed', async () => {
+    const getLspWorkspaceFile = vi.fn(async () => 'helper()');
+    const { workspace } = makeWorkspace('python', getLspWorkspaceFile);
+
+    const file = await workspace.requestFile(`${WORKSPACE_URI}/util.py`);
+
+    expect(file?.doc.toString()).toBe('helper()');
+    expect(workspace.isTracked('util.py')).toBe(true);
+  });
+
+  it('answers null for a file outside the workspace', async () => {
+    const getLspWorkspaceFile = vi.fn(async () => '');
+    const { workspace } = makeWorkspace('python', getLspWorkspaceFile);
+
+    expect(await workspace.requestFile('file:///lib/typing.pyi')).toBeNull();
+    expect(getLspWorkspaceFile).not.toHaveBeenCalled();
+  });
+});
+
+describe('a server spelling a workspace uri differently', () => {
+  const WINDOWS_WORKSPACE_URI = 'file:///C:/ws';
+
+  it('tracks the file under our spelling, so its editor view is found', async () => {
+    const client = makeClient();
+    const workspace = new LspClientWorkspace(
+      client,
+      'python',
+      WINDOWS_WORKSPACE_URI,
+      () => undefined,
+      async () => 'x = 1',
+    );
+
+    const file = await workspace.trackUriFromDisk('file:///c%3A/ws/other.py');
+    expect(file?.uri).toBe(`${WINDOWS_WORKSPACE_URI}/other.py`);
+
+    const view = makeView(
+      'x = 1',
+      makePlugin('file:///c%3A/ws/other.py', ChangeSet.empty(5)),
+    );
+    file?.addView(view);
+    expect(file?.getViews()).toEqual([view]);
   });
 });
 
@@ -464,7 +673,7 @@ describe('refreshFile', () => {
  * A cross-file rename edits files the user is not looking at. Dispatching those
  * edits into a view meant force-opening each one, and the edit was then routinely
  * undone: the editor's onChange writes to whichever file is *selected*, so an edit
- * dispatched into a just-opened pane raced React committing that selection — the
+ * dispatched into a just-opened panel raced React committing that selection — the
  * text went to the wrong key, the file's own content stayed stale, and the next
  * state rebuild reverted the document.
  */
@@ -472,7 +681,7 @@ describe('applyFileUpdate for a file with no view', () => {
   const OTHER_PATH = 'other.py';
   const OTHER_URI = `${WORKSPACE_URI}/${OTHER_PATH}`;
 
-  // Tracked from disk, never shown in a pane — exactly the shape of the "other"
+  // Tracked from disk, never shown in a panel — exactly the shape of the "other"
   // file in a cross-file rename.
   const trackViewlessFile = async (
     setFileValue?: (fileId: string, value: string) => boolean,
@@ -509,7 +718,7 @@ describe('applyFileUpdate for a file with no view', () => {
     // Keyed by the file's own workspace-relative id, not by the selection —
     // which is what made the edit land on the wrong file and get reverted.
     expect(writes).toEqual([[OTHER_PATH, 'badGood = 1']]);
-    // And no navigation: the pane must not jump to the file being edited.
+    // And no navigation: the panel must not jump to the file being edited.
     expect(opened).toEqual([]);
   });
 

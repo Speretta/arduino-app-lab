@@ -34,7 +34,7 @@ describe('filePaths', () => {
       expect(cleaned.previewFileId).toBeNull();
     });
 
-    it('cleans both panes, including their per-file state', () => {
+    it('cleans both panels, including their per-file state', () => {
       const cleaned = withoutHostLocalIds({
         items: ['main.py'],
         selected: 'main.py',

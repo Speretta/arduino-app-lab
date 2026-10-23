@@ -4,10 +4,10 @@ import { useCallback, useEffect } from 'react';
 
 import { UseFiles } from './files.type';
 
-export type CodeEditorPane = 'A' | 'B';
+export type CodeEditorPanel = 'A' | 'B';
 
 export const codeEditorViewInstances: Record<
-  CodeEditorPane,
+  CodeEditorPanel,
   EditorView | null
 > = {
   A: null,
@@ -17,17 +17,17 @@ export const codeEditorViewInstances: Record<
 type UseCodeEditorViewInstance = (
   selectFile: ReturnType<UseFiles>['selectFile'],
   openFiles?: SelectableFileData[],
-  getActivePane?: () => CodeEditorPane,
+  getActiveEditorPanel?: () => CodeEditorPanel,
 ) => {
   scrollToTop: () => void;
   scrollToLine: (line: number, fileName?: string) => void;
-  focusActivePane: () => void;
+  focusActiveEditorPanel: () => void;
 };
 
 export const useCodeEditorViewInstance: UseCodeEditorViewInstance = function (
   selectFile: ReturnType<UseFiles>['selectFile'],
   openFiles?: SelectableFileData[],
-  getActivePane?: () => CodeEditorPane,
+  getActiveEditorPanel?: () => CodeEditorPanel,
 ): ReturnType<UseCodeEditorViewInstance> {
   const scrollToTop = useCallback((): void => {
     const editor = codeEditorViewInstances.A;
@@ -61,10 +61,10 @@ export const useCodeEditorViewInstance: UseCodeEditorViewInstance = function (
     [selectFile, openFiles],
   );
 
-  const focusActivePane = useCallback((): void => {
-    const pane = getActivePane?.() ?? 'A';
-    codeEditorViewInstances[pane]?.focus();
-  }, [getActivePane]);
+  const focusActiveEditorPanel = useCallback((): void => {
+    const panel = getActiveEditorPanel?.() ?? 'A';
+    codeEditorViewInstances[panel]?.focus();
+  }, [getActiveEditorPanel]);
 
   useEffect(
     () => (): void => {
@@ -77,6 +77,6 @@ export const useCodeEditorViewInstance: UseCodeEditorViewInstance = function (
   return {
     scrollToTop,
     scrollToLine,
-    focusActivePane,
+    focusActiveEditorPanel,
   };
 };

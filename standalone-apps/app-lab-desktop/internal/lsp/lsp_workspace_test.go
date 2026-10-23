@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 
 	"app-lab-desktop/internal/board"
@@ -257,6 +258,90 @@ func TestIsAllowedLspFilePathRejectsTheBoardAppsDirOffBoard(t *testing.T) {
 	}
 }
 
+func makeSketchDir(t *testing.T, files ...string) string {
+	t.Helper()
+	dir, err := os.MkdirTemp(getTempWorkspaceBase(), "list-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	for _, rel := range files {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func listSorted(t *testing.T, dir string) []string {
+	t.Helper()
+	got, err := ListLspSketchFiles(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	slices.Sort(got)
+	return got
+}
+
+// The listing must match what arduino-cli copies into the build folder: a
+// listed file with no build copy makes the Arduino LS rebuild when opened.
+func TestListLspSketchFilesFollowsArduinoCliRules(t *testing.T) {
+	dir := makeSketchDir(t,
+		"sketch.ino",
+		"second.ino",
+		"matrix_display.h",
+		"src/weather_bridge.cpp",
+		"extras/old.h",
+		"notes.txt",
+		".hidden.h",
+		".cache/generated.h",
+		"examples/demo/demo.ino",
+		"build/sketch/sketch.ino.cpp",
+		"export/build.options.json",
+		"export/sketch.ino.cpp",
+	)
+
+	want := []string{"extras/old.h", "matrix_display.h", "second.ino", "sketch.ino", "src/weather_bridge.cpp"}
+	if got := listSorted(t, dir); !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// One subfolder that cannot be read must not hide the rest of the sketch.
+func TestListLspSketchFilesSkipsUnreadableSubfolder(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("permission bits do not stop this user from reading the folder")
+	}
+	dir := makeSketchDir(t, "sketch.ino", "locked/inner.h")
+	locked := filepath.Join(dir, "locked")
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+
+	if got, want := listSorted(t, dir), []string{"sketch.ino"}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// An app with no sketch has no sketch dir in the mirror; that must read as
+// empty, not fail the caller.
+func TestListLspSketchFilesMissingDir(t *testing.T) {
+	if got := listSorted(t, filepath.Join(getTempWorkspaceBase(), "does-not-exist")); len(got) != 0 {
+		t.Errorf("got %v, want no files", got)
+	}
+}
+
+func TestListLspSketchFilesRejectsOutsideRoots(t *testing.T) {
+	if _, err := ListLspSketchFiles(t.TempDir()); err == nil {
+		t.Error("expected a directory outside the workspace roots to be rejected")
+	}
+}
+
 func TestIsAllowedLspFilePathRejectsUnrelatedPaths(t *testing.T) {
 	for _, path := range []string{
 		"/etc/passwd",
@@ -265,5 +350,125 @@ func TestIsAllowedLspFilePathRejectsUnrelatedPaths(t *testing.T) {
 		if IsAllowedLspFilePath(path) {
 			t.Errorf("expected %s to be rejected", path)
 		}
+	}
+}
+
+// A folder that appears in one step is announced file by file, and must follow
+// the same sketch rules as the startup listing.
+func TestListLspFilesAppliesSketchRulesInsideSketch(t *testing.T) {
+	dir := makeSketchDir(t,
+		"sketch/sketch.ino",
+		"sketch/src/helper.h",
+		"sketch/src/nested.ino",
+		"sketch/build/sketch/sketch.ino.cpp",
+		"python/pkg/mod.py",
+		"python/pkg/.cache/x.py",
+		"python/pkg/notes.txt",
+	)
+
+	cases := map[string][]string{
+		"":           {"python/pkg/mod.py", "sketch/sketch.ino", "sketch/src/helper.h"},
+		"sketch":     {"sketch/sketch.ino", "sketch/src/helper.h"},
+		"python/pkg": {"python/pkg/mod.py"},
+	}
+	for relDir, want := range cases {
+		got, err := ListLspFiles(dir, relDir)
+		if err != nil {
+			t.Fatalf("%q: unexpected error: %v", relDir, err)
+		}
+		slices.Sort(got)
+		if !slices.Equal(got, want) {
+			t.Errorf("%q: got %v, want %v", relDir, got, want)
+		}
+	}
+}
+
+func TestListLspFilesHasNoFilesForAFileOrAMissingPath(t *testing.T) {
+	dir := makeSketchDir(t, "python/main.py")
+	for _, relDir := range []string{"python/main.py", "python/gone"} {
+		got, err := ListLspFiles(dir, relDir)
+		if err != nil || len(got) != 0 {
+			t.Errorf("%q: got %v, %v; want no files", relDir, got, err)
+		}
+	}
+}
+
+func TestListLspFilesRejectsPathsOutsideTheWorkspace(t *testing.T) {
+	dir := makeSketchDir(t, "python/main.py")
+	if _, err := ListLspFiles(dir, "../.."); err == nil {
+		t.Error("expected a relDir escaping the workspace to be rejected")
+	}
+	if _, err := ListLspFiles(t.TempDir(), ""); err == nil {
+		t.Error("expected a workspace outside the roots to be rejected")
+	}
+}
+
+func makeAppCopy(t *testing.T, files ...string) string {
+	t.Helper()
+	appDir := t.TempDir()
+	for _, rel := range files {
+		p := filepath.Join(appDir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return appDir
+}
+
+func exists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// Removal is a RemoveAll, so the path mapping must never resolve to the app
+// copy itself or anything outside it.
+func TestRemoveWorkspacePathRemovesOnlyInsideTheAppCopy(t *testing.T) {
+	app := boardAppsRootDir + "/myapp"
+	for _, p := range []string{
+		app,
+		app + "/",
+		app + "/.",
+		app + "/python/..",
+		app + "/../other",
+		boardAppsRootDir,
+		"/var/lib/arduino-app-cli/examples/blink/python",
+	} {
+		appDir := makeAppCopy(t, "python/main.py")
+		removeWorkspacePathIn(appDir, p)
+		if !exists(filepath.Join(appDir, "python", "main.py")) {
+			t.Errorf("%s: removed files of the app copy", p)
+		}
+	}
+
+	appDir := makeAppCopy(t, "python/pkg/mod.py", "python/main.py")
+	removeWorkspacePathIn(appDir, app+"/python/pkg")
+	if exists(filepath.Join(appDir, "python", "pkg")) {
+		t.Error("want the folder removed")
+	}
+	if !exists(filepath.Join(appDir, "python", "main.py")) {
+		t.Error("want its sibling kept")
+	}
+}
+
+func TestRenameWorkspacePathMovesAFolderIntoAMissingParent(t *testing.T) {
+	app := boardAppsRootDir + "/myapp"
+	appDir := makeAppCopy(t, "python/pkg/mod.py")
+
+	renameWorkspacePathIn(appDir, app+"/python/pkg", app+"/python/lib/pkg")
+
+	if !exists(filepath.Join(appDir, "python", "lib", "pkg", "mod.py")) {
+		t.Error("want the folder at its new path")
+	}
+	if exists(filepath.Join(appDir, "python", "pkg")) {
+		t.Error("want the old path gone")
+	}
+
+	// Neither end may be the app copy itself.
+	renameWorkspacePathIn(appDir, app, app+"/moved")
+	if exists(filepath.Join(appDir, "moved")) {
+		t.Error("want the app copy itself never moved")
 	}
 }

@@ -28,20 +28,20 @@
     --epr-horizontal-padding: 8px;
     --epr-header-padding: 8px;
     --epr-category-navigation-button-size: 24px;
-    --epr-category-label-text-color: #C9D2D2;
+    --epr-category-label-text-color: #c9d2d2;
     --epr-category-label-height: 28px;
     --epr-category-label-bg-color: #374146;
     --epr-emoji-hover-color: #AEB8B826;
     --epr-focus-bg-color: #AEB8B826;
     --epr-hover-bg-color: #AEB8B826;
     --epr-category-icon-active-color: transparent;
-    --epr-highlight-color: #FFFFFF;
-    --epr-dark-category-icon-active-color: #FFFFFF;
+    --epr-highlight-color: #ffffff;
+    --epr-dark-category-icon-active-color: #ffffff;
 
     & > div {
       // The categories container
       &:first-child {
-        border-top: 1px solid #434F54;
+        border-top: 1px solid #434f54;
 
         button {
           border-radius: 50%;
@@ -58,14 +58,6 @@
 
       // The emojis container
       &:last-child {
-        &::-webkit-scrollbar-thumb {
-          border: 4px solid #171e21;
-        }
-
-        &::-webkit-scrollbar-track {
-          background-color: transparent;
-        }
-
         h2 {
           font-size: 10px;
           font-weight: 600;
@@ -78,6 +70,5 @@
         }
       }
     }
-
   }
 }

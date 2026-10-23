@@ -2,13 +2,18 @@ import {
   OnboardingBack,
   OnboardingNext,
 } from '@cloud-editor-mono/images/assets/icons';
-import { ElementType } from 'react';
+import { ElementType, MouseEvent, MouseEventHandler } from 'react';
 import { TooltipRenderProps } from 'react-joyride';
 
 import { Button } from '../essential/button';
 import { IconButton } from '../essential/icon-button';
 import { Small, XSmall } from '../typography';
 import styles from './onboarding.module.scss';
+
+// IconButton reports a press without a DOM event. react-joyride's handlers
+// only call preventDefault on the event they receive.
+const toPressHandler = (onClick: MouseEventHandler<HTMLElement>) => (): void =>
+  onClick(new window.MouseEvent('click') as unknown as MouseEvent<HTMLElement>);
 
 const Tooltip: ElementType<TooltipRenderProps> = (
   props: TooltipRenderProps,
@@ -23,6 +28,8 @@ const Tooltip: ElementType<TooltipRenderProps> = (
     tooltipProps,
     size,
   } = props;
+  const { onClick: onBack, ...backButtonProps } = backProps;
+  const { onClick: onPrimary, ...primaryButtonProps } = primaryProps;
 
   return (
     <div {...tooltipProps} className={styles['tooltip']}>
@@ -49,13 +56,15 @@ const Tooltip: ElementType<TooltipRenderProps> = (
                 label={'back'}
                 Icon={OnboardingBack}
                 isDisabled={index === 0}
-                {...backProps}
+                {...backButtonProps}
+                onPress={toPressHandler(onBack)}
               />
               <IconButton
                 label={'next'}
                 Icon={OnboardingNext}
                 isDisabled={isLastStep}
-                {...primaryProps}
+                {...primaryButtonProps}
+                onPress={toPressHandler(onPrimary)}
               />
             </div>
           </div>

@@ -1,3 +1,5 @@
+@use "../../../public/shared.module.scss";
+
 $outline: 2px;
 $arrowWidth: 24px;
 $arrowMarginRight: 4px;
@@ -10,9 +12,9 @@ $clearPillsBorder: 1px;
   align-items: center;
   justify-content: flex-start;
   position: relative;
-  border: 1px solid #bdc7c7;
+  border: 1px solid var(--border-default);
   border-radius: 3px;
-  background-color: #fff;
+  background-color: var(--surface-bg-above);
   height: 28px;
   min-width: 250px;
   width: auto;
@@ -37,14 +39,14 @@ $clearPillsBorder: 1px;
     padding-left: 12px;
     padding-right: calc($arrowWidth + $arrowMarginRight);
     border: none;
-  
+
     &:focus-visible {
-      outline: $outline solid #7fcbcd;
+      outline: $outline solid var(--accent-default);
       width: calc(100% - $outline);
       height: calc(30px - $outline);
       margin: 0 auto;
     }
-  
+
     &.disabled {
       opacity: 0.5;
     }
@@ -58,24 +60,27 @@ $clearPillsBorder: 1px;
     display: flex;
     align-items: center;
     height: 28px;
-    width: calc(100% - ($arrowWidth + $arrowMarginRight + $clearPillsWidth + $clearPillsPaddingRight + $clearPillsBorder));
+    width: calc(
+      100% - ($arrowWidth + $arrowMarginRight + $clearPillsWidth + $clearPillsPaddingRight + $clearPillsBorder)
+    );
     padding: 0;
     padding-left: 12px;
     margin: 0;
     box-sizing: border-box;
     list-style: none;
 
-    &::after, &::before {
+    &::after,
+    &::before {
       box-sizing: inherit;
     }
 
     .selection {
-      background: #ecf1f1;
+      background: var(--component-bg-above);
       border-radius: 3px;
       display: flex;
       padding: 2px 4px;
       align-items: center;
-      border: 1px solid #c9d2d2;
+      border: 1px solid var(--border-default);
       height: 14px;
       white-space: nowrap;
       margin-right: 8px;
@@ -89,7 +94,7 @@ $clearPillsBorder: 1px;
     display: flex;
     align-items: center;
     height: 22px;
-    border-right: $clearPillsBorder solid #c9d2d2;
+    border-right: $clearPillsBorder solid var(--border-default);
     padding-right: $clearPillsPaddingRight;
 
     &:hover {
@@ -110,12 +115,12 @@ $clearPillsBorder: 1px;
     flex-direction: column;
     align-items: flex-start;
     width: 100%;
-    background-color: #fff;
+    background-color: var(--surface-bg-above);
     margin-bottom: 24px;
     box-shadow: 0px 4px 20px 0px rgba(0, 0, 0, 0.25);
     clip-path: inset(0 -20px -20px -20px);
     border-radius: 0 0 3px 3px;
-    border: 1px solid #c9d2d2;
+    border: 1px solid var(--border-default);
     border-top: none;
 
     & > ul {
@@ -125,13 +130,11 @@ $clearPillsBorder: 1px;
         width: 8px;
         height: 8px;
       }
-      &::-webkit-scrollbar-track {
-          background-color: transparent;
-      }
+      
       &::-webkit-scrollbar-thumb {
-          background-color: #7f8c8d; // @TODO: To be exported
-          border-width: 0;
-          border-radius: 5px;
+        background-color: #7f8c8d; // @TODO: To be exported
+        border-width: 0;
+        border-radius: 5px;
       }
     }
 
@@ -139,7 +142,7 @@ $clearPillsBorder: 1px;
       margin: 4px 12px;
       padding: 0;
       height: 1px;
-      background-color: #c9d2d2;
+      background-color: var(--border-default);
       width: calc(100% - 12px * 2);
     }
 

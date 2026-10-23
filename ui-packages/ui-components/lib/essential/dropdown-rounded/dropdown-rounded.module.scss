@@ -1,4 +1,3 @@
-@use "sass:color";
 @use "../../../public/shared.module.scss";
 
 :root {
@@ -30,7 +29,7 @@ $dropdownRoundedItemHeight: 44px;
     .dropdown-rounded-button {
         min-width: 134px;
         height: 34px;
-        background: shared.theme-var(--toolbar-background);
+        background: var(--component-bg-below-1);
         border-radius: 30px;
         border: none;
         padding: 0;
@@ -55,14 +54,14 @@ $dropdownRoundedItemHeight: 44px;
     .dropdown-rounded-button-closed {
         &::after {
             @include caret;
-            border-top: solid 6px #000; 
+            border-top: solid 6px var(--text-default);
         }
     }
 
     .dropdown-rounded-button-open {
         &::after {
             @include caret;
-            border-bottom: solid 6px #000; 
+            border-bottom: solid 6px var(--text-default);
         }
     }
 
@@ -70,7 +69,7 @@ $dropdownRoundedItemHeight: 44px;
         position: absolute;
         top: $dropdownRoundedMenuTop;
         z-index: 100;
-        background-color: shared.theme-var(--dropdown-background);
+        background-color: var(--surface-bg-above);
         box-shadow: 0px 4px 20px rgb(0 0 0 / 25%);
         border-radius: 3px;
         width: 218px;
@@ -79,23 +78,21 @@ $dropdownRoundedItemHeight: 44px;
             padding-left: 0;
             margin: 0;
             outline: none;
-
-            @for $i from 0 through 100 {
-                li:nth-child(#{$i * 2}) {
-                    button {
-                        background-color: color.adjust(rgb(236, 241, 241), $lightness: ($i * 1%));
-                    }
+            li:nth-child(odd) {
+                button {
+                    background-color: var(--border-default);
                 }
             }
 
             li {
+                
                 outline: none;
                 button {
                     padding: 0 0 0 20px;
                     height: $dropdownRoundedItemHeight;
 
                     &:hover {
-                        background-color: rgb(236, 241, 241);
+                        background-color: var(--dropdown-item-background-hover);
                         cursor: pointer;
                     }
                 }

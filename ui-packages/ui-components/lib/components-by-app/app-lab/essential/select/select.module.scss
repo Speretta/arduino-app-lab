@@ -15,6 +15,12 @@
       border-color: #c8e9ea;
     }
 
+    // Keyboard focus only: a click also focuses the inner input, and the open state has its own border.
+    &:focus-visible {
+      border-color: var(--border-accent);
+      outline: none;
+    }
+
     .input,
     .input-label {
       cursor: pointer !important;
@@ -84,4 +90,19 @@
       background: none !important;
     }
   }
+}
+
+// Spreads the item text so the checkmark sits at the right edge.
+.dropdown-menu-item > * {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.selected-check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
 }

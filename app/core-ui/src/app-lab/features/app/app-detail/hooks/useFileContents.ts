@@ -41,11 +41,12 @@ export function useFileContents({
       if (!isAbsoluteId(id) && !appPath) return;
       const absPath = resolveAbsPath(id, appPath);
 
-      const content = await queryClient.fetchQuery<string>(
-        [GET_FILE_CONTENT_QUERY_KEY, absPath],
-        () => getAppFileContent(absPath),
-        { staleTime: 0, cacheTime: 0 },
-      );
+      const content = await queryClient.fetchQuery({
+        queryKey: [GET_FILE_CONTENT_QUERY_KEY, absPath],
+        queryFn: () => getAppFileContent(absPath),
+        staleTime: 0,
+        gcTime: 0,
+      });
 
       // Already open → override its buffer in place (new instanceId) so the
       // editor reloads the doc without replacing the subject; otherwise create.

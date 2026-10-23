@@ -1,9 +1,9 @@
 ---
 name: "@react-aria/visually-hidden"
-version: 3.8.19
+version: 3.9.1
 type: npm
 summary: Spectrum UI components in React
-homepage: 
+homepage:
 license: apache-2.0
 licenses:
 - sources: LICENSE

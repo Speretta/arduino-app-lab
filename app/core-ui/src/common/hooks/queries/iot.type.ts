@@ -1,11 +1,6 @@
-import {
-  CompileErrors,
-  GetSketchResult,
-  UploadIotSketchReady_Result,
-} from '@cloud-editor-mono/domain';
+import { CompileErrors, GetSketchResult } from '@cloud-editor-mono/domain';
 import { ManagedOtaErrors } from '@cloud-editor-mono/infrastructure';
 import { IotDevicesGroups } from '@cloud-editor-mono/ui-components';
-import { QueryObserverResult } from '@tanstack/react-query';
 import { IntRange } from 'type-fest';
 
 import { CompleteCommandData } from '../../../cloud-editor/features/main/main.type';
@@ -56,9 +51,7 @@ export type UseIotUpload = (
   selectedIoTDeviceId?: string,
   thingId?: string,
 ) => {
-  startIotUpload: () => Promise<
-    QueryObserverResult<UploadIotSketchReady_Result, unknown>
-  >;
+  startIotUpload: () => void;
   isUploading: boolean;
   uploadHasError: boolean;
   resetUpload: () => void;

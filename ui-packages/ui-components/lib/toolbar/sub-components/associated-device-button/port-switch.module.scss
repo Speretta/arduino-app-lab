@@ -1,9 +1,8 @@
-$grey: #dae3e3;
-$darkerGrey: #bdc7c7;
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
 
 .container {
     display: flex;
-    background-color: $grey;
+    background-color: var(--border-default);
     border-radius: 27px;
     align-items: center;
     justify-content: space-between;
@@ -19,11 +18,13 @@ $darkerGrey: #bdc7c7;
     align-items: center;
     justify-content: center;
     padding: 2px;
-    border: 1px solid $grey;
+    border: 1px solid var(--border-default);
     box-sizing: content-box;
+    color: var(--text-default);
 }
 
 .icon-container-selected {
     background-color: white;
-    border: 1px solid $darkerGrey;
+    color: #171e21;
+    border: 1px solid var(--text-subtle);
 }

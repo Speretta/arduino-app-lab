@@ -1,0 +1,38 @@
+@use "../../../typography/typography.module.scss" as typography;
+
+// The design draws this as a 720px modal.
+.content {
+  --modal-min-width: 720px;
+}
+
+.body {
+  min-width: 688px;
+  padding: 8px 16px !important;
+}
+
+.footer {
+  justify-content: space-between !important;
+}
+
+.log {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px 16px;
+  border-radius: 4px;
+  background: var(--surface-bg-below-1);
+  font-family: typography.$roboto-mono-font-family;
+  font-size: 13px;
+  line-height: 22px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.line {
+  display: block;
+  color: var(--text-default);
+
+  &--error {
+    color: var(--feedback-error-default);
+  }
+}

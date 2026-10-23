@@ -12,20 +12,19 @@ interface DeploymentPath {
  * The deployment path configuration, calculated at runtime.
  */
 export const deploymentPath: DeploymentPath = ((): DeploymentPath => {
-  // Check if we are on an Arduino domain (e.g. app.arduino.cc)
-  const isArduinoDomain = window.location.origin.includes(
-    `app.${Config.DOMAIN}.cc`,
+  // Match `<key>.app.<domain>.cc` for any Arduino environment
+  // based on the runtime hostname alone: the build-time
+  // VITE_DOMAIN may not match the domain the app is actually served from
+  // (e.g. the production component bundle running on a staging domain),
+  // which would wrongly leave `customKey` undefined on custom domains.
+  const match = window.location.hostname.match(
+    /^(?:([^.]+)\.)?app\.(arduino|oniudra)\.cc$/,
   );
 
   return {
     // If we are on an Arduino domain, check if it's a custom one.
-    customKey:
-      isArduinoDomain && window.location.hostname.split('.').length === 4
-        ? window.location.hostname.split('.')[0]
-        : undefined,
+    customKey: match?.[1] || undefined,
     // If we're not running on a real Arduino domain, use the VITE_DOMAIN environment variable. Else, we can simply use the current origin.
-    extRoot: !isArduinoDomain
-      ? `https://app.${Config.DOMAIN}.cc`
-      : window.location.origin,
+    extRoot: match ? window.location.origin : `https://app.${Config.DOMAIN}.cc`,
   };
 })();

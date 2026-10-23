@@ -1,7 +1,7 @@
 import { ChevronRight } from '@cloud-editor-mono/images/assets/icons';
 import {
+  AppBrickListItem,
   BrickDetails,
-  BrickInstance,
   BrickListItem,
 } from '@cloud-editor-mono/infrastructure';
 import clsx from 'clsx';
@@ -32,7 +32,7 @@ export type AddAppBrickDialogLogic = () => {
   open: boolean;
   appId: string;
   bricks: BrickListItem[];
-  appBricks: BrickInstance[] | undefined;
+  appBricks: AppBrickListItem[] | undefined;
   loadBrickDetails: (brickId: string) => Promise<BrickDetails>;
   brickDetailLogic: BrickDetailLogic;
   configureDialogLogic: ConfigureAppBrickDialogLogic;
@@ -45,6 +45,11 @@ export type AddAppBrickDialogLogic = () => {
 };
 
 type AddAppBrickDialogProps = { logic: AddAppBrickDialogLogic };
+
+const isBrickInApp = (
+  appBricks: AppBrickListItem[] | undefined,
+  brickId: string | undefined,
+): boolean => !!appBricks?.some((appBrick) => appBrick.id === brickId);
 
 export const AddAppBrickDialog: React.FC<AddAppBrickDialogProps> = ({
   logic,
@@ -82,14 +87,23 @@ export const AddAppBrickDialog: React.FC<AddAppBrickDialogProps> = ({
   };
 
   useEffect(() => {
-    const newlySelectedBrick = bricks.find((brick) =>
-      appBricks?.every((it) => it.id !== brick.id),
-    );
-    setSelectedBrick(newlySelectedBrick);
-  }, [appBricks, bricks, open]);
+    if (!open) {
+      return;
+    }
+    // Keep the current selection: adding a brick refetches appBricks while the
+    // dialog is still open, and re-picking would show another brick.
+    setSelectedBrick((prev) => {
+      const keepSelection =
+        prev && (loading || !isBrickInApp(appBricks, prev.id));
+      return keepSelection
+        ? prev
+        : bricks.find((brick) => !isBrickInApp(appBricks, brick.id));
+    });
+  }, [appBricks, bricks, loading, open]);
 
   useLayoutEffect(() => {
     if (open) {
+      setSelectedBrick(undefined);
       setSucceeded(false);
       setBrickDetails(undefined);
       setSelectedModelsByBrickId({});
@@ -183,7 +197,6 @@ export const AddAppBrickDialog: React.FC<AddAppBrickDialogProps> = ({
               <Button
                 variant={ButtonVariant.Primary}
                 type="submit"
-                /* eslint-disable-next-line jsx-a11y/no-autofocus */
                 autoFocus
                 classes={{
                   button: styles['action-button'],
@@ -207,11 +220,8 @@ export const AddAppBrickDialog: React.FC<AddAppBrickDialogProps> = ({
                 <Button
                   variant={ButtonVariant.Primary}
                   loading={loading}
-                  disabled={appBricks?.some(
-                    (appBrick) => appBrick.id === selectedBrick?.id,
-                  )}
+                  disabled={isBrickInApp(appBricks, selectedBrick?.id)}
                   type="submit"
-                  /* eslint-disable-next-line jsx-a11y/no-autofocus */
                   autoFocus
                   classes={{
                     button: styles['action-button'],
@@ -266,7 +276,7 @@ export const AddAppBrickDialog: React.FC<AddAppBrickDialogProps> = ({
                   <BricksList
                     bricks={bricks}
                     disabledBricks={bricks.filter((brick) =>
-                      appBricks?.some((appBrick) => appBrick.id === brick.id),
+                      isBrickInApp(appBricks, brick.id),
                     )}
                     selectedBrick={selectedBrick}
                     brickSize="medium"
@@ -293,7 +303,7 @@ export const AddAppBrickDialog: React.FC<AddAppBrickDialogProps> = ({
                     preSelectedModelId={
                       selectedModelByBrickId[selectedBrick?.id ?? '']
                     }
-                    preSelectedModelChange={selectedModelChange}
+                    onPreSelectedModelChange={selectedModelChange}
                     hideExampleHeader
                   />
                 </div>

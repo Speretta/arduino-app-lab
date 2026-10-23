@@ -10,7 +10,7 @@ import { Toggle } from '../../essential/toggle';
 import { systemMessages } from '../messages';
 import styles from '../settings.module.scss';
 
-export interface DeviceStorageProps {
+export interface NetworkModeProps {
   disabled?: boolean;
   logic: UseNetworkModeLogic;
 }
@@ -18,11 +18,11 @@ export interface DeviceStorageProps {
 export const NetworkMode = ({
   disabled,
   logic,
-}: DeviceStorageProps): JSX.Element => {
+}: NetworkModeProps): JSX.Element => {
   const { formatMessage } = useI18n();
   const [open, setOpen] = useState(false);
 
-  const { isNetworkModeEnabled, ...passwordLogic } = logic();
+  const { isNetworkModeEnabled, passwordLogic, openPasswordDialog } = logic();
 
   return (
     <>
@@ -32,16 +32,16 @@ export const NetworkMode = ({
         onOpenChange={setOpen}
         confirmAction={(): void => {
           setOpen(false);
-          passwordLogic.onOpenChange(true);
+          openPasswordDialog();
         }}
       />
       <Toggle
         className={styles['toggle-button']}
         isDisabled={disabled}
-        isSelected={isNetworkModeEnabled}
+        isSelected={!!isNetworkModeEnabled}
         aria-label={formatMessage(systemMessages.remoteAccess)}
         onChange={(enabled): void =>
-          enabled ? passwordLogic.onOpenChange(true) : setOpen(true)
+          enabled ? openPasswordDialog() : setOpen(true)
         }
       />
     </>

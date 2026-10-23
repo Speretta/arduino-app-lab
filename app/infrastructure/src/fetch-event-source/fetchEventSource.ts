@@ -3,16 +3,32 @@ import {
   FetchEventSourceInit,
 } from '@microsoft/fetch-event-source';
 
-import { EventSourceHandlers } from './fetchEventSource.type';
+import {
+  EventSourceHandlers,
+  EventSourceOptions,
+  EventSourceOptionsWithBody,
+} from './fetchEventSource.type';
 
 const maxRetries = 5;
 const baseDelay = 1000; // 1 second
 
-class FatalError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'FatalError';
+const METHOD_NOT_ALLOWED = 405;
+
+export class EventSourceFatalError extends Error {
+  constructor(readonly status: number) {
+    super(`HTTP ${status}`);
+    this.name = 'EventSourceFatalError';
   }
+}
+
+// A daemon too old to implement the endpoint answers the request with 405.
+export function isUnsupportedEndpointError(
+  error: unknown,
+): error is EventSourceFatalError {
+  return (
+    error instanceof EventSourceFatalError &&
+    error.status === METHOD_NOT_ALLOWED
+  );
 }
 
 class RetryableError extends Error {
@@ -25,7 +41,7 @@ class RetryableError extends Error {
 async function commonOnOpen(res: Response): Promise<void> {
   if (!res.ok) {
     if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-      throw new FatalError(`HTTP ${res.status}`);
+      throw new EventSourceFatalError(res.status);
     } else {
       throw new RetryableError(`Unexpected response status: ${res.status}`);
     }
@@ -35,7 +51,7 @@ async function commonOnOpen(res: Response): Promise<void> {
 function getCommonOnError(): (err: Error) => number {
   let tries = 0;
   return (err: Error): number => {
-    if (err instanceof FatalError) {
+    if (err instanceof EventSourceFatalError) {
       throw err;
     }
 
@@ -56,109 +72,66 @@ function addCommonHandlers(handlers: EventSourceHandlers): EventSourceHandlers {
       await handlers.onopen?.(res);
       await commonOnOpen(res);
     },
-    onerror: (err: Error): void => {
+    onerror: (err: Error): number => {
       handlers.onerror?.(err);
-      commonOnError(err);
+      return commonOnError(err);
     },
   };
 }
 
+async function sendEventSource(
+  method: 'GET' | 'POST' | 'PUT',
+  { url, handlers, token, abortController, headers }: EventSourceOptions,
+  body?: object | FormData,
+): Promise<void> {
+  const options: FetchEventSourceInit = {
+    method,
+    ...addCommonHandlers(handlers),
+    openWhenHidden: true,
+  };
+
+  if (body instanceof FormData) {
+    options.body = body;
+  } else if (body) {
+    options.body = JSON.stringify(body);
+  }
+
+  if (token) {
+    options.headers = {
+      Authorization: `Bearer ${token}`,
+    };
+  }
+
+  if (abortController) {
+    options.signal = abortController.signal;
+  }
+
+  if (headers) {
+    options.headers = {
+      ...options.headers,
+      ...headers,
+    };
+  }
+
+  return fetchEventSource(url, options);
+}
+
 export async function getEventSource(
-  url: string,
-  handlers: EventSourceHandlers,
-  token?: string,
-  abortController?: AbortController,
-  headers?: FetchEventSourceInit['headers'],
+  options: EventSourceOptions,
 ): Promise<void> {
-  const options: FetchEventSourceInit = {
-    method: 'GET',
-    ...addCommonHandlers(handlers),
-  };
-
-  if (token) {
-    options.headers = {
-      Authorization: `Bearer ${token}`,
-    };
-  }
-
-  if (abortController) {
-    options.signal = abortController.signal;
-  }
-
-  if (headers) {
-    options.headers = {
-      ...options.headers,
-      ...headers,
-    };
-  }
-
-  return fetchEventSource(url, { ...options, openWhenHidden: true });
+  return sendEventSource('GET', options);
 }
 
-export async function postEventSource(
-  url: string,
-  handlers: EventSourceHandlers,
+export async function postEventSource({
   body = {},
-  token?: string,
-  abortController?: AbortController,
-  headers?: FetchEventSourceInit['headers'],
-): Promise<void> {
-  const options: FetchEventSourceInit = {
-    method: 'POST',
-    body: JSON.stringify(body),
-    ...addCommonHandlers(handlers),
-  };
-
-  if (token) {
-    options.headers = {
-      Authorization: `Bearer ${token}`,
-    };
-  }
-
-  if (abortController) {
-    options.signal = abortController.signal;
-  }
-
-  if (headers) {
-    options.headers = {
-      ...options.headers,
-      ...headers,
-    };
-  }
-
-  return fetchEventSource(url, { ...options, openWhenHidden: true });
+  ...options
+}: EventSourceOptionsWithBody): Promise<void> {
+  return sendEventSource('POST', options, body);
 }
 
-export async function putEventSource(
-  url: string,
-  handlers: EventSourceHandlers,
+export async function putEventSource({
   body = {},
-  token?: string,
-  abortController?: AbortController,
-  headers?: FetchEventSourceInit['headers'],
-): Promise<void> {
-  const options: FetchEventSourceInit = {
-    method: 'PUT',
-    body: JSON.stringify(body),
-    ...addCommonHandlers(handlers),
-  };
-
-  if (token) {
-    options.headers = {
-      Authorization: `Bearer ${token}`,
-    };
-  }
-
-  if (abortController) {
-    options.signal = abortController.signal;
-  }
-
-  if (headers) {
-    options.headers = {
-      ...options.headers,
-      ...headers,
-    };
-  }
-
-  return fetchEventSource(url, { ...options, openWhenHidden: true });
+  ...options
+}: EventSourceOptionsWithBody): Promise<void> {
+  return sendEventSource('PUT', options, body);
 }

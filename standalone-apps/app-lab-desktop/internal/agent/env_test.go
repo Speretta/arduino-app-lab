@@ -36,6 +36,7 @@ func TestChildEnvKeepsWhatTheAgentNeeds(t *testing.T) {
 		"HTTPS_PROXY", "NO_PROXY", // corporate egress
 		"NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", // MITM proxy CA
 		"DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", // the login CLI's keychain access on Linux
+		"XDG_DATA_DIRS", "XDG_CURRENT_DESKTOP", // resolving the browser that opens the sign-in URL
 	} {
 		t.Setenv(k, "set-"+k)
 		if envValue(ChildEnv(), k) != "set-"+k {

@@ -13,6 +13,12 @@ export interface AppItemProps {
   onRename?: () => void;
   onDuplicate?: () => void;
   onExport?: () => void;
+  onCreateRelease?: () => void;
+  // Set while a release of this App is being created: the action stays, disabled, with this reason.
+  createReleaseDisabledReason?: string;
+  onReleaseInfo?: () => void;
+  // Set for an App installed from a release, which shows the release badge.
+  releaseBadge?: { label?: string; createdAt?: string };
   onSetAsDefault?: () => void;
   onDelete?: () => void;
   onMenuOpen?: (isOpen: boolean) => void;

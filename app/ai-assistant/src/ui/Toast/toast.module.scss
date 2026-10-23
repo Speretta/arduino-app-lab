@@ -29,6 +29,7 @@
     z-index: 10;
   }
 
+  // Both variants paint a solid saturated fill, so the content takes inverted ink.
   &--error {
     background: var(--feedback-error-default, #ff8878);
   }
@@ -38,7 +39,7 @@
   }
 
   .text {
-    color: var(--text-default, #1f2a2d);
+    color: var(--text-inverted, #171e21);
     font-size: typography.$font-size-xx-small;
     font-weight: fonts.$font-weight-semibold;
     line-height: 1.6;
@@ -51,7 +52,7 @@
   height: 16px;
   flex: none;
   path {
-    fill: var(--text-default, #000000) !important;
+    fill: var(--text-inverted, #171e21) !important;
   }
 }
 
@@ -60,7 +61,7 @@
   flex: none;
   border: none;
   background: none;
-  color: var(--text-on-error, #1f2a2d);
+  color: var(--text-inverted, #171e21);
   font-size: typography.$font-size-small;
   line-height: 1;
   cursor: pointer;

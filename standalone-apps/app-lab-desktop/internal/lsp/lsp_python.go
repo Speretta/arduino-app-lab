@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,7 +18,9 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const pyrightPythonVersion = "3.13"
+// defaultPythonVersion is the Python of the app container runtime, used for the
+// analysis when the app-bricks wheel does not state it (see pythonAnalysisRules).
+const defaultPythonVersion = "3.13"
 const pyrightConfigFileName = "pyrightconfig.json"
 
 // pythonDirName is the app subfolder holding the Python sources, the counterpart
@@ -37,14 +40,26 @@ func getPyrightConfigPath() string {
 	return filepath.Join(getLspWorkspacePythonConfigDir(), pyrightConfigFileName)
 }
 
-func appBricksWheelURL(version string) string {
-	return fmt.Sprintf("https://github.com/arduino/app-bricks-py/releases/download/release/%s/arduino_app_bricks-%s-py3-none-any.whl", version, version)
+// appBricksWheelURLs returns the release asset URLs to try, in order, for the
+// app-bricks-py wheel of a version.
+//
+// app-bricks-py tags its releases bricks/<version> since 0.13.0; earlier releases
+// are tagged release/<version>, and the assets of those tags are not republished.
+// With the legacy scheme alone a board on a 0.13 runtime found no wheel (404), so
+// the stubs fell back to an older release, or to nothing, and every app-bricks
+// symbol read as undefined or stale in the editor.
+func appBricksWheelURLs(version string) []string {
+	asset := fmt.Sprintf("arduino_app_bricks-%s-py3-none-any.whl", version)
+	return []string{
+		fmt.Sprintf("https://github.com/arduino/app-bricks-py/releases/download/bricks/%s/%s", version, asset),
+		fmt.Sprintf("https://github.com/arduino/app-bricks-py/releases/download/release/%s/%s", version, asset),
+	}
 }
 
-// wheelURLFor is indirected through a variable so a test can serve the wheel
+// wheelURLsFor is indirected through a variable so a test can serve the wheel
 // locally. The download failing is the case that used to destroy working stubs, and
-// it cannot be exercised against the real release URL.
-var wheelURLFor = appBricksWheelURL
+// it cannot be exercised against the real release URLs.
+var wheelURLsFor = appBricksWheelURLs
 
 // ensurePythonStubs provisions the app-bricks type stubs for the connected board's
 // runtime and returns the directory to hand basedpyright as extraPaths, or "" when
@@ -243,13 +258,9 @@ func publishStubsForVersion(ctx context.Context, root, versionDir, version strin
 	// A no-op once the rename below has moved it.
 	defer os.RemoveAll(stagingDir)
 
-	dlCtx, cancelDownload := context.WithTimeout(ctx, wheelDownloadTimeout)
-	defer cancelDownload()
-
-	wheelURL := wheelURLFor(version)
-	wheelPath, err := downloadToTempFile(dlCtx, wheelURL)
+	wheelPath, err := downloadWheel(ctx, wheelURLsFor(version))
 	if err != nil {
-		return fmt.Errorf("could not download the app-bricks-py wheel %s: %w", wheelURL, err)
+		return err
 	}
 	defer os.Remove(wheelPath)
 
@@ -276,6 +287,26 @@ func publishStubsForVersion(ctx context.Context, root, versionDir, version strin
 		return fmt.Errorf("could not publish the stubs to %s: %w", versionDir, err)
 	}
 	return nil
+}
+
+// downloadWheel fetches the wheel from the first candidate URL that serves it. Each
+// attempt gets its own timeout, and when none succeeds every failure is reported, so
+// the log says which tag schemes were tried rather than just "404".
+func downloadWheel(ctx context.Context, urls []string) (string, error) {
+	// One deadline for every candidate: the LSP start waits on this download,
+	// and a connection that black-holes must not stall it once per URL.
+	dlCtx, cancel := context.WithTimeout(ctx, wheelDownloadTimeout)
+	defer cancel()
+
+	var errs []error
+	for _, wheelURL := range urls {
+		wheelPath, err := downloadToTempFile(dlCtx, wheelURL)
+		if err == nil {
+			return wheelPath, nil
+		}
+		errs = append(errs, fmt.Errorf("%s: %w", wheelURL, err))
+	}
+	return "", fmt.Errorf("could not download the app-bricks-py wheel: %w", errors.Join(errs...))
 }
 
 func downloadToTempFile(ctx context.Context, downloadURL string) (string, error) {
@@ -370,7 +401,12 @@ func extractPyFilesFromWheel(wheelPath string, dstDir string) error {
 			return closeSrcErr
 		}
 
-		extracted++
+		// The rules file rides along with the stubs but is not one: a wheel with
+		// no Python entry must still fail the guard below, or a version directory
+		// holding nothing to analyze would be published and win the fallback.
+		if name != pythonAnalysisRulesRelPath {
+			extracted++
+		}
 	}
 
 	if extracted == 0 {
@@ -381,6 +417,9 @@ func extractPyFilesFromWheel(wheelPath string, dstDir string) error {
 }
 
 func isLSPRelevantStubFile(name string) bool {
+	if name == pythonAnalysisRulesRelPath {
+		return true
+	}
 	lower := strings.ToLower(name)
 	if strings.HasSuffix(lower, ".py") {
 		return true
@@ -422,13 +461,180 @@ func ensurePythonVenvStub(base string) {
 	}
 }
 
+// pythonAnalysisRulesRelPath is where the app-bricks-py wheel ships the analysis
+// rules, next to the other static assets of the library. The path is relative to
+// the stubs directory the wheel is extracted into.
+const pythonAnalysisRulesRelPath = "arduino/app_bricks/static/pyright-rules.json"
+
+// pythonAnalysisRulesSchemaVersion is the only schema of pyright-rules.json this
+// build understands; a newer one is treated like a missing file.
+const pythonAnalysisRulesSchemaVersion = 1
+
+// pythonAnalysisProfileName is the profile of pyright-rules.json that applies to
+// code written against the library API: the apps edited here, the same way the
+// library's CI checks the published examples. The file's other profile
+// (app-bricks-py) is for the library checking itself, and is stricter than user
+// code should face.
+const pythonAnalysisProfileName = "api-user"
+
+// defaultTypeCheckingMode applies when the wheel carries no usable rules file:
+// wheels older than the rules, a download that fell back to nothing, or a file
+// this build cannot parse. "standard" is pyright's own default and the mode the
+// library's CI runs on the published examples, so it is the closest thing to what
+// the library authors verified; it is also what those authors chose as the
+// initial content of the api-user profile.
+const defaultTypeCheckingMode = "standard"
+
+// pythonAnalysisRules is how the library wants user code analyzed, as resolved
+// from pyright-rules.json for pythonAnalysisProfileName. The library decides the
+// type-checking mode, the per-rule severities, the Python version its runtime
+// provides and whether its sources stand in for stubs, and ships them with every
+// release, so a change in the library's annotations can carry the rule it needs
+// without a desktop release; the desktop owns only the environment (paths, venv,
+// execution root). The zero value means "no rules": buildPyrightConfig then
+// applies the defaults above.
+type pythonAnalysisRules struct {
+	TypeCheckingMode string
+	Rules            map[string]any
+	// PythonVersion is the Python the apps run on; empty means defaultPythonVersion.
+	PythonVersion string
+	// UseLibraryCodeForTypes says whether the library sources are to be read
+	// for types; nil means yes, the library ships no stubs.
+	UseLibraryCodeForTypes *bool
+	// PyrightVersion is the pyright the library verified the rules with. It is
+	// only logged: basedpyright tracks pyright with a delay, and the two
+	// versions explain a diagnostic that differs from the library's CI.
+	PyrightVersion string
+}
+
+// pythonAnalysisRulesFile is the on-disk shape of pyright-rules.json, schema 1.
+type pythonAnalysisRulesFile struct {
+	SchemaVersion          int                              `json:"schemaVersion"`
+	PythonVersion          string                           `json:"pythonVersion"`
+	PyrightVersion         string                           `json:"pyrightVersion"`
+	UseLibraryCodeForTypes *bool                            `json:"useLibraryCodeForTypes"`
+	Profiles               map[string]pythonAnalysisProfile `json:"profiles"`
+}
+
+// pythonAnalysisProfile is one entry of the profiles map of pyright-rules.json.
+type pythonAnalysisProfile struct {
+	TypeCheckingMode string         `json:"typeCheckingMode"`
+	Rules            map[string]any `json:"rules"`
+}
+
+// pyrightTypeCheckingModes are the values basedpyright accepts for typeCheckingMode.
+var pyrightTypeCheckingModes = map[string]bool{"off": true, "basic": true, "standard": true, "strict": true, "recommended": true, "all": true}
+
+// pyrightRuleSeverities are the values a report* rule can take, besides a boolean:
+// pyright's four plus "hint", which basedpyright adds.
+var pyrightRuleSeverities = map[string]bool{"none": true, "hint": true, "information": true, "warning": true, "error": true}
+
+// isPythonVersion reports whether s is a pythonVersion basedpyright parses: two or
+// more dot-separated numbers, "3.13" or "3.13.2" alike.
+func isPythonVersion(s string) bool {
+	parts := strings.Split(s, ".")
+	if len(parts) < 2 {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" || strings.Trim(part, "0123456789") != "" {
+			return false
+		}
+	}
+	return true
+}
+
+// loadPythonAnalysisRules reads pyright-rules.json from the wheel extracted into
+// stubsDir and resolves the api-user profile. Any problem with the file or with
+// that profile is an error for the caller to log and fall back on: a half-applied
+// rules file would be harder to diagnose than the defaults. Only the applied
+// profile is validated, so a slip in a profile this build does not use cannot
+// degrade the editor; the library's own CI validates the file as a whole.
+func loadPythonAnalysisRules(stubsDir string) (pythonAnalysisRules, error) {
+	var rules pythonAnalysisRules
+	if stubsDir == "" {
+		return rules, errors.New("no stubs directory to read the rules from")
+	}
+	path := filepath.Join(stubsDir, filepath.FromSlash(pythonAnalysisRulesRelPath))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return rules, err
+	}
+	var file pythonAnalysisRulesFile
+	if err := json.Unmarshal(data, &file); err != nil {
+		return rules, fmt.Errorf("%s: %w", path, err)
+	}
+	if file.SchemaVersion != pythonAnalysisRulesSchemaVersion {
+		return rules, fmt.Errorf("%s: unsupported schemaVersion %d, want %d", path, file.SchemaVersion, pythonAnalysisRulesSchemaVersion)
+	}
+	if file.PythonVersion != "" && !isPythonVersion(file.PythonVersion) {
+		// Optional and unrelated to the rules: losing the whole profile over it
+		// would be out of proportion, so the default version applies instead.
+		slog.Warn("python analysis rules: ignoring malformed pythonVersion, using the default", "path", path, "pythonVersion", file.PythonVersion, "default", defaultPythonVersion)
+		file.PythonVersion = ""
+	}
+	profile, ok := file.Profiles[pythonAnalysisProfileName]
+	if !ok {
+		return rules, fmt.Errorf("%s: no %s profile", path, pythonAnalysisProfileName)
+	}
+	if !pyrightTypeCheckingModes[profile.TypeCheckingMode] {
+		return rules, fmt.Errorf("%s: profile %s has an unknown typeCheckingMode %q", path, pythonAnalysisProfileName, profile.TypeCheckingMode)
+	}
+	for name, value := range profile.Rules {
+		if !strings.HasPrefix(name, "report") {
+			return rules, fmt.Errorf("%s: profile %s: %q is not a report* rule", path, pythonAnalysisProfileName, name)
+		}
+		switch v := value.(type) {
+		case bool:
+		case string:
+			if !pyrightRuleSeverities[v] {
+				return rules, fmt.Errorf("%s: profile %s: rule %s has an unknown severity %q", path, pythonAnalysisProfileName, name, v)
+			}
+		default:
+			return rules, fmt.Errorf("%s: profile %s: rule %s has an unsupported value %v", path, pythonAnalysisProfileName, name, value)
+		}
+	}
+	return pythonAnalysisRules{
+		TypeCheckingMode:       profile.TypeCheckingMode,
+		Rules:                  profile.Rules,
+		PythonVersion:          file.PythonVersion,
+		UseLibraryCodeForTypes: file.UseLibraryCodeForTypes,
+		PyrightVersion:         file.PyrightVersion,
+	}, nil
+}
+
 // buildPyrightConfig returns the pyrightconfig.json contents for an app rooted
 // at workspaceDir, resolving the app-bricks stubs from stubsDir and the stub
-// virtual environment from venvBase.
-func buildPyrightConfig(workspaceDir, stubsDir, venvBase string) map[string]any {
-	config := map[string]any{
-		"pythonVersion":    pyrightPythonVersion,
-		"typeCheckingMode": "recommended",
+// virtual environment from venvBase, and analyzing the code the way rules asks.
+//
+// Two owners share the file. The library, through rules, decides how user code is
+// checked: the type-checking mode, the report* severities, the Python version and
+// whether its sources are read for types. The desktop decides the environment:
+// where the sources are, where the stubs are, which interpreter (none) to probe,
+// and the two rules below that only make sense knowing that environment.
+// Anything rules sets for those two is overridden, on purpose.
+func buildPyrightConfig(workspaceDir, stubsDir, venvBase string, rules pythonAnalysisRules) map[string]any {
+	mode := rules.TypeCheckingMode
+	if mode == "" {
+		mode = defaultTypeCheckingMode
+	}
+	pythonVersion := rules.PythonVersion
+	if pythonVersion == "" {
+		pythonVersion = defaultPythonVersion
+	}
+	useLibraryCodeForTypes := true
+	if rules.UseLibraryCodeForTypes != nil {
+		useLibraryCodeForTypes = *rules.UseLibraryCodeForTypes
+	}
+
+	config := map[string]any{}
+	for name, value := range rules.Rules {
+		config[name] = value
+	}
+
+	maps.Copy(config, map[string]any{
+		"pythonVersion":    pythonVersion,
+		"typeCheckingMode": mode,
 		"include":          []string{workspaceDir},
 
 		// Points at the stub venv from ensurePythonVenvStub. Both keys are
@@ -463,14 +669,17 @@ func buildPyrightConfig(workspaceDir, stubsDir, venvBase string) map[string]any 
 			{"root": filepath.Join(workspaceDir, pythonDirName)},
 		},
 
-		"useLibraryCodeForTypes":     true,
-		"reportMissingImports":       "none",
-		"reportMissingModuleSource":  "none",
-		"reportUnknownMemberType":    "none",
-		"reportUnknownArgumentType":  "none",
-		"reportUnknownParameterType": "none",
-		"reportMissingParameterType": "none",
-	}
+		// The library ships sources, not stubs, and its own dependencies are not
+		// in the stub venv: without this the arduino modules would resolve to
+		// nothing useful. The rules file states it too; the default covers
+		// wheels older than the rules.
+		"useLibraryCodeForTypes": useLibraryCodeForTypes,
+		// Environment-owned: the stub venv holds no third-party package, so
+		// unresolved imports say nothing about the user's code. The library
+		// cannot know that, hence these two are never taken from the rules.
+		"reportMissingImports":      "none",
+		"reportMissingModuleSource": "none",
+	})
 
 	// Omitted entirely rather than passed empty when there are no stubs: pyright
 	// resolves a relative extraPath against the project root, so "" would quietly
@@ -492,7 +701,16 @@ func (h *LSPHandler) initPyrightConfig(workspaceDir, stubsDir string) {
 	venvBase := GetLspWorkspacePythonVenvBase()
 	ensurePythonVenvStub(venvBase)
 
-	config := buildPyrightConfig(workspaceDir, stubsDir, venvBase)
+	rules, err := loadPythonAnalysisRules(stubsDir)
+	if err != nil {
+		runtime.LogWarningf(ctx, "python analysis rules: %v; falling back to typeCheckingMode=%s", err, defaultTypeCheckingMode)
+		rules = pythonAnalysisRules{}
+	} else {
+		runtime.LogInfof(ctx, "python analysis rules loaded from the app-bricks wheel profile=%s typeCheckingMode=%s rules=%d pythonVersion=%q pyrightVersion=%q",
+			pythonAnalysisProfileName, rules.TypeCheckingMode, len(rules.Rules), rules.PythonVersion, rules.PyrightVersion)
+	}
+
+	config := buildPyrightConfig(workspaceDir, stubsDir, venvBase, rules)
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		runtime.LogErrorf(ctx, "failed to marshal pyright config: %v", err)
@@ -501,7 +719,7 @@ func (h *LSPHandler) initPyrightConfig(workspaceDir, stubsDir string) {
 	if err := os.WriteFile(configPath, data, 0o644); err != nil {
 		runtime.LogErrorf(ctx, "failed to write pyrightconfig.json %s: %v", configPath, err)
 	} else {
-		runtime.LogInfof(ctx, "wrote pyrightconfig.json path=%s version=%s", configPath, pyrightPythonVersion)
+		runtime.LogInfof(ctx, "wrote pyrightconfig.json path=%s pythonVersion=%s typeCheckingMode=%s", configPath, config["pythonVersion"], config["typeCheckingMode"])
 	}
 }
 

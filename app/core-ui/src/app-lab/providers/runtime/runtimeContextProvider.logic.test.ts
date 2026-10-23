@@ -22,6 +22,7 @@ import { act, renderHook, RenderHookResult } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import TestProviderWrapper from '../../../../tests-setup';
+import { usePreparationDialogStore } from '../../store/preparationDialog';
 import { useRuntimeLogic } from './runtimeContextProvider.logic';
 
 const h = vi.hoisted(() => ({
@@ -72,13 +73,28 @@ const emitFailure = async (handlers: EventSourceHandlers): Promise<void> => {
   });
 };
 
+const NOT_PREPARED =
+  'app is not prepared: model "yolox" for brick "arduino:object_detection" is not installed';
+
+const emitNotPrepared = async (
+  handlers: EventSourceHandlers,
+): Promise<void> => {
+  await act(async () => {
+    handlers.onmessage?.({
+      id: '',
+      event: StreamEventType.Error,
+      data: JSON.stringify({ code: 'not_prepared', message: NOT_PREPARED }),
+    });
+  });
+};
+
 const startupSourceOf = (
   result: RenderHookResult<
     ReturnType<typeof useRuntimeLogic>,
     unknown
   >['result'],
 ): ConsoleSource | undefined =>
-  result.current.consoleLogic.consoleSources[app.id]?.[
+  result.current.consoleState.consoleSources[app.id]?.[
     CONSOLE_SOURCE_KEYS.STARTUP
   ];
 
@@ -91,6 +107,7 @@ describe('useRuntimeLogic', () => {
   beforeEach(() => {
     h.startAppHandlers.length = 0;
     h.stopAppHandlers.length = 0;
+    usePreparationDialogStore.getState().setOpen(false);
   });
 
   it('writes a run failure to the startup console on the first attempt', async () => {
@@ -141,5 +158,36 @@ describe('useRuntimeLogic', () => {
       FAILURE,
     );
     expect(startupSourceOf(result)?.style).toBe('error');
+  });
+
+  it('asks to prepare a release the board says is not prepared, then runs it', async () => {
+    const release = { ...app, release: true } as AppDetailedInfo;
+    const { result } = renderRuntime();
+
+    await act(async () => {
+      await result.current.runtimeActions.runAction(release);
+    });
+    await emitNotPrepared(h.startAppHandlers[0]);
+
+    const dialog = usePreparationDialogStore.getState();
+    expect(dialog.open).toBe(true);
+    expect(dialog.appId).toBe(app.id);
+    expect(dialog.appName).toBe(app.name);
+
+    await act(async () => {
+      dialog.onPrepared?.();
+    });
+    expect(h.startAppHandlers).toHaveLength(2);
+  });
+
+  it('does not ask to prepare an App that is not a release', async () => {
+    const { result } = renderRuntime();
+
+    await act(async () => {
+      await result.current.runtimeActions.runAction(app);
+    });
+    await emitNotPrepared(h.startAppHandlers[0]);
+
+    expect(usePreparationDialogStore.getState().open).toBe(false);
   });
 });

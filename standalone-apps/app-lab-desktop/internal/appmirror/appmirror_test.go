@@ -1,6 +1,7 @@
 package appmirror
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,30 +9,39 @@ import (
 	"time"
 )
 
-// fakeBoard records mirror→board calls; failWrites makes every WriteFile fail.
+// fakeBoard records mirror→board calls; failWrites/failPath make writes fail, silentWrites makes them lie (nil error, nothing stored).
 type fakeBoard struct {
-	writes     map[string]string
-	contents   map[string]string // board-side content per path, for the three-way checks; absent → "content"
-	dirs       []string
-	removed    []string
-	failWrites bool
-	list       []string // served by ListFiles (Populate tests)
+	writes       map[string]string
+	contents     map[string]string // board-side content per path, for the three-way checks; absent → "content"
+	dirs         []string
+	removed      []string
+	failWrites   bool
+	failPath     string
+	silentWrites bool
+	list         []string // served by ListFiles (Populate tests)
+	listErr      error    // served alongside list, for the partial-walk case
 }
 
 func newFakeBoard() *fakeBoard {
 	return &fakeBoard{writes: map[string]string{}, contents: map[string]string{}}
 }
 
-func (f *fakeBoard) ListFiles(string) ([]string, error) { return f.list, nil }
+func (f *fakeBoard) ListFiles(string) ([]string, error) { return f.list, f.listErr }
 func (f *fakeBoard) ReadFile(p string) (string, error) {
+	if c, ok := f.writes[p]; ok { // what a sync wrote is what a read-back must see
+		return c, nil
+	}
 	if c, ok := f.contents[p]; ok {
 		return c, nil
 	}
 	return "content", nil
 }
 func (f *fakeBoard) WriteFile(path, content string) error {
-	if f.failWrites {
+	if f.failWrites || path == f.failPath {
 		return os.ErrPermission
+	}
+	if f.silentWrites {
+		return nil
 	}
 	f.writes[path] = content
 	return nil
@@ -271,9 +281,12 @@ func TestReconcileRefreshesOnlyUntouchedFiles(t *testing.T) {
 		"gone.py":  contentHash([]byte("obsolete")),
 	}
 
-	next, err := Reconcile(board, "/apps/demo", local, base)
+	next, parked, err := Reconcile(board, "/apps/demo", local, base)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
+	}
+	if len(parked) != 0 {
+		t.Fatalf("nothing should be parked when the board side is unchanged: %v", parked)
 	}
 	for rel, want := range map[string]string{
 		"main.py":  "agent edit",                    // pending edit survives
@@ -296,5 +309,266 @@ func TestReconcileRefreshesOnlyUntouchedFiles(t *testing.T) {
 	}
 	if next["app.yaml"] != contentHash([]byte("user saved this in the editor")) {
 		t.Error("a refreshed file must be re-baselined to the board's content")
+	}
+}
+
+// A built-in app's checkout passes no baseline so the shipped files win: with a baseline, Reconcile preserves a
+// locally-diverged file for SyncBack to judge, and for a read-only app SyncBack never runs to judge it.
+func TestReconcileWithoutBaselineRestoresBoardContent(t *testing.T) {
+	local := t.TempDir()
+	if err := os.WriteFile(filepath.Join(local, "main.py"), []byte("agent's edit"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	board := newFakeBoard()
+	board.list = []string{"/ex/main.py"}
+	board.contents["/ex/main.py"] = "shipped"
+
+	if _, _, err := Reconcile(board, "/ex", local, nil); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(local, "main.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "shipped" {
+		t.Errorf("mirror holds %q, want the board's shipped content", got)
+	}
+}
+
+// Both sides moved since checkout: a re-checkout resolves it — board wins, the local edit is parked as
+// .claude-local, the baseline follows the board — so the next SyncBack has nothing left to push or report.
+func TestReconcileParksConflictingEditAndRebaselines(t *testing.T) {
+	local := t.TempDir()
+	writeLocal(t, local, "main.py", "agent edit")
+	board := newFakeBoard()
+	board.list = []string{"/apps/demo/main.py"}
+	board.contents["/apps/demo/main.py"] = "board rewrite"
+	base := map[string]string{"main.py": contentHash([]byte("original"))}
+
+	next, parked, err := Reconcile(board, "/apps/demo", local, base)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if len(parked) != 1 || parked[0] != "main.py" {
+		t.Fatalf("parked = %v, want [main.py]", parked)
+	}
+	if got, _ := os.ReadFile(filepath.Join(local, "main.py")); string(got) != "board rewrite" {
+		t.Errorf("real file = %q, want the board's version", got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(local, "main.py"+ParkedSuffix)); string(got) != "agent edit" {
+		t.Errorf("parked copy = %q, want the displaced local edit", got)
+	}
+	if next["main.py"] != contentHash([]byte("board rewrite")) {
+		t.Error("baseline must follow the board's content after the resolution")
+	}
+
+	res, err := SyncBack(board, "/apps/demo", local, time.Time{}, next)
+	if err != nil {
+		t.Fatalf("SyncBack: %v", err)
+	}
+	if len(res.Written) != 0 || len(res.Conflicts) != 0 {
+		t.Errorf("resolved file must be in sync: written=%v conflicts=%v", res.Written, res.Conflicts)
+	}
+}
+
+// Parked copies are mirror-local bookkeeping: SyncBack must never push one to the board or delete one from it.
+func TestSyncBackIgnoresParkedFiles(t *testing.T) {
+	local := t.TempDir()
+	writeLocal(t, local, "main.py", "code")
+	writeLocal(t, local, "main.py"+ParkedSuffix, "displaced edit")
+	board := newFakeBoard()
+	board.contents["/apps/demo/main.py"] = "code"
+	base := map[string]string{"main.py": contentHash([]byte("code"))}
+
+	res, err := SyncBack(board, "/apps/demo", local, time.Time{}, base)
+	if err != nil {
+		t.Fatalf("SyncBack: %v", err)
+	}
+	if len(board.writes) != 0 {
+		t.Errorf("a parked file was pushed to the board: %v", board.writes)
+	}
+	if len(board.removed) != 0 || len(res.Deleted) != 0 {
+		t.Errorf("a parked file triggered deletion bookkeeping: %v %v", board.removed, res.Deleted)
+	}
+	if _, tracked := res.NewBase["main.py"+ParkedSuffix]; tracked {
+		t.Errorf("a parked file entered the baseline: %v", res.NewBase)
+	}
+}
+
+// A write that returns nil but doesn't persist must fail the sync and leave the baseline alone: advancing it
+// would mark the file "in sync" forever — never re-pushed, and reverted by the next Reconcile.
+func TestSyncBackDetectsSilentWriteFailure(t *testing.T) {
+	local := t.TempDir()
+	writeLocal(t, local, "main.py", "edited")
+	board := newFakeBoard()
+	board.silentWrites = true
+	board.contents["/apps/demo/main.py"] = "code" // the stale copy the lying write never replaced
+	base := map[string]string{"main.py": contentHash([]byte("code"))}
+
+	res, err := SyncBack(board, "/apps/demo", local, time.Time{}, base)
+	if err == nil || !strings.Contains(err.Error(), "did not persist") {
+		t.Fatalf("want a did-not-persist error, got %v", err)
+	}
+	if res.NewBase["main.py"] != base["main.py"] {
+		t.Fatalf("baseline advanced for an unverified write: %v", res.NewBase)
+	}
+}
+
+// A per-file failure must not strand the rest of the run: later files still land and keep their verified
+// baseline advances, and the failed file alone is re-pushed on retry — never misread as a conflict.
+func TestSyncBackKeepsVerifiedAdvancesOnMidRunFailure(t *testing.T) {
+	local := t.TempDir()
+	writeLocal(t, local, "a.py", "a edited")
+	writeLocal(t, local, "b.py", "b edited")
+	board := newFakeBoard()
+	board.failPath = "/apps/demo/a.py" // fails first; b.py must still be pushed
+	board.contents["/apps/demo/a.py"] = "a orig"
+	board.contents["/apps/demo/b.py"] = "b orig"
+	base := map[string]string{"a.py": contentHash([]byte("a orig")), "b.py": contentHash([]byte("b orig"))}
+
+	res, err := SyncBack(board, "/apps/demo", local, time.Time{}, base)
+	if err == nil {
+		t.Fatal("want error from the failing write")
+	}
+	if board.writes["/apps/demo/b.py"] != "b edited" {
+		t.Fatalf("a failure must not strand later files: %v", board.writes)
+	}
+	if res.NewBase["b.py"] != contentHash([]byte("b edited")) {
+		t.Fatalf("a verified write lost its baseline advance: %v", res.NewBase)
+	}
+	if res.NewBase["a.py"] != base["a.py"] {
+		t.Fatalf("the failed write must keep its old baseline: %v", res.NewBase)
+	}
+
+	board.failPath = ""
+	res2, err := SyncBack(board, "/apps/demo", local, time.Time{}, res.NewBase)
+	if err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if len(res2.Conflicts) != 0 {
+		t.Fatalf("retry misreported already-synced files as conflicts: %v", res2.Conflicts)
+	}
+	if len(res2.Written) != 1 || res2.Written[0] != "/apps/demo/a.py" {
+		t.Fatalf("retry must push only the failed file, wrote %v", res2.Written)
+	}
+}
+
+// Deleted locally while the board changed since checkout: the board copy is restored, nothing to park.
+func TestReconcileRestoresBoardCopyWhenLocalDeleted(t *testing.T) {
+	local := t.TempDir()
+	board := newFakeBoard()
+	board.list = []string{"/apps/demo/main.py"}
+	board.contents["/apps/demo/main.py"] = "board rewrite"
+	base := map[string]string{"main.py": contentHash([]byte("original"))}
+
+	next, parked, err := Reconcile(board, "/apps/demo", local, base)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if len(parked) != 0 {
+		t.Fatalf("a deleted file leaves nothing to park: %v", parked)
+	}
+	if got, err := os.ReadFile(filepath.Join(local, "main.py")); err != nil || string(got) != "board rewrite" {
+		t.Errorf("board copy not restored: %q (%v)", got, err)
+	}
+	if next["main.py"] != contentHash([]byte("board rewrite")) {
+		t.Error("baseline must follow the restored board content")
+	}
+}
+
+// Turn-end cleanup removes the parked copies (same-turn buffers) and touches nothing else.
+func TestRemoveParkedLeavesRealFiles(t *testing.T) {
+	local := t.TempDir()
+	writeLocal(t, local, "main.py", "code")
+	writeLocal(t, local, "main.py"+ParkedSuffix, "displaced edit")
+	writeLocal(t, local, "sub/app.yaml", "y")
+	writeLocal(t, local, "sub/app.yaml"+ParkedSuffix, "old y")
+
+	RemoveParked(local)
+
+	for _, rel := range []string{"main.py", "sub/app.yaml"} {
+		if _, err := os.Stat(filepath.Join(local, filepath.FromSlash(rel))); err != nil {
+			t.Errorf("real file %s touched by cleanup: %v", rel, err)
+		}
+		if _, err := os.Stat(filepath.Join(local, filepath.FromSlash(rel)+ParkedSuffix)); !os.IsNotExist(err) {
+			t.Errorf("parked copy %s not removed (err=%v)", rel+ParkedSuffix, err)
+		}
+	}
+}
+
+func TestReconcileParksUntrackedEdits(t *testing.T) {
+	local := t.TempDir()
+	writeLocal(t, local, "main.py", "stranded agent edit")
+	board := newFakeBoard()
+	board.list = []string{"/apps/demo/main.py"}
+	board.contents["/apps/demo/main.py"] = "board content"
+
+	// Empty non-nil base = a reattached mirror: the stranded edit is parked, never silently overwritten.
+	next, parked, err := Reconcile(board, "/apps/demo", local, map[string]string{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if len(parked) != 1 || parked[0] != "main.py" {
+		t.Fatalf("parked = %v, want [main.py]", parked)
+	}
+	if got, _ := os.ReadFile(filepath.Join(local, "main.py")); string(got) != "board content" {
+		t.Errorf("real file = %q, want the board's version", got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(local, "main.py"+ParkedSuffix)); string(got) != "stranded agent edit" {
+		t.Errorf("parked copy = %q, want the stranded edit", got)
+	}
+	if next["main.py"] != contentHash([]byte("board content")) {
+		t.Error("baseline must track the restored board content")
+	}
+
+	// nil base is the read-only restore: same difference, deliberately no parking.
+	writeLocal(t, local, "main.py", "stranded agent edit")
+	_ = os.Remove(filepath.Join(local, "main.py"+ParkedSuffix))
+	if _, parked, err := Reconcile(board, "/apps/demo", local, nil); err != nil || len(parked) != 0 {
+		t.Fatalf("nil-base reconcile: parked=%v err=%v, want no parking", parked, err)
+	}
+}
+
+// partialList is what a walk that lost a subtree looks like across the BoardFS seam (fs.UnreadableDirsError).
+type partialList struct{ dirs []string }
+
+func (e partialList) Error() string             { return "could not list: " + strings.Join(e.dirs, ", ") }
+func (e partialList) UnreadablePaths() []string { return e.dirs }
+
+// One folder the board won't let us list (a root-owned .venv, say) used to fail the whole checkout, leaving the
+// agent with no mirror at all. The rest of the app is mirrored instead, and the missing paths stay out of the
+// baseline, so SyncBack neither pushes nor deletes them.
+func TestPopulateMirrorsWhatTheWalkCouldRead(t *testing.T) {
+	local := t.TempDir()
+	board := newFakeBoard()
+	board.list = []string{"/apps/demo/app.yaml", "/apps/demo/main.py"}
+	board.listErr = partialList{dirs: []string{"/apps/demo/.venv"}}
+
+	base, err := Populate(board, "/apps/demo", local)
+	if err != nil {
+		t.Fatalf("a partial walk must still check the app out: %v", err)
+	}
+	for _, rel := range []string{"app.yaml", "main.py"} {
+		if base[rel] == "" {
+			t.Errorf("baseline missing %q: %v", rel, base)
+		}
+		if _, err := os.Stat(filepath.Join(local, rel)); err != nil {
+			t.Errorf("%q not mirrored: %v", rel, err)
+		}
+	}
+	if _, ok := base[".venv/pyvenv.cfg"]; ok {
+		t.Error("the unreadable subtree must not appear in the baseline")
+	}
+}
+
+// A connection that failed outright is still fatal: an empty listing there would mirror an empty app and let
+// SyncBack read every board file as deleted.
+func TestPopulateFailsWhenTheWalkFailed(t *testing.T) {
+	board := newFakeBoard()
+	board.listErr = errors.New("ssh: rejected: connect failed (open failed)")
+
+	if _, err := Populate(board, "/apps/demo", t.TempDir()); err == nil {
+		t.Fatal("want an error when the board could not be walked at all")
 	}
 }

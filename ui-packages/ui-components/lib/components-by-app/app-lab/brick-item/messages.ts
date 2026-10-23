@@ -12,11 +12,6 @@ export const messages = defineMessages({
     defaultMessage: 'Rename',
     description: 'Label for the context menu item to rename a brick',
   },
-  addBrickLabel: {
-    id: 'brickItem.addBrickLabel',
-    defaultMessage: 'Add Brick',
-    description: 'Label for the context menu item to add a new brick',
-  },
   missingConfigTooltip: {
     id: 'brickItem.missingConfigTooltip',
     defaultMessage: 'Missing configuration files',

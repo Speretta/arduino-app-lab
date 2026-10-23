@@ -1,9 +1,9 @@
 ---
 name: "@react-aria/progress"
-version: 3.4.19
+version: 3.5.1
 type: npm
 summary: Spectrum UI components in React
-homepage: 
+homepage:
 license: apache-2.0
 licenses:
 - sources: LICENSE

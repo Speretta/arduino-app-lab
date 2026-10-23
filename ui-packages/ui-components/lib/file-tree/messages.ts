@@ -1,24 +1,9 @@
 import { defineMessages } from 'react-intl';
 
 export const messages = defineMessages({
-  nameLabel: {
-    id: 'fileTree.name',
-    defaultMessage: 'Name',
-    description: 'Label for the name column of the file tree',
-  },
-  sizeLabel: {
-    id: 'fileTree.size',
-    defaultMessage: 'Size',
-    description: 'Label for the size column of the file tree',
-  },
-  modifiedAtLabel: {
-    id: 'fileTree.modifiedAt',
-    defaultMessage: 'Date Modified',
-    description: 'Label for the date column of the file tree',
-  },
   createFile: {
     id: 'fileTree.createFile',
-    defaultMessage: 'Create file',
+    defaultMessage: 'Create new file',
     description: 'Context menu item for creating a new file in the file tree',
   },
   createFolder: {
@@ -28,13 +13,34 @@ export const messages = defineMessages({
   },
   importFile: {
     id: 'fileTree.importFile',
-    defaultMessage: 'Import File',
+    defaultMessage: 'Import file',
     description: 'Context menu item for importing a file in the file tree',
   },
   importFolder: {
     id: 'fileTree.importFolder',
-    defaultMessage: 'Import Folder',
+    defaultMessage: 'Import folder',
     description: 'Context menu item for importing a folder in the file tree',
+  },
+  addSketchFolder: {
+    id: 'fileTree.addSketchFolder',
+    defaultMessage: 'Add sketch folder',
+    description:
+      'Context menu item that creates the sketch folder with sketch.ino and sketch.yaml',
+  },
+  addSketchLibrary: {
+    id: 'fileTree.addSketchLibrary',
+    defaultMessage: 'Add sketch library',
+    description: 'Context menu item that opens the add sketch library dialog',
+  },
+  addBrick: {
+    id: 'fileTree.addBrick',
+    defaultMessage: 'Add Brick',
+    description: 'Context menu item that opens the add Brick dialog',
+  },
+  createBrick: {
+    id: 'fileTree.createBrick',
+    defaultMessage: 'Create new Brick',
+    description: 'Context menu item that opens the create Brick dialog',
   },
   rename: {
     id: 'fileTree.rename',
@@ -47,12 +53,5 @@ export const messages = defineMessages({
     defaultMessage: 'Delete',
     description:
       'Context menu item for deleting a file or folder in the file tree',
-  },
-  invalidCharactersInName: {
-    id: 'fileTree.invalidCharactersInName',
-    defaultMessage:
-      'Invalid name. Can\'t contain $ ` / \\ < > : " | ? *, end with a dot or space.',
-    description:
-      'Tooltip on the file tree rename/create input when the typed name is not allowed',
   },
 });

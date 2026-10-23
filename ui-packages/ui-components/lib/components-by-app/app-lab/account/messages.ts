@@ -3,12 +3,7 @@ import { defineMessages } from 'react-intl';
 export const messages = defineMessages({
   title: {
     id: 'app.account.title',
-    defaultMessage: 'Arduino Account',
-    description: 'Title for the login form',
-  },
-  setupTitle: {
-    id: 'app.account.setupTitle',
-    defaultMessage: 'Sign in with Arduino to access all App Lab features.',
+    defaultMessage: 'Arduino account',
     description: 'Title for the login form',
   },
   subtitle: {
@@ -24,40 +19,40 @@ export const messages = defineMessages({
   },
   customAiModels: {
     id: 'app.account.customAiModels',
-    defaultMessage: 'AI Models training with Edge Impulse',
+    defaultMessage: 'Custom AI Models with Edge Impulse',
     description:
       'Description for the custom AI models feature on the login form',
   },
   arduinoCloud: {
     id: 'app.account.arduinoCloud',
-    defaultMessage: 'Arduino Cloud integration',
+    defaultMessage: 'Arduino Cloud',
     description:
       'Description for the Arduino Cloud integration feature on the login form',
   },
   connectedBoards: {
     id: 'app.account.connectedBoards',
-    defaultMessage: 'Publish your project to Project Hub in one click',
+    defaultMessage: 'All your boards are connected to your account',
     description:
       'Description for the connected boards feature on the login form',
   },
   signInButton: {
     id: 'app.account.signInButton',
-    defaultMessage: 'Sign In with Arduino',
+    defaultMessage: 'Sign in with Arduino',
     description: 'Text for the sign in button on the login form',
   },
   logoutLabel: {
     id: 'app.account.logoutLabel',
-    defaultMessage: 'Log Out',
+    defaultMessage: 'Log out',
     description: 'Text for the log out button on the login form',
   },
   personalInfo: {
     id: 'app.account.personalInfo',
-    defaultMessage: 'Personal Information',
+    defaultMessage: 'Personal information',
     description: 'Title for the personal information section',
   },
   fullNameLabel: {
     id: 'app.account.fullNameLabel',
-    defaultMessage: 'Full Name',
+    defaultMessage: 'Full name',
     description: 'Label for the full name field',
   },
   emailLabel: {

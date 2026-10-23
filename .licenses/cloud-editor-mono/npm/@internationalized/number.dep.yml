@@ -1,9 +1,9 @@
 ---
 name: "@internationalized/number"
-version: 3.6.0
+version: 3.6.8
 type: npm
 summary: Internationalized number formatting and parsing utilities
-homepage: 
+homepage:
 license: apache-2.0
 licenses:
 - sources: LICENSE

@@ -3,6 +3,7 @@ import {
   CreateAppDialogLogic,
   DeleteAppDialogLogic,
   ExportAppDialogLogic,
+  ReleaseInfoDialogLogic,
   RenameAppDialogLogic,
   SnackbarProps,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
@@ -12,6 +13,9 @@ export interface AppActions {
   onRename: (app: AppInfo) => void;
   onDuplicate: (app: AppInfo) => void;
   onExport: (app: AppInfo) => void;
+  onCreateRelease: (app: AppInfo) => void;
+  createReleaseDisabledReason: (app: AppInfo) => string | undefined;
+  onReleaseInfo: (app: AppInfo) => void;
   onSetAsDefault: (app: AppInfo) => void;
   onDelete: (app: AppInfo) => void;
 }
@@ -22,12 +26,14 @@ export interface UseAppListLogic {
   openCreateAppDialog: () => void;
   openImportAppDialog: () => void;
   importedAppId?: string;
+  resetImportedAppId: () => void;
   sendNotification: (props: Omit<SnackbarProps, 'onClose' | 'toastId'>) => void;
   appActions: AppActions;
   deleteAppDialogLogic: DeleteAppDialogLogic;
   duplicateAppDialogLogic: CreateAppDialogLogic;
   renameAppDialogLogic: RenameAppDialogLogic;
   exportAppDialogLogic: ExportAppDialogLogic;
+  releaseInfoDialogLogic: ReleaseInfoDialogLogic;
   defaultApp?: AppInfo;
   handleAppClick: (appId: string, e?: React.MouseEvent) => void;
 }

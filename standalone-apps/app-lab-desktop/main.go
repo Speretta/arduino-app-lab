@@ -2,9 +2,11 @@ package main
 
 import (
 	"app-lab-desktop/internal/app"
+	"app-lab-desktop/internal/instance"
 	"app-lab-desktop/internal/learn"
 	"embed"
 	"fmt"
+	"os"
 	"runtime"
 
 	"github.com/wailsapp/wails/v2"
@@ -12,6 +14,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
 var (
@@ -19,6 +22,10 @@ var (
 	assets  embed.FS
 	version = "0.0.0-dev"
 )
+
+// singleInstanceID names both App Lab's own instance lock and Wails' D-Bus
+// single-instance service, so a second launch can forward its arguments.
+const singleInstanceID = "56b1104f-fc4f-4f31-91c6-6447c01338a4"
 
 func main() {
 
@@ -30,6 +37,10 @@ func main() {
 	// enabled cuts scroll CPU roughly in half on the Arduino SBCs. The variable
 	// is no longer set here, so it can still be exported externally to
 	// A/B the renderer without a rebuild.
+
+	if !instance.Claim(singleInstanceID) {
+		os.Exit(0)
+	}
 
 	learnSvc := learn.New()
 
@@ -55,6 +66,9 @@ func main() {
 		},
 		Linux: &linux.Options{
 			WebviewGpuPolicy: linux.WebviewGpuPolicyAlways,
+		},
+		Windows: &windows.Options{
+			IsZoomControlEnabled: true,
 		},
 		WindowStartState: options.Maximised,
 		Mac: &mac.Options{
@@ -89,7 +103,7 @@ func main() {
 func getInstanceLockOptions(app *app.App) *options.SingleInstanceLock {
 	if runtime.GOOS != "darwin" {
 		return &options.SingleInstanceLock{
-			UniqueId:               "56b1104f-fc4f-4f31-91c6-6447c01338a4",
+			UniqueId:               singleInstanceID,
 			OnSecondInstanceLaunch: app.HandleSecondInstanceLaunch,
 		}
 	}

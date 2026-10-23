@@ -13,10 +13,11 @@
   right: 31px;
   bottom: 31px;
   border-radius: 4px;
-  border: 1px solid #c9d2d2;
+  border: 1px solid var(--border-default);
   gap: 14px;
 
-  background: #fff;
+  background: var(--surface-bg-above);
+  color: var(--text-default);
 
   box-shadow: 0px 4px 20px 0px rgba(0, 0, 0, 0.25);
 }
@@ -57,6 +58,6 @@
   gap: 10px;
 
   &.gen-ai-banner-button-hide {
-    color: #7f8c8d;
+    color: var(--text-subtle);
   }
 }

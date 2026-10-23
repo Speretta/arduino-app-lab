@@ -3,7 +3,7 @@ import { defineMessages } from 'react-intl';
 export const messages = defineMessages({
   notConnected: {
     id: 'appLabFooterBar.boardSelection.notConnected',
-    defaultMessage: 'Board not Connected',
+    defaultMessage: 'Board not connected',
     description: 'Label shown when no board is connected',
   },
   switchBoardDropdownButton: {

@@ -183,7 +183,7 @@ $roboto-mono-font-family: "Roboto Mono", "monospace", "Courier New", "Lucida Con
 .link {
   @extend %arduino-typography-x-small-strong;
 
-  color: shared.theme-var(--button-secondary-label);
+  color: var(--text-link);
   text-decoration: none;
 
   &:focus,

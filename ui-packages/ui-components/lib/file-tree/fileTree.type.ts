@@ -3,7 +3,6 @@ import { NodeApi } from 'react-arborist';
 export interface BaseNode {
   name: string;
   path: string;
-  size?: number;
   createdAt?: string;
   modifiedAt?: string;
 }
@@ -16,7 +15,8 @@ export interface FileNode extends BaseNode {
 
 export interface FolderNode extends BaseNode {
   type: 'folder';
-  children: TreeNode[];
+  // null when folder content has not been listed yet
+  children: TreeNode[] | null;
 }
 
 export type TreeNode = FileNode | FolderNode;

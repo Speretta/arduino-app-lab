@@ -13,7 +13,7 @@ export const messages = defineMessages({
   },
   computerVisionTitle: {
     id: 'examples.computerVisionTitle',
-    defaultMessage: 'AI · Computer Vision',
+    defaultMessage: 'AI · Computer vision',
     description: 'Title of the Computer Vision brick examples section',
   },
   computerVisionDescription: {
@@ -24,7 +24,7 @@ export const messages = defineMessages({
   },
   audioTitle: {
     id: 'examples.audioTitle',
-    defaultMessage: 'AI · Audio & Sound',
+    defaultMessage: 'AI · Audio & sound',
     description: 'Title of the Audio & Sound brick examples section',
   },
   audioDescription: {
@@ -34,7 +34,7 @@ export const messages = defineMessages({
   },
   languageTitle: {
     id: 'examples.languageTitle',
-    defaultMessage: 'AI · Language & Text',
+    defaultMessage: 'AI · Language & text',
     description: 'Title of the Language & Text brick examples section',
   },
   languageDescription: {
@@ -44,7 +44,7 @@ export const messages = defineMessages({
   },
   connectivityTitle: {
     id: 'examples.connectivityTitle',
-    defaultMessage: 'Connectivity, Cloud & Data',
+    defaultMessage: 'Connectivity, cloud & data',
     description:
       'Title of the Connectivity, Cloud & Data brick examples section',
   },
@@ -56,12 +56,12 @@ export const messages = defineMessages({
   },
   userInterfaceTitle: {
     id: 'examples.userInterfaceTitle',
-    defaultMessage: 'User Interface',
+    defaultMessage: 'User interface',
     description: 'Title of the User Interface brick examples section',
   },
   userInterfaceDescription: {
     id: 'examples.userInterfaceDescription',
-    defaultMessage: 'Web interfaces to control your app.',
+    defaultMessage: 'Web interfaces to control your App.',
     description: 'Description of the User Interface brick examples section',
   },
   otherTitle: {
@@ -71,7 +71,7 @@ export const messages = defineMessages({
   },
   otherDescription: {
     id: 'examples.otherDescription',
-    defaultMessage: 'Assorted bricks for everything else.',
+    defaultMessage: 'Assorted Bricks for everything else.',
     description: 'Description of the fallback section for uncategorized bricks',
   },
 });

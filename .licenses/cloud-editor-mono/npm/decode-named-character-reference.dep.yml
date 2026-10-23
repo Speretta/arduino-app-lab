@@ -1,9 +1,9 @@
 ---
 name: decode-named-character-reference
-version: 1.1.0
+version: 1.3.0
 type: npm
 summary: Decode named character references
-homepage: 
+homepage:
 license: mit
 licenses:
 - sources: license

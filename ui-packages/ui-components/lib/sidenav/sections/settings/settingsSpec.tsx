@@ -20,7 +20,7 @@ import {
 const settingsItemsDictionary: SettingsItemRecord = {
   [SettingsItemId.Appearance]: {
     Icon: AppearanceIcon,
-    label: messages.appearenceLabel,
+    label: messages.appearanceLabel,
   },
   [SettingsItemId.Sketch]: {
     Icon: SketchIcon,

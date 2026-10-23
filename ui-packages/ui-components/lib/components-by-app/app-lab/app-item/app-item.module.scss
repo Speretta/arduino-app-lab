@@ -178,7 +178,9 @@ $skeleton-opacity: 0.1 !default;
   }
 
   &-description {
-    flex: 1;
+    // Must not grow: line-clamp only adds the ellipsis, and a box taller than
+    // three lines still paints the lines after it.
+    flex: 0 0 auto;
     color: var(--text-subtle, #c9d2d2);
     font-family: typography.$open-sans-font-family;
     line-height: 160%;
@@ -186,6 +188,7 @@ $skeleton-opacity: 0.1 !default;
     font-size: 12px;
 
     display: -webkit-box;
+    line-clamp: 3;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
@@ -217,7 +220,7 @@ $skeleton-opacity: 0.1 !default;
 
 .context-menu-content {
   background: var(--component-bg-above, #374146);
-  border-radius: 4px;
+  border-radius: 8px;
   width: 232px;
   padding: 4px;
   z-index: 1000;
@@ -228,7 +231,7 @@ $skeleton-opacity: 0.1 !default;
   align-items: center;
   color: var(--text-default, #fff);
   width: 100%;
-  height: 36px;
+  height: 28px;
   gap: 10px;
   border-radius: 4px;
   padding: 0 8px;
@@ -247,12 +250,16 @@ $skeleton-opacity: 0.1 !default;
 
   &.danger {
     color: var(--feedback-error-default, #ff8878);
+  }
+
+  &.danger,
+  &.divider {
     border-top: 1px solid var(--grayscale-dust, #434f54);
   }
 }
 
 .context-menu-icon {
-  width: 20px;
+  width: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -288,13 +295,13 @@ $skeleton-opacity: 0.1 !default;
 .dropdownMenu {
   background: var(--component-bg-above, #374146);
   margin-top: 4px;
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 4px;
   width: 232px;
 
   .dropdownMenuList ul:not(:nth-child(2)) .dropdownMenuItem {
     color: white;
-    height: 36px;
+    height: 28px;
     padding: 0 8px;
     border-radius: 4px;
     background-color: transparent;
@@ -327,6 +334,10 @@ $skeleton-opacity: 0.1 !default;
         fill: var(--feedback-error-default, #ff8878);
       }
     }
+
+    &.divider {
+      border-top: 1px solid var(--grayscale-dust, #434f54);
+    }
   }
 
   .dropdownMenuList ul:nth-child(2) {
@@ -335,7 +346,7 @@ $skeleton-opacity: 0.1 !default;
     }
 
     .dropdownMenuItem {
-      height: 36px;
+      height: 28px;
       background: none !important;
       padding: 0 8px;
 
@@ -354,13 +365,19 @@ $skeleton-opacity: 0.1 !default;
         flex-direction: column;
         width: 100%;
 
+        &-divider {
+          border-top: 1px solid var(--grayscale-dust, #434f54);
+          margin: 0 -4px;
+          width: calc(100% + 8px);
+        }
+
         &-title {
           display: flex;
           color: white;
           align-items: center;
           gap: 10px;
           width: 100%;
-          height: 36px;
+          height: 28px;
 
           // no margin rule here: it also matched the leading icon (the only child
           // of its own box) and knocked it off-centre. .default-app-toggle pushes
@@ -408,4 +425,21 @@ $skeleton-opacity: 0.1 !default;
       outline-offset: 2px;
     }
   }
+}
+
+.release {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  margin-top: auto;
+}
+
+.release-date {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-family: typography.$open-sans-font-family;
+  font-size: 10px;
+  line-height: 160%;
+  color: var(--text-subtle);
 }

@@ -34,9 +34,7 @@ const EditorStatus: React.FC<EditorStatusProps> = (
             <Text size={TextSize.XSmall}> {editorStatus.label} </Text>
           ) : null}
         </div>
-        {editorStatus?.tooltip
-          ? renderTooltip(styles['editor-notifications-tooltip'])
-          : null}
+        {editorStatus?.tooltip ? renderTooltip() : null}
       </div>
     ) : null;
   };

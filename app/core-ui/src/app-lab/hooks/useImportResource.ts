@@ -4,7 +4,6 @@ import {
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import { BOARD_STORAGE_FULL_ERROR } from '@cloud-editor-mono/infrastructure';
 import {
-  checkForDuplicates,
   importResourceDialogMessages,
   ImportResourceLogic,
   ImportStatus,
@@ -14,6 +13,9 @@ import {
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
+
+export const baseName = (path: string): string =>
+  path.split(/[/\\]/).pop() || '';
 
 const createSuccessfulImportMessage = (resourceName: string): string =>
   resourceName
@@ -31,9 +33,10 @@ export const useImportResource = (
     importResourceFromPath,
     type,
     invalidateQueries,
-    nodes = [],
+    checkPathConflict,
     targetFolderPath = '',
     onDuplicateConflict,
+    claimPaths,
   } = props;
 
   const { formatMessage } = useI18n();
@@ -111,15 +114,16 @@ export const useImportResource = (
 
   const processImportPath = useCallback(
     async (path: string, isFolder: boolean) => {
-      const fileName = path.split(/[/\\]/).pop() || '';
+      const fileName = baseName(path);
       const targetPath = targetFolderPath
         ? `${targetFolderPath}/${fileName}`
         : fileName;
 
       const actualType = isFolder ? 'folder' : 'file';
-      if (nodes.length > 0 && onDuplicateConflict) {
-        const { hasDuplicate, conflictType } = checkForDuplicates(
-          nodes,
+      if (checkPathConflict && onDuplicateConflict) {
+        // A failed check aborts the import: it is the only thing standing
+        // between an existing file and being overwritten.
+        const { hasDuplicate, conflictType } = await checkPathConflict(
           targetPath,
           actualType,
         );
@@ -137,7 +141,12 @@ export const useImportResource = (
       }
       await handleImportFromPath({ filePath: path, isFolder });
     },
-    [nodes, targetFolderPath, onDuplicateConflict, handleImportFromPath],
+    [
+      checkPathConflict,
+      targetFolderPath,
+      onDuplicateConflict,
+      handleImportFromPath,
+    ],
   );
 
   useEffect(() => {
@@ -145,6 +154,7 @@ export const useImportResource = (
       async (items: { path: string; isFolder: boolean }[]) => {
         if (items && items.length > 0) {
           setImportResourceDialogOpen(true);
+          if (claimPaths?.(items)) return;
           try {
             for (const { path, isFolder } of items) {
               await processImportPath(path, isFolder);
@@ -161,7 +171,7 @@ export const useImportResource = (
     return () => {
       unsubscribe();
     };
-  }, [processImportPath, closeDialog, setImportResourceDialogOpen]);
+  }, [processImportPath, closeDialog, setImportResourceDialogOpen, claimPaths]);
 
   const startImport = useCallback(async () => {
     if (!selectResourcePath) return;
@@ -173,16 +183,21 @@ export const useImportResource = (
       ? selectedResult
       : [selectedResult];
 
+    const isFolder = type === 'folder';
+    if (claimPaths?.(pathsToProcess.map((path) => ({ path, isFolder })))) {
+      return;
+    }
+
     try {
       for (const path of pathsToProcess) {
-        await processImportPath(path, type === 'folder');
+        await processImportPath(path, isFolder);
       }
 
       closeDialog();
     } catch (error) {
       console.error(error);
     }
-  }, [selectResourcePath, closeDialog, processImportPath]);
+  }, [selectResourcePath, closeDialog, processImportPath, type, claimPaths]);
 
   const handleOpenChange = useCallback(
     (open: boolean) => {

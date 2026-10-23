@@ -257,6 +257,15 @@
           left: -30%;
           animation: slide 1s linear infinite;
         }
+
+        // Once the update reports a percentage the bar fills to it: the width
+        // comes from the inline style, the sliding animation stops.
+        &.determinate .indicator {
+          width: 0;
+          left: 0;
+          animation: none;
+          transition: width 0.3s ease-out;
+        }
       }
 
       .progress {
@@ -265,6 +274,11 @@
         gap: 8px;
         padding: 11px 0 14px;
         width: 100%;
+
+        .percentage {
+          margin-left: auto;
+          white-space: nowrap;
+        }
       }
     }
 

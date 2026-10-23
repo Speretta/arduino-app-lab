@@ -17,16 +17,16 @@ import {
 let isInitialized = false;
 let isEnabled = false;
 
-// Enrich the window object with analytics services.
+// Enrich the window object with analytics services. @bcmi-labs/art-auth
+// declares the same globals, and TypeScript rejects a redeclaration whose type
+// or modifiers differ, so these must match its declaration.
 declare global {
   interface Window extends Record<string, unknown> {
-    dataLayer: {
-      push: (event: Record<string, unknown>) => void;
-    };
-    arduinoCookieSolution: {
+    dataLayer?: Array<Record<string, unknown>>;
+    arduinoCookieSolution?: {
       initCookieConsent: (isAdult: boolean) => void;
     };
-    _iub: {
+    _iub?: {
       cs: {
         consent: {
           purposes: { [key: string]: boolean };
@@ -34,7 +34,7 @@ declare global {
       };
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    analytics: any;
+    analytics?: any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     profitwell: (event: string, data: any) => void;
   }
@@ -156,7 +156,7 @@ async function initCookieSolution(profile: ArduinoUser): Promise<void> {
     profile[USER_CLAIM_IS_MINOR] === undefined
       ? false
       : !profile[USER_CLAIM_IS_MINOR];
-  window.arduinoCookieSolution.initCookieConsent(coppa);
+  window.arduinoCookieSolution?.initCookieConsent(coppa);
 }
 
 /**

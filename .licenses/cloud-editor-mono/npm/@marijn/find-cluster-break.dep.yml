@@ -1,9 +1,9 @@
 ---
 name: "@marijn/find-cluster-break"
-version: 1.0.2
+version: 1.0.4
 type: npm
 summary: Find the position of grapheme cluster breaks in a string
-homepage: https://github.com/marijnh/find-cluster-break#readme
+homepage: https://code.haverbeke.berlin/marijn/find-cluster-break
 license: mit
 licenses:
 - sources: LICENSE

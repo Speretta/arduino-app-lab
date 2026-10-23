@@ -19,7 +19,7 @@ import {
   useSplitDragPointer,
 } from './SplitDragContext';
 
-const PAYLOAD: SplitDragPayload = { fileId: 'file-a', originPane: 'A' };
+const PAYLOAD: SplitDragPayload = { fileId: 'file-a', originPanel: 'A' };
 
 /** Trigger element whose hit-box is the (0,0)-(100,100) square. */
 function makeTriggerEl(): HTMLElement {

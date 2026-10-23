@@ -1,9 +1,9 @@
 ---
 name: style-mod
-version: 4.1.2
+version: 4.1.3
 type: npm
 summary: A minimal CSS module shim
-homepage: 
+homepage:
 license: mit
 licenses:
 - sources: LICENSE

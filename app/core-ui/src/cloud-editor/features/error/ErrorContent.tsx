@@ -1,8 +1,8 @@
+import { Button } from '@bcmi-labs/art-ui/components';
 import { Config } from '@cloud-editor-mono/common';
 import { isPlayStoreApp } from '@cloud-editor-mono/domain';
 import { StatusError } from '@cloud-editor-mono/images/assets/icons';
 import {
-  Button,
   Large,
   Link,
   Small,
@@ -43,12 +43,12 @@ const ErrorContent: React.FC<ErrorContentProps> = (
         <Small className={styles.message}>
           {formatMessage(messages.helpMessage)}
         </Small>
-        <Button classes={{ button: styles.button }} onClick={onClickCopyError}>
+        <Button className={styles.button} onClick={onClickCopyError}>
           {formatMessage(messages.copyError)}
         </Button>
         <hr className={styles.divider} />
         {!isPlayStoreApp() ? (
-          <XSmall>
+          <XSmall className={styles.message}>
             {formatMessage(messages.needHelpMessage, { getInTouchLink })}
           </XSmall>
         ) : undefined}

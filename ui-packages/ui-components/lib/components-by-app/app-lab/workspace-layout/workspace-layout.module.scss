@@ -8,12 +8,24 @@
   }
 }
 
+// `react-resizable-panels` renders `div[data-panel]` with an inline `height: auto` around an inner
+// div that takes this class and has `flex-grow: 1` but no height. `height: 100%` makes that height
+// definite, so the editor inside does not need an intrinsic-height pass. The used height does not
+// change: `flex-grow: 1` already stretched the inner div to it. The outer `div[data-panel]` gets its
+// height from `public/index.scss`.
 .panel {
+  height: 100%;
+
   &-left {
-    height: 100%;
     z-index: 1;
   }
   &-editor {
+    overflow: hidden !important;
+  }
+  &-main {
+    overflow: hidden !important;
+  }
+  &-references {
     overflow: hidden !important;
   }
 }
@@ -27,9 +39,10 @@
     width: 1px;
   }
   &[aria-orientation="horizontal"] {
-    height: 1px
+    height: 1px;
   }
-  &[data-separator="active"], &[data-separator="hover"] {
+  &[data-separator="active"],
+  &[data-separator="hover"] {
     background-color: var(--border-accent, #25c2c7);
   }
 }

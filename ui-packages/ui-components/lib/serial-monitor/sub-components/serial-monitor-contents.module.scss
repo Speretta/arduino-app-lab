@@ -20,18 +20,30 @@ $serialMonitorUnavailableMargin: 20px;
 }
 
 @mixin arrow {
+    position: relative;
     border: none;
     height: 40px;
     width: 40px;
     background-color: transparent;
-    background-image: url(css-images.$arrowUp);
-    background-repeat: no-repeat;
-    background-position: center;
     border-radius: 50%;
+
+    // Masked rather than drawn as a background image: the glyph is a single-colour data URI, so only a mask can tint it with the current text colour.
+    &::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-color: currentColor;
+        mask-image: url("#{css-images.$arrowUp}");
+        mask-repeat: no-repeat;
+        mask-position: center;
+        -webkit-mask-image: url("#{css-images.$arrowUp}");
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+    }
 
     &:hover {
         cursor: pointer;
-        background-color: #ecf1f1;
+        background-color: var(--component-bg-flexible);
     }
 }
 
@@ -50,6 +62,7 @@ $serialMonitorUnavailableMargin: 20px;
     width: $contentsWidth;
     height: $contentsHeight;
     position: relative;
+    color: var(--text-default);
 
     & > span {
         display: block;
@@ -106,7 +119,7 @@ $serialMonitorUnavailableMargin: 20px;
             left: auto !important;
             right: $searchPanelHorizontalPadding;
             border: none;
-            background-color: #fff;
+            background-color: var(--component-bg-above);
             width: 124px;
             padding: 4px;
             box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.25);
@@ -116,7 +129,7 @@ $serialMonitorUnavailableMargin: 20px;
                 border: none;
                 height: 36px;
                 width: 100%;
-                color: #000;
+                color: var(--text-default);
                 font-size: 14px;
                 text-align: left;
                 padding: 8px 16px;
@@ -124,7 +137,7 @@ $serialMonitorUnavailableMargin: 20px;
                 display: block;
 
                 &[class~="selected"] {
-                    background-color: #ecf1f1;
+                    background-color: var(--dropdown-item-background-selected);
                 }
 
                 &:hover {
@@ -132,7 +145,7 @@ $serialMonitorUnavailableMargin: 20px;
                 }
 
                 &:not([class~="selected"]):hover {
-                    background-color: #f7f9f9;
+                    background-color: var(--dropdown-item-background-hover);
                 }
             }
         }
@@ -140,10 +153,10 @@ $serialMonitorUnavailableMargin: 20px;
         [class~="cm-panels"] {
             display: flex;
             padding: 0;
-            background-color: #fff;
+            background-color: var(--editor-background);
             border-top: none;
-            border-bottom: 1px solid #dae3e3;
-            color: #4e5b61;
+            border-bottom: 1px solid var(--editor-lines-background-selected);
+            color: var(--text-subtle);
             font-size: 12px;
             height: 0;
             overflow: hidden;
@@ -164,7 +177,13 @@ $serialMonitorUnavailableMargin: 20px;
                 [class~="search-icon"] {
                     height: 16px;
                     width: 16px;
-                    background-image: url(css-images.$search);
+                    background-color: currentColor;
+                    mask-image: url("#{css-images.$search}");
+                    mask-repeat: no-repeat;
+                    mask-size: contain;
+                    -webkit-mask-image: url("#{css-images.$search}");
+                    -webkit-mask-repeat: no-repeat;
+                    -webkit-mask-size: contain;
                     margin-right: 8px;
                 }
 
@@ -174,6 +193,12 @@ $serialMonitorUnavailableMargin: 20px;
                     font-size: 14px;
                     margin-right: 8px;
                     flex-grow: 1;
+                    background-color: transparent;
+                    color: var(--text-default);
+
+                    &::placeholder {
+                        color: var(--text-subtle);
+                    }
 
                     &:focus-visible {
                         outline: none;
@@ -208,9 +233,9 @@ $serialMonitorUnavailableMargin: 20px;
                     background-color: transparent;
                     height: 30px;
                     width: 124px;
-                    color: #000;
+                    color: var(--text-default);
                     font-size: 12px;
-                    border: 1px solid #c9d2d2;
+                    border: 1px solid var(--border-default);
                     border-radius: 4px;
                     padding-left: 12px;
                     padding-right: 12px;
@@ -222,14 +247,14 @@ $serialMonitorUnavailableMargin: 20px;
                     &:not([class~="dropdown-opened"]) {
                         &::after {
                             @include caret;
-                            border-top: solid 6px #58646b;
+                            border-top: solid 6px var(--text-subtle);
                         }
                     }
 
                     &[class~="dropdown-opened"] {
                         &::after {
                             @include caret;
-                            border-bottom: solid 6px #58646b;
+                            border-bottom: solid 6px var(--text-subtle);
                         }
                     }
                 }
@@ -238,7 +263,9 @@ $serialMonitorUnavailableMargin: 20px;
 
         [class~="cm-scroller"] {
             [class~="cm-gutters"] {
-                background: #fff;
+                background: var(--editor-background);
+                // CodeMirror's base theme leaves the timestamps at its light-theme #6c6c6c, which is 2.3:1 on the dark canvas.
+                color: var(--editor-lines-foreground);
                 padding-left: serial-monitor-variables.$serialMonitorPaddingLeft;
                 padding-right: 8px;
                 border-right: none;
@@ -316,7 +343,7 @@ $serialMonitorUnavailableMargin: 20px;
         }
 
         &:hover {
-            background: shared.theme-var(--button-primary-background);
+            background: var(--accent-default);
         }
     }
 }

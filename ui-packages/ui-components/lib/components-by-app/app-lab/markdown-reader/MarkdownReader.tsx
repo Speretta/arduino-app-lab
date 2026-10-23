@@ -1,10 +1,10 @@
 import clsx from 'clsx';
-import React, { useMemo } from 'react';
+import React, { memo, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { PluggableList } from 'react-markdown/lib/react-markdown';
 import { AllowElement } from 'react-markdown/lib/rehype-filter';
 import rehypeRaw from 'rehype-raw';
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import rehypeSanitize, { type Options, defaultSchema } from 'rehype-sanitize';
 import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
 import remarkRemoveComments from 'remark-remove-comments';
@@ -24,7 +24,8 @@ import { MarkdownReaderTagSummary } from './sub-components/tag-summary/TagSummar
 // keeps everything markdown itself produces (tables, task lists, footnotes,
 // `language-*` on code, `<details>`/`<summary>`); authored docs also style
 // blocks with plain classes, which CSS modules keep away from our own styles.
-export const sanitizeSchema = {
+// Annotated so the emitted .d.ts names the type via rehype-sanitize instead of a deep node_modules path (TS2742).
+export const sanitizeSchema: Options = {
   ...defaultSchema,
 
   // Leave ids as authored. The default schema prefixes every id and id
@@ -121,7 +122,7 @@ export const sanitizeSchema = {
 // still refused, and so is every element the strict schema drops. Only styling
 // is trusted, and only for content we publish ourselves. Never reach for this
 // for anything that arrives from an app, a board, or a user.
-export const trustedSanitizeSchema = {
+export const trustedSanitizeSchema: Options = {
   ...sanitizeSchema,
   tagNames: [...(sanitizeSchema.tagNames ?? []), 'style'],
   attributes: {
@@ -200,4 +201,4 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = (
   );
 };
 
-export default MarkdownReader;
+export default memo(MarkdownReader);
