@@ -6,10 +6,10 @@ package app
 import (
 	"errors"
 	"fmt"
-	"path"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"app-lab-desktop/internal/agent"
 	"app-lab-desktop/internal/appui"
 	"app-lab-desktop/internal/arduinoapps"
 	"app-lab-desktop/internal/auth"
@@ -21,10 +21,10 @@ import (
 	"app-lab-desktop/internal/fs/opener"
 	"app-lab-desktop/internal/fs/watcher"
 	"app-lab-desktop/internal/httpclient"
+	"app-lab-desktop/internal/hw"
 	"app-lab-desktop/internal/learn"
 	"app-lab-desktop/internal/lsp"
 	"app-lab-desktop/internal/network"
-	"app-lab-desktop/internal/network/ethernet"
 	"app-lab-desktop/internal/network/wifi"
 	"app-lab-desktop/internal/terminal"
 	"app-lab-desktop/internal/update"
@@ -44,7 +44,8 @@ func (a *App) NeedsImageUpdate() bool {
 }
 
 func (a *App) RebootBoard(password string) error {
-	return a.selectedBoard.RebootBoard(a.selectedBoard.Conn, password)
+	sb := a.boardSnapshot() // one snapshot: the board and the connection it is rebooted over must be the same one
+	return sb.RebootBoard(sb.Conn, password)
 }
 
 // Orchestrator URL management
@@ -59,7 +60,7 @@ func (a *App) GetCloudConnectorURL() (string, error) {
 
 // WiFi management
 func (a *App) ConnectToWiFi(ssid, password string) error {
-	err := wifi.Connect(a.ctx(), a.selectedBoard.Conn, ssid, password)
+	err := wifi.Connect(a.ctx(), a.boardConn(), ssid, password)
 	if errors.Is(err, wifi.ErrIncorrectPassword) {
 		// Return the bare error code: it is the API contract with the frontend
 		return wifi.ErrIncorrectPassword
@@ -68,31 +69,23 @@ func (a *App) ConnectToWiFi(ssid, password string) error {
 }
 
 func (a *App) DisconnectWiFi() error {
-	return wifi.Disconnect(a.ctx(), a.selectedBoard.Conn)
+	return wifi.Disconnect(a.ctx(), a.boardConn())
 }
 
 func (a *App) ListSSIDs() ([]string, error) {
-	return wifi.ListSSIDs(a.ctx(), a.selectedBoard.Conn)
+	return wifi.ListSSIDs(a.ctx(), a.boardConn())
 }
 
-func (a *App) GetWiFiStatus() (wifi.WifiStatus, error) {
-	return wifi.GetWiFiStatus(a.ctx(), a.selectedBoard.Conn)
-}
-
-func (a *App) GetEthStatus() (ethernet.EthStatus, error) {
-	return ethernet.GetEthStatus(a.ctx(), a.selectedBoard.Conn)
-}
-
-func (a *App) GetInternetStatus() (bool, error) {
-	return network.GetInternetStatus(a.ctx(), a.selectedBoard.Conn)
+func (a *App) GetNetworkStatus() (network.NetworkStatus, error) {
+	return network.GetNetworkStatus(a.ctx(), a.boardConn())
 }
 
 func (a *App) GetConnectionName() (*string, error) {
-	return network.GetConnectionName(a.ctx(), a.selectedBoard.Conn)
+	return network.GetConnectionName(a.ctx(), a.boardConn())
 }
 
 func (a *App) GetIPAddress() (*string, error) {
-	return network.GetIPAddress(a.ctx(), a.selectedBoard.Conn)
+	return network.GetIPAddress(a.ctx(), a.boardConn())
 }
 
 // Feature flags management
@@ -196,12 +189,17 @@ func (a *App) OpenFile(path string) error {
 	return opener.Open(path)
 }
 
-func (a *App) GetFileTree(path string) (*fs.FSNode, error) {
-	return fs.GetFileTree(path, a.selectedBoard.Conn)
+func (a *App) ListDirectory(path string) ([]fs.FSNode, error) {
+	return fs.ListDirectory(path, a.boardConn())
+}
+
+// StatPath resolves to null when nothing exists at path.
+func (a *App) StatPath(path string) (*fs.FSNode, error) {
+	return fs.StatPath(a.boardConn(), path)
 }
 
 func (a *App) GetFileContent(path string) (string, error) {
-	return fs.GetFileContent(path, a.selectedBoard.Conn, a.hostReads)
+	return fs.GetFileContent(path, a.boardConn(), a.hostReads)
 }
 
 // File mutations optionally suppress the watcher: when suppressWatch is true
@@ -214,44 +212,23 @@ func (a *App) WriteFileContent(path string, content string, suppressWatch bool) 
 		a.suppressHold(path)
 		defer a.suppressRelease(path)
 	}
-	return fs.WriteFileContent(a.selectedBoard.Conn, path, content)
-}
-
-// errInvalidName is returned when a target name would be unsafe on the board
-// shell or unwritable in the host-side LSP mirror. The frontend runs the same
-// check for immediate feedback; this is the enforcing one.
-var errInvalidName = errors.New("name contains characters that are not allowed")
-
-// checkTargetName validates the final component of a path we are about to
-// create or rename to. Only the leaf is checked: the parent directories already
-// exist, and re-validating them would reject legitimate pre-existing names.
-func checkTargetName(p string) error {
-	if !watcher.IsCreatableName(path.Base(p)) {
-		return fmt.Errorf("%w: %q", errInvalidName, path.Base(p))
-	}
-	return nil
+	return fs.WriteFileContent(a.boardConn(), path, content)
 }
 
 func (a *App) RenameFile(oldPath string, newPath string, suppressWatch bool) error {
-	if err := checkTargetName(newPath); err != nil {
-		return err
-	}
 	if suppressWatch {
 		a.suppressHold(oldPath, newPath)
 		defer a.suppressRelease(oldPath, newPath)
 	}
-	return fs.RenameFile(a.selectedBoard.Conn, oldPath, newPath)
+	return fs.RenameFile(a.boardConn(), oldPath, newPath)
 }
 
 func (a *App) RenameFolder(oldPath string, newPath string, suppressWatch bool) error {
-	if err := checkTargetName(newPath); err != nil {
-		return err
-	}
 	if suppressWatch {
 		a.suppressHold(oldPath, newPath)
 		defer a.suppressRelease(oldPath, newPath)
 	}
-	return fs.RenameFolder(a.selectedBoard.Conn, oldPath, newPath)
+	return fs.RenameFolder(a.boardConn(), oldPath, newPath)
 }
 
 func (a *App) RemoveFile(path string, suppressWatch bool) error {
@@ -259,18 +236,15 @@ func (a *App) RemoveFile(path string, suppressWatch bool) error {
 		a.suppressHold(path)
 		defer a.suppressRelease(path)
 	}
-	return fs.RemoveFile(a.selectedBoard.Conn, path)
+	return fs.RemoveFile(a.boardConn(), path)
 }
 
-func (a *App) CreateFolder(p string, suppressWatch bool) error {
-	if err := checkTargetName(p); err != nil {
-		return err
-	}
+func (a *App) CreateFolder(path string, suppressWatch bool) error {
 	if suppressWatch {
-		a.suppressHold(p)
-		defer a.suppressRelease(p)
+		a.suppressHold(path)
+		defer a.suppressRelease(path)
 	}
-	return fs.CreateFolder(a.selectedBoard.Conn, p)
+	return fs.CreateFolder(a.boardConn(), path)
 }
 
 // Filesystem watching. These start/stop backend watches whose changes are
@@ -299,9 +273,10 @@ func (a *App) UnwatchAll() {
 // watchTarget snapshots the current connection and whether its filesystem is
 // local, for the watcher to choose the fsnotify vs inotifywait backend.
 func (a *App) watchTarget() watcher.Target {
+	sb := a.boardSnapshot()
 	return watcher.Target{
-		Conn:    a.selectedBoard.Conn,
-		IsLocal: a.selectedBoard.IsLocalFS(),
+		Conn:    sb.Conn,
+		IsLocal: sb.IsLocalFS(),
 	}
 }
 
@@ -321,16 +296,12 @@ func (a *App) suppressRelease(paths ...string) {
 	}
 }
 
-func (a *App) IsDirectory(path string) (bool, error) {
-	return fs.IsDirectory(a.selectedBoard.Conn, path)
-}
-
 func (a *App) IsLocalDirectory(path string) (bool, error) {
 	return fs.IsLocalDirectory(path)
 }
 
 func (a *App) SelectFilesDialog(remoteDir string) ([]string, error) {
-	return fs.SelectFilesDialog(a.ctx(), a.selectedBoard.Conn, remoteDir, a.hostReads)
+	return fs.SelectFilesDialog(a.ctx(), a.boardConn(), remoteDir, a.hostReads)
 }
 
 func (a *App) ImportFileToAppFromPath(remoteDir string, filePaths string, newFileName string, suppressWatch bool) (string, error) {
@@ -339,11 +310,11 @@ func (a *App) ImportFileToAppFromPath(remoteDir string, filePaths string, newFil
 		a.suppressHold(target)
 		defer a.suppressRelease(target)
 	}
-	return fs.ImportFileToAppFromPath(a.ctx(), a.selectedBoard.Conn, remoteDir, filePaths, newFileName, a.hostReads)
+	return fs.ImportFileToAppFromPath(a.ctx(), a.boardConn(), remoteDir, filePaths, newFileName, a.hostReads)
 }
 
 func (a *App) SelectFolderDialog(remoteDir string) (string, error) {
-	return fs.SelectFolderDialog(a.ctx(), a.selectedBoard.Conn, remoteDir, a.hostReads)
+	return fs.SelectFolderDialog(a.ctx(), a.boardConn(), remoteDir, a.hostReads)
 }
 
 func (a *App) ImportFolderToAppFromPath(remoteDir string, folderPath string, newFileName string, suppressWatch bool) (string, error) {
@@ -352,7 +323,7 @@ func (a *App) ImportFolderToAppFromPath(remoteDir string, folderPath string, new
 		a.suppressHold(target)
 		defer a.suppressRelease(target)
 	}
-	return fs.ImportFolderToAppFromPath(a.ctx(), a.selectedBoard.Conn, remoteDir, folderPath, newFileName, a.hostReads)
+	return fs.ImportFolderToAppFromPath(a.ctx(), a.boardConn(), remoteDir, folderPath, newFileName, a.hostReads)
 }
 
 // Apps UI management
@@ -392,7 +363,7 @@ func (a *App) IsUserPartitionPreservationSupported(currentImageVersion string, t
 }
 
 func (a *App) ListAvailableOSImages() ([]flasher.OSImageRelease, error) {
-	return flasher.ListAvailableOSImages(a.ctx())
+	return flasher.ListAvailableOSImages(a.ctx(), a.selectedBoard.Info.FQBN)
 }
 
 func (a *App) GetAvailableFreeSpace() (uint64, error) {
@@ -400,9 +371,22 @@ func (a *App) GetAvailableFreeSpace() (uint64, error) {
 }
 
 func (a *App) Flash(imageVersion flasher.OSImageRelease, preserveUserPartition bool) error {
-	return flasher.Flash(a.selectedBoard.Info.Serial, imageVersion, preserveUserPartition, func(event flasher.FlashEvent) {
+	// flasher.Flash calls the callback on this goroutine, so reading the flag after it returns needs no sync.
+	writing := false
+	err := flasher.Flash(a.selectedBoard.Info, imageVersion, preserveUserPartition, func(event flasher.FlashEvent) {
+		if event.Step == flasher.FlashStepFlashing {
+			writing = true
+		}
 		runtime.EventsEmit(a.ctx(), "flash-progress", event)
 	})
+	// A flashed board reboots and may have lost the apps the agent checked out, so the agent is stopped instead of
+	// kept on stale state. A failure counts too once the write had started: the board the checkouts describe is
+	// wiped either way, and a later turn would push pre-flash files at it. A failure before that (no daemon, a
+	// download that never landed) leaves the board alone, so the agent keeps working.
+	if (err == nil || writing) && a.dropAgent() {
+		a.emit("acp:restart", agent.RestartInfo{GaveUp: true, Reason: boardFlashedReason})
+	}
+	return err
 }
 
 func (a *App) CancelFlash() {
@@ -410,7 +394,7 @@ func (a *App) CancelFlash() {
 }
 
 func (a *App) InferOrchestratorURL() (string, error) {
-	return a.selectedBoard.InferOrchestratorURL()
+	return a.boardSnapshot().InferOrchestratorURL()
 }
 
 // App import/export
@@ -441,6 +425,22 @@ func (a *App) ImportAppFromPath(filePath string) (string, error) {
 	return arduinoapps.ImportAppFromPath(a.ctx(), orchestratorURL, filePath, a.hostReads)
 }
 
+func (a *App) ChooseReleaseSavePath(defaultFileName string) (string, error) {
+	return a.releaseFiles.ChooseSavePath(a.ctx(), defaultFileName)
+}
+
+func (a *App) WriteReleaseFile(filePath string, contentBase64 string) error {
+	return a.releaseFiles.Write(filePath, contentBase64)
+}
+
+func (a *App) ReadReleaseManifest(filePath string) (arduinoapps.ReleaseManifest, error) {
+	return arduinoapps.ReadReleaseManifest(filePath, a.hostReads)
+}
+
+func (a *App) ReadReleaseArchive(filePath string) (string, error) {
+	return arduinoapps.ReadReleaseArchive(filePath, a.hostReads)
+}
+
 // Edge Impulse integration
 func (a *App) GetRefreshToken(user string) (string, error) {
 	return auth.GetRefreshToken(user)
@@ -455,20 +455,45 @@ func (a *App) DeleteRefreshToken(user string) error {
 }
 
 // Carrier
-func (a *App) CarrierList() ([]carrier.Carrier, error) {
-	return carrier.List(a.ctx(), a.selectedBoard.Conn)
+func (a *App) CarrierList() (carrier.CarrierResponse, error) {
+	return carrier.List(a.ctx(), a.boardConn())
 }
 
-func (a *App) CarrierShow(carrierName string) (carrier.ShowResult, error) {
-	return carrier.Show(a.ctx(), a.selectedBoard.Conn, carrierName)
+func (a *App) CarrierShow() (carrier.ShowResult, error) {
+	return carrier.Show(a.ctx(), a.boardConn())
 }
 
-func (a *App) CarrierDisable(password string, carrierName string) (carrier.ShowCarrierResult, error) {
-	return carrier.Disable(a.selectedBoard.Conn, password, carrierName)
+func (a *App) CarrierDisable(password string, carrierName string) error {
+	return carrier.Disable(a.ctx(), a.boardConn(), password, carrierName)
 }
 
-func (a *App) CarrierEnable(password string, carrierName string, configuration []carrier.EnableDeviceConfig) (carrier.ShowCarrierResult, error) {
-	return carrier.Enable(a.selectedBoard.Conn, password, carrierName, configuration)
+func (a *App) CarrierEnable(password string, carrierName string, configuration []carrier.EnableDeviceConfig) error {
+	return carrier.Enable(a.ctx(), a.boardConn(), password, carrierName, configuration)
+}
+
+// Hardware
+func (a *App) HwSupported() bool {
+	return hw.Supported(a.ctx(), a.boardConn())
+}
+
+func (a *App) HwAvailable() bool {
+	return hw.Available(a.ctx(), a.boardConn())
+}
+
+func (a *App) HwList() (hw.ListResult, error) {
+	return hw.List(a.ctx(), a.boardConn())
+}
+
+func (a *App) HwShow() (hw.ShowResult, error) {
+	return hw.Show(a.ctx(), a.boardConn())
+}
+
+func (a *App) HwDisable(password string, name string) error {
+	return hw.Disable(a.ctx(), a.boardConn(), password, name)
+}
+
+func (a *App) HwEnable(password string, name string, configuration []hw.EnableDeviceConfig) error {
+	return hw.Enable(a.ctx(), a.boardConn(), password, name, configuration)
 }
 
 // LSP
@@ -478,7 +503,7 @@ func (a *App) IsLspEnabled() bool {
 }
 
 func (a *App) InitLspWorkspace(appPath string) error {
-	return lsp.InitLspWorkspace(a.selectedBoard.Conn, appPath)
+	return lsp.InitLspWorkspace(a.boardConn(), appPath)
 }
 
 func (a *App) GetLspTempWorkspaceAppDir() string {
@@ -487,6 +512,14 @@ func (a *App) GetLspTempWorkspaceAppDir() string {
 
 func (a *App) GetLspWorkspaceFile(filePath string) (string, error) {
 	return lsp.GetLspWorkspaceFile(filePath)
+}
+
+func (a *App) ListLspSketchFiles(dir string) ([]string, error) {
+	return lsp.ListLspSketchFiles(dir)
+}
+
+func (a *App) ListLspFiles(workspaceDir string, relDir string) ([]string, error) {
+	return lsp.ListLspFiles(workspaceDir, relDir)
 }
 
 func (a *App) StartLSP(lspId lsp.LspId, workspaceDir string) error {

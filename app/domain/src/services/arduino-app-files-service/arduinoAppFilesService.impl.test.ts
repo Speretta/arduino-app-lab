@@ -1,7 +1,10 @@
 import {
+  FileNode,
   FolderNode,
   isFolderNode,
+  TreeNode,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+import { Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -9,10 +12,11 @@ import {
   createAppFile,
   createAppFolder,
   getAppFileContent,
-  getAppFiles,
-  getAppFileTree,
   getCodeReloadSubject,
   getCodeSubjects,
+  getUnsavedFilesSubject,
+  getUnsavedFilesSubjectNext,
+  listAppDirectory,
   reloadCodeSubject,
   removeAppFile,
   renameAppFile,
@@ -21,10 +25,61 @@ import {
   saveAppFile,
   setArduinoAppFilesService,
   setCodeSubjects,
+  statAppPath,
 } from './arduinoAppFilesService.impl';
 import { MockArduinoAppFilesService } from './arduinoAppFilesService.mock';
+import { FileId } from './arduinoAppFilesService.type';
 
 const APP_ROOT = '/myapp';
+
+// The service no longer walks the whole app — that was the eager fetch this
+// work removed. Tests that need a shape build it from the per-directory
+// listings the app itself renders from.
+const flatFiles = async (root: string, dir = ''): Promise<FileNode[]> => {
+  const entries = await listAppDirectory(root, dir);
+  const files: FileNode[] = [];
+  for (const entry of entries) {
+    if (entry.type === 'folder') {
+      files.push(...(await flatFiles(root, entry.path)));
+    } else {
+      files.push(entry);
+    }
+  }
+  return files;
+};
+
+// Same, in the root-wrapped shape the assertions below navigate.
+const appTree = async (root: string): Promise<TreeNode[]> => {
+  const listDeep = async (dir: string): Promise<TreeNode[]> =>
+    Promise.all(
+      (await listAppDirectory(root, dir)).map(async (entry) =>
+        entry.type === 'folder'
+          ? { ...entry, children: await listDeep(entry.path) }
+          : entry,
+      ),
+    );
+
+  return [
+    {
+      name: root.split('/').pop() ?? '',
+      path: '',
+      type: 'folder',
+      children: await listDeep(''),
+    } as FolderNode,
+  ];
+};
+
+// `children` is null for a folder the app has not listed yet — the lazy-loading
+// contract asserted directly in the listAppDirectory suite below.
+// Folders reached through `appTree` have all been listed, so reading their
+// children is safe; asserting it keeps a broken invariant a named failure
+// rather than a TypeError inside the `.find(...)` that follows.
+const childrenOf = (folder: FolderNode): TreeNode[] => {
+  if (folder.children === null) {
+    expect.fail(`Expected folder "${folder.name}" to have been listed`);
+  }
+  return folder.children;
+};
 
 beforeAll(() => {
   setArduinoAppFilesService(MockArduinoAppFilesService);
@@ -34,82 +89,76 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - getAppFileTree', () => {
-  it('getAppFileTree returns the root "myapp" and its children', async () => {
-    const tree = await getAppFileTree(APP_ROOT);
+describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - listAppDirectory', () => {
+  it('returns only the immediate children of the app root', async () => {
+    const entries = await listAppDirectory(APP_ROOT);
 
-    expect(Array.isArray(tree)).toBe(true);
-    expect(tree.length).toBe(1);
-
-    const root = tree[0];
-    expect(root.type).toBe('folder');
-
-    if (!isFolderNode(root)) {
-      expect.fail('Expected root node to be a folder');
-    }
-    const rootFolder: FolderNode = root;
-
-    expect(rootFolder.name).toBe('myapp');
-    expect(rootFolder.children.length).toBeGreaterThan(0);
-
-    const childNames = rootFolder.children.map((c) => c.name);
-    expect(childNames).toEqual(
+    expect(entries.map((e) => e.name)).toEqual(
       expect.arrayContaining(['README.md', 'python', 'sketch', 'data']),
     );
+    expect(entries.some((e) => e.name === 'main.py')).toBe(false);
   });
 
-  it('getAppFileTree returns nodes with all properties', async () => {
-    const tree = await getAppFileTree(APP_ROOT);
-    const root = tree[0];
+  it('returns folders unlisted so nothing is loaded eagerly', async () => {
+    const entries = await listAppDirectory(APP_ROOT);
+    const python = entries.find((e) => e.name === 'python');
 
-    if (!isFolderNode(root)) {
-      expect.fail('Expected root node to be a folder');
+    if (!python || !isFolderNode(python)) {
+      expect.fail('Expected a python folder node');
     }
-
-    expect(root).toHaveProperty('name');
-    expect(root).toHaveProperty('path');
-    expect(root).toHaveProperty('type');
-    expect(root).toHaveProperty('createdAt');
-    expect(root).toHaveProperty('modifiedAt');
-    expect(root).toHaveProperty('children');
+    expect(python.children).toBeNull();
   });
 
-  it('getAppFileTree contains folders and files with the right structure', async () => {
-    const tree = await getAppFileTree(APP_ROOT);
-    const root = tree[0];
+  it('lists a nested directory and keeps ids app-relative', async () => {
+    const entries = await listAppDirectory(APP_ROOT, 'python');
 
-    if (!isFolderNode(root)) {
-      expect.fail('Expected root node to be a folder');
-    }
-
-    const pythonFolder = root.children.find(
-      (c) => c.type === 'folder' && c.name === 'python',
+    expect(entries.map((e) => e.path)).toEqual(
+      expect.arrayContaining(['python/main.py', 'python/requirements.txt']),
     );
+  });
 
-    expect(pythonFolder).toBeDefined();
-    expect(pythonFolder!.type).toBe('folder');
+  it('does not mutate the underlying tree when emptying folder children', async () => {
+    await listAppDirectory(APP_ROOT);
+    const fileTree = await appTree(APP_ROOT);
+    const root = fileTree[0];
 
-    if (pythonFolder!.type === 'folder') {
-      expect(pythonFolder!.children.length).toBeGreaterThan(0);
-      const mainPy = pythonFolder!.children.find(
-        (f) => f.type === 'file' && f.name === 'main.py',
-      );
-      expect(mainPy).toBeDefined();
+    if (!isFolderNode(root)) {
+      expect.fail('Expected root node to be a folder');
     }
+    const python = childrenOf(root).find((c) => c.name === 'python');
+    if (!python || !isFolderNode(python)) {
+      expect.fail('Expected a python folder node');
+    }
+    expect(childrenOf(python).length).toBeGreaterThan(0);
+  });
+
+  it('rejects for a directory that does not exist', async () => {
+    await expect(listAppDirectory(APP_ROOT, 'nope')).rejects.toThrow();
   });
 });
 
-describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - getAppFiles', () => {
-  it('getAppFiles returns a flat list of files and the corresponding tree', async () => {
-    const { filesList, fileTree } = await getAppFiles(APP_ROOT);
+describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - statAppPath', () => {
+  it('reports a file', async () => {
+    expect(await statAppPath(`${APP_ROOT}/python/main.py`)).toEqual({
+      isDir: false,
+    });
+  });
 
-    expect(Array.isArray(fileTree)).toBe(true);
-    expect(fileTree.length).toBe(1);
-    expect(Array.isArray(filesList)).toBe(true);
-    expect(filesList.length).toBeGreaterThan(0);
+  it('reports a folder', async () => {
+    expect(await statAppPath(`${APP_ROOT}/python`)).toEqual({ isDir: true });
+  });
 
-    const paths = filesList.map((f) => f.path);
-    expect(paths).toEqual(
+  it('resolves to null for a path that does not exist', async () => {
+    expect(await statAppPath(`${APP_ROOT}/python/nope.py`)).toBeNull();
+  });
+});
+
+describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - recursive listing', () => {
+  it('reaches every file through the per-directory listings', async () => {
+    const filesList = await flatFiles(APP_ROOT);
+
+    expect(filesList.every((node) => node.type === 'file')).toBe(true);
+    expect(filesList.map((f) => f.path)).toEqual(
       expect.arrayContaining([
         'README.md',
         'python/main.py',
@@ -119,36 +168,6 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - getAppFiles
         'data/data.json',
       ]),
     );
-  });
-
-  it('getAppFiles filesList contains only file nodes', async () => {
-    const { filesList } = await getAppFiles(APP_ROOT);
-
-    expect(filesList.every((node) => node.type === 'file')).toBe(true);
-  });
-
-  it('getAppFiles filesList includes files from all nested folders', async () => {
-    const { filesList } = await getAppFiles(APP_ROOT);
-
-    const pythonFiles = filesList.filter((f) => f.path.startsWith('python/'));
-    const sketchFiles = filesList.filter((f) => f.path.startsWith('sketch/'));
-    const dataFiles = filesList.filter((f) => f.path.startsWith('data/'));
-
-    expect(pythonFiles.length).toBeGreaterThan(0);
-    expect(sketchFiles.length).toBeGreaterThan(0);
-    expect(dataFiles.length).toBeGreaterThan(0);
-  });
-
-  it('getAppFiles fileTree e filesList sono coerenti', async () => {
-    const { filesList, fileTree } = await getAppFiles(APP_ROOT);
-
-    expect(fileTree.length).toBe(1);
-    expect(fileTree[0].type).toBe('folder');
-
-    const pathsInList = new Set(filesList.map((f) => f.path));
-
-    expect(pathsInList.has('README.md')).toBe(true);
-    expect(pathsInList.has('python/main.py')).toBe(true);
   });
 });
 
@@ -272,7 +291,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFi
     const content = await getAppFileContent(path);
     expect(content).toBe('void loop() {}\n');
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
     const created = filesList.find((f) => f.path === 'sketch/newFile.ino');
     expect(created).toBeDefined();
     expect(created!.type).toBe('file');
@@ -286,7 +305,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFi
     const content = await getAppFileContent(path);
     expect(content).toBe('');
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
     const created = filesList.find((f) => f.path === 'python/empty.py');
     expect(created).toBeDefined();
   });
@@ -296,7 +315,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFi
 
     await createAppFile(path, '{"test": true}');
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
     const created = filesList.find((f) => f.path === 'data/new.json');
 
     expect(created).toBeDefined();
@@ -315,7 +334,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFi
     const content = await getAppFileContent(path);
     expect(content).toBe('Root file content');
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
     const created = filesList.find((f) => f.path === 'newfile.txt');
     expect(created).toBeDefined();
   });
@@ -331,7 +350,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFi
     for (const file of files) {
       await createAppFile(file.path, 'content');
 
-      const { filesList } = await getAppFiles(APP_ROOT);
+      const filesList = await flatFiles(APP_ROOT);
       const created = filesList.find(
         (f) => f.path === file.path.replace(`${APP_ROOT}/`, ''),
       );
@@ -340,14 +359,14 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFi
   });
 
   it('createAppFile aggiorna modifiedAt della cartella parent', async () => {
-    const tree = await getAppFileTree(APP_ROOT);
+    const tree = await appTree(APP_ROOT);
     const root = tree[0];
 
     if (!isFolderNode(root)) {
       expect.fail('Expected root node to be a folder');
     }
 
-    const pythonFolder = root.children.find(
+    const pythonFolder = childrenOf(root).find(
       (c) => c.type === 'folder' && c.name === 'python',
     );
 
@@ -357,14 +376,14 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFi
 
     await createAppFile(`${APP_ROOT}/python/test.py`, 'test');
 
-    const treeAfter = await getAppFileTree(APP_ROOT);
+    const treeAfter = await appTree(APP_ROOT);
     const rootAfter = treeAfter[0];
 
     if (!isFolderNode(rootAfter)) {
       expect.fail('Expected root node to be a folder');
     }
 
-    const pythonFolderAfter = rootAfter.children.find(
+    const pythonFolderAfter = childrenOf(rootAfter).find(
       (c) => c.type === 'folder' && c.name === 'python',
     );
 
@@ -390,7 +409,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - renameAppFi
     expect(oldContent).toBe('');
     expect(newContent).toBe('int x = 1;');
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
     const oldNode = filesList.find((f) => f.path === 'sketch/temp.ino');
     const newNode = filesList.find((f) => f.path === 'sketch/renamed.ino');
 
@@ -405,7 +424,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - renameAppFi
     await createAppFile(from, 'print("test")');
     await renameAppFile(from, to);
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
     const renamed = filesList.find((f) => f.path === 'python/new.py');
 
     expect(renamed).toBeDefined();
@@ -423,7 +442,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - renameAppFi
     const content = await getAppFileContent(to);
     expect(content).toBe('moved content');
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
     const moved = filesList.find((f) => f.path === 'sketch/moved.py');
     expect(moved).toBeDefined();
   });
@@ -434,7 +453,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - renameAppFi
 
     await createAppFile(from, 'content');
 
-    const { filesList: before } = await getAppFiles(APP_ROOT);
+    const before = await flatFiles(APP_ROOT);
     const nodeBefore = before.find((f) => f.path === 'test-rename.txt');
     const modifiedBefore = nodeBefore?.modifiedAt;
 
@@ -442,7 +461,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - renameAppFi
 
     await renameAppFile(from, to);
 
-    const { filesList: after } = await getAppFiles(APP_ROOT);
+    const after = await flatFiles(APP_ROOT);
     const nodeAfter = after.find((f) => f.path === 'test-renamed.txt');
 
     expect(nodeAfter?.modifiedAt).not.toBe(modifiedBefore);
@@ -455,7 +474,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - renameAppFi
 
     await renameAppFile(`${APP_ROOT}/oldfolder`, `${APP_ROOT}/newfolder`);
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
 
     const file1 = filesList.find((f) => f.path === 'newfolder/file1.txt');
     const file2 = filesList.find((f) => f.path === 'newfolder/file2.txt');
@@ -485,7 +504,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - removeAppFi
     content = await getAppFileContent(path);
     expect(content).toBe('');
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
     const removed = filesList.find((f) => f.path === 'data/to-delete.json');
     expect(removed).toBeUndefined();
   });
@@ -496,7 +515,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - removeAppFi
     await createAppFile(path, 'delete this');
     await removeAppFile(path);
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
     const removed = filesList.find((f) => f.path === 'deleteme.txt');
     expect(removed).toBeUndefined();
   });
@@ -504,14 +523,14 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - removeAppFi
   it('removeAppFile aggiorna modifiedAt della cartella parent', async () => {
     await createAppFile(`${APP_ROOT}/python/todelete.py`, 'content');
 
-    const tree = await getAppFileTree(APP_ROOT);
+    const tree = await appTree(APP_ROOT);
     const root = tree[0];
 
     if (!isFolderNode(root)) {
       expect.fail('Expected root node to be a folder');
     }
 
-    const pythonFolder = root.children.find(
+    const pythonFolder = childrenOf(root).find(
       (c) => c.type === 'folder' && c.name === 'python',
     );
 
@@ -521,14 +540,14 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - removeAppFi
 
     await removeAppFile(`${APP_ROOT}/python/todelete.py`);
 
-    const treeAfter = await getAppFileTree(APP_ROOT);
+    const treeAfter = await appTree(APP_ROOT);
     const rootAfter = treeAfter[0];
 
     if (!isFolderNode(rootAfter)) {
       expect.fail('Expected root node to be a folder');
     }
 
-    const pythonFolderAfter = rootAfter.children.find(
+    const pythonFolderAfter = childrenOf(rootAfter).find(
       (c) => c.type === 'folder' && c.name === 'python',
     );
 
@@ -540,7 +559,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - removeAppFi
 
     await removeAppFile(path);
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
     const removed = filesList.find((f) => f.path === 'already-deleted.txt');
     expect(removed).toBeUndefined();
   });
@@ -548,13 +567,13 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - removeAppFi
   it('removeAppFile può eliminare file esistenti predefiniti', async () => {
     const path = `${APP_ROOT}/README.md`;
 
-    const { filesList: before } = await getAppFiles(APP_ROOT);
+    const before = await flatFiles(APP_ROOT);
     const exists = before.find((f) => f.path === 'README.md');
     expect(exists).toBeDefined();
 
     await removeAppFile(path);
 
-    const { filesList: after } = await getAppFiles(APP_ROOT);
+    const after = await flatFiles(APP_ROOT);
     const removed = after.find((f) => f.path === 'README.md');
     expect(removed).toBeUndefined();
   });
@@ -566,13 +585,13 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFo
 
     await createAppFolder(folderPath);
 
-    const tree = await getAppFileTree(APP_ROOT);
+    const tree = await appTree(APP_ROOT);
     const root = tree[0];
 
     if (!isFolderNode(root)) {
       expect.fail('Expected root node to be a folder');
     }
-    const folderNode = root.children.find(
+    const folderNode = childrenOf(root).find(
       (c) => c.type === 'folder' && c.name === 'new-folder',
     );
 
@@ -586,14 +605,14 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFo
 
     await createAppFolder(folderPath);
 
-    const tree = await getAppFileTree(APP_ROOT);
+    const tree = await appTree(APP_ROOT);
     const root = tree[0];
 
     if (!isFolderNode(root)) {
       expect.fail('Expected root node to be a folder');
     }
 
-    const folder = root.children.find(
+    const folder = childrenOf(root).find(
       (c) => c.type === 'folder' && c.name === 'testfolder',
     );
 
@@ -613,21 +632,21 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFo
 
     await createAppFolder(folderPath);
 
-    const tree = await getAppFileTree(APP_ROOT);
+    const tree = await appTree(APP_ROOT);
     const root = tree[0];
 
     if (!isFolderNode(root)) {
       expect.fail('Expected root node to be a folder');
     }
 
-    const pythonFolder = root.children.find(
+    const pythonFolder = childrenOf(root).find(
       (c) => c.type === 'folder' && c.name === 'python',
     );
 
     expect(pythonFolder).toBeDefined();
 
     if (pythonFolder!.type === 'folder') {
-      const subfolder = pythonFolder!.children.find(
+      const subfolder = childrenOf(pythonFolder!).find(
         (c) => c.type === 'folder' && c.name === 'subfolder',
       );
       expect(subfolder).toBeDefined();
@@ -636,14 +655,14 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFo
   });
 
   it('createAppFolder aggiorna modifiedAt della cartella parent', async () => {
-    const tree = await getAppFileTree(APP_ROOT);
+    const tree = await appTree(APP_ROOT);
     const root = tree[0];
 
     if (!isFolderNode(root)) {
       expect.fail('Expected root node to be a folder');
     }
 
-    const sketchFolder = root.children.find(
+    const sketchFolder = childrenOf(root).find(
       (c) => c.type === 'folder' && c.name === 'sketch',
     );
 
@@ -653,14 +672,14 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFo
 
     await createAppFolder(`${APP_ROOT}/sketch/libs`);
 
-    const treeAfter = await getAppFileTree(APP_ROOT);
+    const treeAfter = await appTree(APP_ROOT);
     const rootAfter = treeAfter[0];
 
     if (!isFolderNode(rootAfter)) {
       expect.fail('Expected root node to be a folder');
     }
 
-    const sketchFolderAfter = rootAfter.children.find(
+    const sketchFolderAfter = childrenOf(rootAfter).find(
       (c) => c.type === 'folder' && c.name === 'sketch',
     );
 
@@ -674,7 +693,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - createAppFo
     const content = await getAppFileContent(`${APP_ROOT}/newdir/file.txt`);
     expect(content).toBe('content in new dir');
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
     const file = filesList.find((f) => f.path === 'newdir/file.txt');
     expect(file).toBeDefined();
   });
@@ -684,11 +703,11 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - Operazioni 
   it('Workflow completo: crea cartella, crea file, modifica, rinomina, elimina', async () => {
     await createAppFolder(`${APP_ROOT}/workflow`);
 
-    const tree = await getAppFileTree(APP_ROOT);
+    const tree = await appTree(APP_ROOT);
     const root = tree[0];
     if (!isFolderNode(root)) throw new Error('Expected folder');
 
-    const folder = root.children.find(
+    const folder = childrenOf(root).find(
       (c) => c.type === 'folder' && c.name === 'workflow',
     );
     expect(folder).toBeDefined();
@@ -737,7 +756,7 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - Operazioni 
       `${APP_ROOT}/file3-renamed.txt`,
     );
 
-    const { filesList } = await getAppFiles(APP_ROOT);
+    const filesList = await flatFiles(APP_ROOT);
 
     const file1 = filesList.find((f) => f.path === 'file1.txt');
     const file2 = filesList.find((f) => f.path === 'file2.txt');
@@ -766,23 +785,23 @@ describe('arduinoAppFilesService.impl + MockArduinoAppFilesService - Operazioni 
       'level3 content',
     );
 
-    const tree = await getAppFileTree(APP_ROOT);
+    const tree = await appTree(APP_ROOT);
     const root = tree[0];
     if (!isFolderNode(root)) throw new Error('Expected folder');
 
-    const level1 = root.children.find(
+    const level1 = childrenOf(root).find(
       (c) => c.type === 'folder' && c.name === 'level1',
     );
     expect(level1).toBeDefined();
 
     if (level1!.type === 'folder') {
-      const level2 = level1!.children.find(
+      const level2 = childrenOf(level1!).find(
         (c) => c.type === 'folder' && c.name === 'level2',
       );
       expect(level2).toBeDefined();
 
       if (level2!.type === 'folder') {
-        const level3 = level2!.children.find(
+        const level3 = childrenOf(level2!).find(
           (c) => c.type === 'folder' && c.name === 'level3',
         );
         expect(level3).toBeDefined();
@@ -886,9 +905,112 @@ describe('arduinoAppFilesService.impl - reloadCodeSubject', () => {
     ]);
   });
 
+  const flush = (): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, 20));
+
+  it('saves an edit that returns the file to its opened content after a reload', async () => {
+    const saveCode = vi.fn().mockResolvedValue(undefined);
+    setCodeSubjects({ path: 'a.py', content: 'X: int = 42\n' }, 0);
+
+    reloadCodeSubject('a.py', 'Z: int = 7\n', 'external-change');
+    codeSubjectNext('a.py', 'X: int = 42\n', saveCode);
+    await flush();
+
+    expect(saveCode).toHaveBeenCalledWith('a.py', 'X: int = 42\n', undefined);
+  });
+
+  it('does not save or mark unsaved for a reload alone', async () => {
+    const saveCode = vi.fn().mockResolvedValue(undefined);
+    const unsaved: [FileId, boolean][] = [];
+    getUnsavedFilesSubject<Subject<[FileId, boolean]>>().subscribe(
+      (entry) => entry && unsaved.push(entry),
+    );
+    setCodeSubjects({ path: 'a.py', content: 'X: int = 42\n' }, 0);
+
+    reloadCodeSubject('a.py', 'Z: int = 7\n', 'external-change');
+    await flush();
+
+    expect(saveCode).not.toHaveBeenCalled();
+    expect(unsaved).not.toContainEqual(['a.py', true]);
+  });
+
+  it('does not save an edit that leaves the reloaded content unchanged', async () => {
+    const saveCode = vi.fn().mockResolvedValue(undefined);
+    setCodeSubjects({ path: 'a.py', content: 'X: int = 42\n' }, 0);
+
+    reloadCodeSubject('a.py', 'Z: int = 7\n', 'external-change');
+    codeSubjectNext('a.py', 'Z: int = 7\n', saveCode);
+    await flush();
+
+    expect(saveCode).not.toHaveBeenCalled();
+  });
+
   it('is a no-op for a file with no subject', () => {
     expect(() =>
       reloadCodeSubject('unknown.py', 'content', 'refetch'),
     ).not.toThrow();
+  });
+});
+
+describe('arduinoAppFilesService.impl - unsavedFiles subject', () => {
+  beforeEach(() => {
+    resetAppFilesState();
+  });
+
+  // Snapshot the contents as well as the reference: the reducers mutate the set they are
+  // handed before copying it, so a reference kept from an earlier emission has moved on.
+  function collect(): { refs: Set<FileId>[]; contents: FileId[][] } {
+    const refs: Set<FileId>[] = [];
+    const contents: FileId[][] = [];
+    getUnsavedFilesSubject<Subject<Set<FileId>>>().subscribe((ids) => {
+      refs.push(ids);
+      contents.push([...ids]);
+    });
+    return { refs, contents };
+  }
+
+  it('marks a file unsaved and clears it on save', () => {
+    const { refs, contents } = collect();
+
+    getUnsavedFilesSubjectNext('main.py', true);
+    getUnsavedFilesSubjectNext('main.py', false);
+
+    expect(contents).toEqual([['main.py'], []]);
+    expect(refs[1]).not.toBe(refs[0]);
+  });
+
+  it('does not emit a new set when an already-unsaved file is re-marked', () => {
+    const { refs, contents } = collect();
+
+    getUnsavedFilesSubjectNext('main.py', true);
+    // One `next([id, true])` per keystroke is what `createCodeSubject` does.
+    getUnsavedFilesSubjectNext('main.py', true);
+    getUnsavedFilesSubjectNext('main.py', true);
+
+    expect(refs).toHaveLength(3);
+    expect(refs[1]).toBe(refs[0]);
+    expect(refs[2]).toBe(refs[0]);
+    expect(contents).toEqual([['main.py'], ['main.py'], ['main.py']]);
+  });
+
+  it('does not emit a new set when clearing a file that is not unsaved', () => {
+    const { refs, contents } = collect();
+
+    getUnsavedFilesSubjectNext('main.py', true);
+    getUnsavedFilesSubjectNext('other.py', false);
+
+    expect(refs).toHaveLength(2);
+    expect(refs[1]).toBe(refs[0]);
+    expect(contents).toEqual([['main.py'], ['main.py']]);
+  });
+
+  it('still changes identity when a second file becomes unsaved', () => {
+    const { refs, contents } = collect();
+
+    getUnsavedFilesSubjectNext('main.py', true);
+    getUnsavedFilesSubjectNext('sketch.ino', true);
+
+    expect(refs[1]).not.toBe(refs[0]);
+    expect(contents[1]).toEqual(['main.py', 'sketch.ino']);
   });
 });

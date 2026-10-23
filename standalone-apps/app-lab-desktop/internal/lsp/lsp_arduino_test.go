@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -181,5 +182,190 @@ func TestVerifyClangdExecutableRejectsANonZeroExit(t *testing.T) {
 
 	if err := verifyClangdExecutableAt(clangd, toolVerifyTimeout); err == nil {
 		t.Fatal("verifyClangdExecutableAt() = nil, want an error for a non-zero exit")
+	}
+}
+
+// writeFakeArduinoCliConfig plants a script that answers `config dump --json` from a
+// urls file and rewrites that file on `config remove`, so the removal can be
+// tested without an arduino-cli install. Returns the script path and the urls
+// file, which holds one URL per line.
+func writeFakeArduinoCliConfig(t *testing.T, urls []string) (cliPath, urlsPath string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	urlsPath = filepath.Join(dir, "urls")
+	body := ""
+	if len(urls) > 0 {
+		body = strings.Join(urls, "\n") + "\n"
+	}
+	if err := os.WriteFile(urlsPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write urls: %v", err)
+	}
+
+	script := `#!/bin/sh
+URLS="` + urlsPath + `"
+case "$1 $2" in
+  "config dump")
+    printf '{"config":{"board_manager":{"additional_urls":['
+    sep=""
+    while IFS= read -r u; do
+      [ -z "$u" ] && continue
+      printf '%s"%s"' "$sep" "$u"
+      sep=","
+    done < "$URLS"
+    printf ']}}}'
+    ;;
+  "config remove")
+    grep -v -x -F "$4" "$URLS" > "$URLS.new"
+    mv "$URLS.new" "$URLS"
+    ;;
+  *)
+    echo "unexpected: $*" >&2
+    exit 1
+    ;;
+esac
+`
+	cliPath = filepath.Join(dir, "arduino-cli")
+	if err := os.WriteFile(cliPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake arduino-cli: %v", err)
+	}
+	return cliPath, urlsPath
+}
+
+// readURLs returns what the fake arduino-cli's config now holds.
+func readURLs(t *testing.T, urlsPath string) []string {
+	t.Helper()
+
+	raw, err := os.ReadFile(urlsPath)
+	if err != nil {
+		t.Fatalf("read urls: %v", err)
+	}
+	var urls []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if line != "" {
+			urls = append(urls, line)
+		}
+	}
+	return urls
+}
+
+// An install that registered the zephyr staging index for ventunoq must have it
+// removed: the index publishes pre-releases that decide "latest" for every
+// arduino:zephyr board. URLs the user added stay.
+func TestRemoveStaleArduinoCliAdditionalURLsDropsOnlyOurs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stand-in is a /bin/sh script")
+	}
+
+	userURL := "https://example.com/package_user_index.json"
+	cliPath, urlsPath := writeFakeArduinoCliConfig(t, []string{staleIndexURLs[0], userURL})
+
+	if err := removeStaleArduinoCliAdditionalURLs(cliPath, filepath.Join(t.TempDir(), "arduino-cli.yaml")); err != nil {
+		t.Fatalf("removeStaleArduinoCliAdditionalURLs() = %v, want nil", err)
+	}
+	if got := readURLs(t, urlsPath); len(got) != 1 || got[0] != userURL {
+		t.Fatalf("additional_urls = %v, want only %q", got, userURL)
+	}
+}
+
+// writeFakeArduinoCli plants a script that records each invocation's arguments,
+// one line per call, and exits with the given status. Returns the script path
+// and the log path.
+func writeFakeArduinoCli(t *testing.T, exitCode int) (cliPath, logPath string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake arduino-cli is a shell script")
+	}
+
+	dir := t.TempDir()
+	logPath = filepath.Join(dir, "calls.log")
+	cliPath = filepath.Join(dir, "arduino-cli")
+	script := "#!/bin/sh\necho \"$@\" >> '" + logPath + "'\nexit " + strconv.Itoa(exitCode) + "\n"
+	if err := os.WriteFile(cliPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake arduino-cli: %v", err)
+	}
+	return cliPath, logPath
+}
+
+// countUpdateIndexCalls returns how often the fake arduino-cli was asked to
+// update the core index.
+func countUpdateIndexCalls(t *testing.T, logPath string) int {
+	t.Helper()
+	data, err := os.ReadFile(logPath)
+	if os.IsNotExist(err) {
+		return 0
+	}
+	if err != nil {
+		t.Fatalf("read call log: %v", err)
+	}
+	n := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if strings.HasPrefix(line, "core update-index ") {
+			n++
+		}
+	}
+	return n
+}
+
+// The config file is persistent, so the index must be fetched on the first
+// install call of a launch; later calls in the same launch reuse it.
+func TestRefreshArduinoCliCoreIndexRunsOncePerLaunch(t *testing.T) {
+	cliPath, logPath := writeFakeArduinoCli(t, 0)
+	h := &LSPHandler{}
+
+	for i := 0; i < 3; i++ {
+		h.refreshArduinoCliCoreIndex(cliPath, "cfg.yaml")
+	}
+	if got := countUpdateIndexCalls(t, logPath); got != 1 {
+		t.Fatalf("update-index ran %d times, want 1", got)
+	}
+}
+
+// An offline host keeps the cached index: the per-launch refresh is not fatal,
+// and it is not retried in the same launch, so a failing fetch cannot stall
+// every language-server start.
+func TestRefreshArduinoCliCoreIndexToleratesOfflineOncePerLaunch(t *testing.T) {
+	cliPath, logPath := writeFakeArduinoCli(t, 1)
+	h := &LSPHandler{}
+
+	for i := 0; i < 2; i++ {
+		h.refreshArduinoCliCoreIndex(cliPath, "cfg.yaml")
+	}
+	if got := countUpdateIndexCalls(t, logPath); got != 1 {
+		t.Fatalf("update-index ran %d times, want 1", got)
+	}
+}
+
+// writeHangingArduinoCli plants a script that sleeps past any test timeout, so
+// a caller without a deadline never returns.
+func writeHangingArduinoCli(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake arduino-cli is a shell script")
+	}
+
+	cliPath := filepath.Join(t.TempDir(), "arduino-cli")
+	if err := os.WriteFile(cliPath, []byte("#!/bin/sh\nsleep 300\n"), 0o755); err != nil {
+		t.Fatalf("write hanging arduino-cli: %v", err)
+	}
+	return cliPath
+}
+
+// A firewall that drops packets makes the fetch hang, so the per-launch
+// refresh is time-boxed and the language server start continues without it.
+func TestRefreshArduinoCliCoreIndexGivesUpOnAHangingFetch(t *testing.T) {
+	cliPath := writeHangingArduinoCli(t)
+	h := &LSPHandler{}
+
+	prev := coreIndexRefreshTimeout
+	coreIndexRefreshTimeout = 1 * time.Second
+	t.Cleanup(func() { coreIndexRefreshTimeout = prev })
+
+	start := time.Now()
+	h.refreshArduinoCliCoreIndex(cliPath, "cfg.yaml")
+	// The script sleeps for 300s. Anything near that means the deadline did not
+	// reach the process.
+	if elapsed := time.Since(start); elapsed > 30*time.Second {
+		t.Fatalf("refreshArduinoCliCoreIndex() took %s, want it to give up at the timeout", elapsed)
 	}
 }

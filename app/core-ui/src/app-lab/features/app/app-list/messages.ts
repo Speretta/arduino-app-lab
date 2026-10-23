@@ -6,7 +6,7 @@ export type EmptyStateKey = AppsSection | 'inspirations';
 export const emptyTitleMessages = defineMessages<EmptyStateKey>({
   'my-apps': {
     id: 'appList.emptyMyApps',
-    defaultMessage: 'No apps yet',
+    defaultMessage: 'No Apps yet',
     description: 'No apps yet',
   },
   examples: {
@@ -53,7 +53,7 @@ export const emptySearchMessages = defineMessages({
 export const appListMessages = defineMessages({
   actionCreate: {
     id: 'appList.actionCreate',
-    defaultMessage: 'Create new app',
+    defaultMessage: 'Create new App',
     description: 'Create a new app',
   },
   successfullyDeletedApp: {
@@ -61,24 +61,14 @@ export const appListMessages = defineMessages({
     defaultMessage: 'App successfully deleted',
     description: 'Success message when an app is deleted',
   },
-  successfullyRenamedApp: {
-    id: 'app-lab.app-list.successfully-renamed-app',
-    defaultMessage: 'App successfully renamed',
-    description: 'Success message when an app is renamed',
-  },
   successfullyExportedApp: {
     id: 'app-lab.app-list.successfully-exported-app',
     defaultMessage: '{appName} successfully exported',
     description: 'Success message when an app is exported',
   },
-  setAsDefault: {
-    id: 'app-lab.app-list.set-as-default',
-    defaultMessage: '{appName} set as default app',
-    description: 'Success message when an app is set as default',
-  },
   removedAsDefault: {
     id: 'app-lab.app-list.removed-as-default',
-    defaultMessage: '{appName} removed as default app',
+    defaultMessage: '{appName} removed as default App',
     description: 'Success message when an app is removed as default',
   },
   searchExamples: {

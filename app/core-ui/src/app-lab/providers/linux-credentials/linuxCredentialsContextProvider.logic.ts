@@ -4,9 +4,8 @@ import {
   setUserPassword as apiSetUserPassword,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useReducer } from 'react';
+import { useCallback, useMemo, useReducer } from 'react';
 
-import { useBoards } from '../../hooks/useBoards';
 import { useBoardLifecycleStore } from '../../store/boardLifecycle';
 import { LinuxCredentialsContextValue } from './linuxCredentialsContext';
 
@@ -63,8 +62,9 @@ function setUserPasswordReducer(
 export function useLinuxCredentials(): LinuxCredentialsContextValue {
   const queryClient = useQueryClient();
 
-  const boardsProps = useBoards();
-  const isVentunoQ = boardsProps.selectedBoard?.fqbn === BOARD_FQBN.VENTUNO_Q;
+  const isVentunoQ = useBoardLifecycleStore(
+    (state) => state.selectedConnectedBoard?.fqbn === BOARD_FQBN.VENTUNO_Q,
+  );
 
   const boardIsReachable = useBoardLifecycleStore(
     (state) => state.boardIsReachable,
@@ -75,20 +75,18 @@ export function useLinuxCredentials(): LinuxCredentialsContextValue {
     setUserPasswordInitialState,
   );
 
-  const { data: userPasswordIsSet, isSuccess: userPasswordChecked } = useQuery(
-    ['get-user-password-set'],
-    isUserPasswordSet,
-    {
-      enabled: boardIsReachable,
-    },
-  );
+  const { data: userPasswordIsSet, isSuccess: userPasswordChecked } = useQuery({
+    queryKey: ['get-user-password-set'],
+    queryFn: isUserPasswordSet,
+    enabled: boardIsReachable,
+  });
 
   const {
     mutate: setUserPassword,
-    isLoading: setUserPasswordIsLoading,
+    isPending: setUserPasswordIsLoading,
     isSuccess: setUserPasswordIsSuccess,
   } = useMutation({
-    mutationFn: apiSetUserPassword,
+    mutationFn: (variables: string) => apiSetUserPassword(variables),
     onSuccess: () => {
       queryClient.setQueryData(['get-user-password-set'], true);
       dispatch({ type: 'RESET_ERROR' });
@@ -100,7 +98,9 @@ export function useLinuxCredentials(): LinuxCredentialsContextValue {
       dispatch({ type: 'SET_PASSWORD_ERROR', payload: errorMessage });
     },
     onSettled: () => {
-      queryClient.invalidateQueries(['get-user-password-set']);
+      queryClient.invalidateQueries({
+        queryKey: ['get-user-password-set'],
+      });
     },
   });
 
@@ -132,16 +132,28 @@ export function useLinuxCredentials(): LinuxCredentialsContextValue {
     [setUserPassword],
   );
 
-  return {
-    isVentunoQ,
-    userPasswordChecked,
-    userPasswordIsSet: userPasswordIsSet ?? false,
-    setUserPassword: handleSetUserPassword,
-    setUserPasswordIsLoading,
-    setUserPasswordIsError: errorState.isPasswordError,
-    setUserPasswordIsSuccess,
-    userPasswordErrorMsg: errorState.passwordErrorMsg,
-    setUserPasswordConfirmationIsError: errorState.isPasswordConfirmationError,
-    userPasswordConfirmationErrorMsg: errorState.passwordConfirmationErrorMsg,
-  };
+  return useMemo(
+    () => ({
+      isVentunoQ,
+      userPasswordChecked,
+      userPasswordIsSet: userPasswordIsSet ?? false,
+      setUserPassword: handleSetUserPassword,
+      setUserPasswordIsLoading,
+      setUserPasswordIsError: errorState.isPasswordError,
+      setUserPasswordIsSuccess,
+      userPasswordErrorMsg: errorState.passwordErrorMsg,
+      setUserPasswordConfirmationIsError:
+        errorState.isPasswordConfirmationError,
+      userPasswordConfirmationErrorMsg: errorState.passwordConfirmationErrorMsg,
+    }),
+    [
+      errorState,
+      handleSetUserPassword,
+      isVentunoQ,
+      setUserPasswordIsLoading,
+      setUserPasswordIsSuccess,
+      userPasswordChecked,
+      userPasswordIsSet,
+    ],
+  );
 }

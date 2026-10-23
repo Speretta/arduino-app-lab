@@ -181,3 +181,14 @@ $rail-top: 9px;
   margin-top: 8px;
 }
 
+
+// The row acted on another app: the same signal the permission prompt carries, kept visible in the transcript.
+.timeline-outside {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--component-bg-above);
+  color: var(--text-inverted-subtle);
+  font-size: 10px;
+  white-space: nowrap;
+}

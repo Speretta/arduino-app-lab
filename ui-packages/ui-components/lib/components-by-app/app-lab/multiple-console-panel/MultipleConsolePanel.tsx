@@ -18,6 +18,7 @@ import {
   IconButton,
   ProgressBar,
   SerialMonitor,
+  Tabs,
   useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import clsx from 'clsx';
@@ -27,7 +28,6 @@ import { codeMirrorParams } from './config';
 import { useSendMessage } from './hooks/useSendMessage';
 import { messages } from './messages';
 import styles from './multiple-console-panel.module.scss';
-import ConsoleTabs from './sub-components/ConsoleTabs';
 import { getOrderedConsoleTabs } from './utils';
 
 const MultipleConsolePanel: React.FC<ConsolePanelProps> = (
@@ -152,10 +152,23 @@ const MultipleConsolePanel: React.FC<ConsolePanelProps> = (
         })}
       >
         <div className={styles['console-panel-header']}>
-          <ConsoleTabs
-            consoleTabs={orderedConsoleTabs}
+          <Tabs
+            tabs={orderedConsoleTabs}
             activeTab={activeTab}
-            setActiveTab={setActiveTab}
+            onTabChange={setActiveTab}
+            size="small"
+            tabDictionary={(tab): string => {
+              switch (tab) {
+                case CONSOLE_SOURCE_KEYS.STARTUP:
+                  return formatMessage(messages.tabAppLaunch);
+                case CONSOLE_SOURCE_KEYS.PYTHON:
+                  return formatMessage(messages.tabPython);
+                case CONSOLE_SOURCE_KEYS.SERIAL_MONITOR:
+                  return formatMessage(messages.tabSerialMonitor);
+                default:
+                  return formatMessage(messages.tabUnknown, { tab });
+              }
+            }}
           />
           <div className={styles['console-panel-header--actions']}>
             <IconButton

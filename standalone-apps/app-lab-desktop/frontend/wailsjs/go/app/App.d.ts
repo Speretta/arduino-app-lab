@@ -7,11 +7,12 @@ import {flasher} from '../models';
 import {assetserver} from '../models';
 import {board} from '../models';
 import {options} from '../models';
-import {ethernet} from '../models';
-import {fs} from '../models';
 import {learn} from '../models';
-import {wifi} from '../models';
+import {network} from '../models';
+import {hw} from '../models';
+import {fs} from '../models';
 import {httpclient} from '../models';
+import {arduinoapps} from '../models';
 import {airuntime} from '../models';
 import {lsp} from '../models';
 
@@ -39,13 +40,13 @@ export function AgentListSessions():Promise<Array<agent.SessionSummary>>;
 
 export function AgentLoadSession(arg1:string):Promise<void>;
 
-export function AgentNewSession(arg1:string):Promise<string>;
+export function AgentNewSession(arg1:string,arg2:string):Promise<string>;
 
 export function AgentPermissionReply(arg1:string,arg2:agent.PermissionOutcome):Promise<void>;
 
 export function AgentPinSession(arg1:string,arg2:boolean):Promise<void>;
 
-export function AgentPrompt(arg1:string,arg2:string):Promise<void>;
+export function AgentPrompt(arg1:string,arg2:string,arg3:agent.EditorContext):Promise<void>;
 
 export function AgentRenameSession(arg1:string,arg2:string):Promise<void>;
 
@@ -73,17 +74,19 @@ export function ApplyBoardUpdate(arg1:boolean,arg2:string):Promise<any>;
 
 export function CancelFlash():Promise<void>;
 
-export function CarrierDisable(arg1:string,arg2:string):Promise<carrier.ShowCarrierResult>;
+export function CarrierDisable(arg1:string,arg2:string):Promise<void>;
 
-export function CarrierEnable(arg1:string,arg2:string,arg3:Array<carrier.EnableDeviceConfig>):Promise<carrier.ShowCarrierResult>;
+export function CarrierEnable(arg1:string,arg2:string,arg3:Array<carrier.EnableDeviceConfig>):Promise<void>;
 
-export function CarrierList():Promise<Array<carrier.Carrier>>;
+export function CarrierList():Promise<carrier.CarrierResponse>;
 
-export function CarrierShow(arg1:string):Promise<carrier.ShowResult>;
+export function CarrierShow():Promise<carrier.ShowResult>;
 
 export function CheckAndApplyUpdate(arg1:boolean):Promise<void>;
 
 export function CheckBoardUpdate(arg1:boolean,arg2:string):Promise<string>;
+
+export function ChooseReleaseSavePath(arg1:string):Promise<string>;
 
 export function ConnectToWiFi(arg1:string,arg2:string):Promise<void>;
 
@@ -100,6 +103,8 @@ export function EnableNetworkMode(arg1:string):Promise<void>;
 export function ExportApp(arg1:string,arg2:string,arg3:boolean):Promise<string>;
 
 export function Flash(arg1:flasher.OSImageRelease,arg2:boolean):Promise<void>;
+
+export function ForgetWorkspaceApp(arg1:string):Promise<void>;
 
 export function ForwardNonUIPort(arg1:number):Promise<void>;
 
@@ -123,17 +128,11 @@ export function GetCurrentVersion():Promise<string>;
 
 export function GetErrorFormatter():Promise<options.ErrorFormatter>;
 
-export function GetEthStatus():Promise<ethernet.EthStatus>;
-
 export function GetFeatureFlags():Promise<Array<string>>;
 
 export function GetFileContent(arg1:string):Promise<string>;
 
-export function GetFileTree(arg1:string):Promise<fs.FSNode>;
-
 export function GetIPAddress():Promise<any>;
-
-export function GetInternetStatus():Promise<boolean>;
 
 export function GetKernelVersion():Promise<string>;
 
@@ -151,6 +150,8 @@ export function GetLspWorkspaceFile(arg1:string):Promise<string>;
 
 export function GetNetworkModeStatus():Promise<boolean>;
 
+export function GetNetworkStatus():Promise<network.NetworkStatus>;
+
 export function GetOSImageVersion():Promise<string>;
 
 export function GetOrchestratorURL():Promise<string>;
@@ -161,9 +162,19 @@ export function GetTags():Promise<Array<learn.Tag>>;
 
 export function GetTitle():Promise<string>;
 
-export function GetWiFiStatus():Promise<wifi.WifiStatus>;
-
 export function HandleSecondInstanceLaunch(arg1:options.SecondInstanceData):Promise<void>;
+
+export function HwAvailable():Promise<boolean>;
+
+export function HwDisable(arg1:string,arg2:string):Promise<void>;
+
+export function HwEnable(arg1:string,arg2:string,arg3:Array<hw.EnableDeviceConfig>):Promise<void>;
+
+export function HwList():Promise<hw.ListResult>;
+
+export function HwShow():Promise<hw.ShowResult>;
+
+export function HwSupported():Promise<boolean>;
 
 export function ImportAppFromPath(arg1:string):Promise<string>;
 
@@ -177,11 +188,11 @@ export function InitLspWorkspace(arg1:string):Promise<void>;
 
 export function IsBoard():Promise<boolean>;
 
-export function IsDirectory(arg1:string):Promise<boolean>;
-
 export function IsLocalDirectory(arg1:string):Promise<boolean>;
 
 export function IsLspEnabled():Promise<boolean>;
+
+export function IsUIZoomAvailable():Promise<boolean>;
 
 export function IsUserPartitionPreservationSupported(arg1:string,arg2:string):Promise<boolean>;
 
@@ -189,7 +200,13 @@ export function IsUserPasswordSet():Promise<boolean>;
 
 export function ListAvailableOSImages():Promise<Array<flasher.OSImageRelease>>;
 
+export function ListDirectory(arg1:string):Promise<Array<fs.FSNode>>;
+
 export function ListKeyboardLayouts():Promise<Array<board.KeyboardLayout>>;
+
+export function ListLspFiles(arg1:string,arg2:string):Promise<Array<string>>;
+
+export function ListLspSketchFiles(arg1:string):Promise<Array<string>>;
 
 export function ListSSIDs():Promise<Array<string>>;
 
@@ -206,6 +223,12 @@ export function OpenBoardTerminal():Promise<void>;
 export function OpenFile(arg1:string):Promise<void>;
 
 export function OpenUIWhenReady(arg1:number,arg2:number):Promise<void>;
+
+export function ReadReleaseArchive(arg1:string):Promise<string>;
+
+export function ReadReleaseManifest(arg1:string):Promise<arduinoapps.ReleaseManifest>;
+
+export function RebindWorkspaceApp(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function RebootBoard(arg1:string):Promise<void>;
 
@@ -241,9 +264,13 @@ export function SetKeyboardLayout(arg1:string):Promise<void>;
 
 export function SetRefreshToken(arg1:string,arg2:string):Promise<void>;
 
+export function SetUIZoom(arg1:number):Promise<void>;
+
 export function SetUserPassword(arg1:string):Promise<void>;
 
 export function StartLSP(arg1:lsp.LspId,arg2:string):Promise<void>;
+
+export function StatPath(arg1:string):Promise<fs.FSNode>;
 
 export function StopAllLSP():Promise<void>;
 
@@ -258,3 +285,5 @@ export function WatchApp(arg1:string):Promise<void>;
 export function WatchAppsDir(arg1:string):Promise<void>;
 
 export function WriteFileContent(arg1:string,arg2:string,arg3:boolean):Promise<void>;
+
+export function WriteReleaseFile(arg1:string,arg2:string):Promise<void>;

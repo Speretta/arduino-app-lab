@@ -16,14 +16,22 @@ import {
   CreateAppDialogLogic,
   DeleteAppDialogLogic,
   ExportAppDialogLogic,
+  PublishAppDialogLogic,
+  ReleaseInfoDialogLogic,
   useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 
+import { AuthContext } from '../../../../../providers/auth/authContext';
+import { PublishContext } from '../../../../../providers/publish/publishContext';
 import { DETAIL_PATH_BY_SECTION } from '../../../../../routes/__root';
+import { removeOpenFilesForApp } from '../../../../../services/openFilesStore';
+import { useBoardLifecycleStore } from '../../../../../store/boardLifecycle';
 import { sendAppLabNotification } from '../../../../notifications';
+import { releaseInfoDetails } from '../../../../release/releaseApp';
+import { useCreateReleaseTrigger } from '../../../../release/releaseDialogs.logic';
 import { messages } from '../../messages';
 
 export type UseCreateAppTitleLogic = (
@@ -57,6 +65,8 @@ export const useCreateAppTitleLogic: UseCreateAppTitleLogic = function (
   const [deleteAppDialogOpen, setDeleteAppDialogOpen] = useState(false);
   const [createAppDialogOpen, setCreateAppDialogOpen] = useState(false);
   const [exportAppDialogOpen, setExportAppDialogOpen] = useState(false);
+  const [publishAppDialogOpen, setPublishAppDialogOpen] = useState(false);
+  const [releaseInfoDialogOpen, setReleaseInfoDialogOpen] = useState(false);
   const [name, setName] = useState(app?.name ?? '');
   const [editing, setEditing] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -68,8 +78,12 @@ export const useCreateAppTitleLogic: UseCreateAppTitleLogic = function (
 
         const result = await deleteApp(app.id);
         if (result) {
+          const serial =
+            useBoardLifecycleStore.getState().selectedConnectedBoard?.serial;
+          await removeOpenFilesForApp(app.id, serial);
           navigate({
             to: `/${section}`,
+            params: true,
           });
           sendAppLabNotification({
             message: formatMessage(messages.successfullyDeletedApp),
@@ -104,6 +118,7 @@ export const useCreateAppTitleLogic: UseCreateAppTitleLogic = function (
         if (result) {
           navigate({
             to: `/my-apps/${result}`,
+            params: true,
           });
         }
         return result !== undefined;
@@ -124,10 +139,53 @@ export const useCreateAppTitleLogic: UseCreateAppTitleLogic = function (
     navigate,
   ]);
 
+  const usePublishAppDialogLogic = (): ReturnType<PublishAppDialogLogic> => {
+    const { user: arduinoUser, login: arduinoLogin } = useContext(AuthContext);
+    const { startPublish } = useContext(PublishContext);
+    const [isSigningIn, setIsSigningIn] = useState(false);
+
+    return {
+      open: publishAppDialogOpen,
+      onPublish: async (includeData: boolean): Promise<void> => {
+        if (!app) return;
+
+        if (!arduinoUser) {
+          setIsSigningIn(true);
+          try {
+            await arduinoLogin();
+          } catch (error) {
+            console.error('Arduino sign-in failed:', error);
+            return;
+          } finally {
+            setIsSigningIn(false);
+          }
+        }
+
+        setPublishAppDialogOpen(false);
+        startPublish(app, includeData);
+      },
+      onOpenChange: setPublishAppDialogOpen,
+      isLoading: isSigningIn,
+    };
+  };
+  const publishAppDialogLogic = useCallback(usePublishAppDialogLogic, [
+    app,
+    publishAppDialogOpen,
+  ]);
+
+  const releaseInfoDialogLogic = useCallback(
+    (): ReturnType<ReleaseInfoDialogLogic> => ({
+      open: releaseInfoDialogOpen,
+      release: app ? releaseInfoDetails(app) : undefined,
+      onOpenChange: setReleaseInfoDialogOpen,
+    }),
+    [app, releaseInfoDialogOpen],
+  );
+
   const useExportAppDialogLogic = (): ReturnType<ExportAppDialogLogic> => {
     const {
       mutate: onExport,
-      isLoading,
+      isPending,
       error,
       reset,
     } = useMutation({
@@ -154,7 +212,7 @@ export const useCreateAppTitleLogic: UseCreateAppTitleLogic = function (
       appName: [app?.icon, app?.name].join(' '),
       onExport,
       onOpenChange: setExportAppDialogOpen,
-      isLoading,
+      isLoading: isPending,
       error,
       reset,
     };
@@ -173,25 +231,43 @@ export const useCreateAppTitleLogic: UseCreateAppTitleLogic = function (
     setName(app?.name || '');
   }, [app?.name]);
 
-  const onAppAction = useCallback((action: AppAction): void => {
-    switch (action) {
-      case AppAction.Rename:
-        setEditing(true);
-        break;
+  const { openCreateRelease, disabledReason } = useCreateReleaseTrigger();
+  const createReleaseDisabledReason = disabledReason(app?.id);
 
-      case AppAction.Duplicate:
-        setCreateAppDialogOpen(true);
-        break;
+  const onAppAction = useCallback(
+    (action: AppAction): void => {
+      switch (action) {
+        case AppAction.Rename:
+          setEditing(true);
+          break;
 
-      case AppAction.Export:
-        setExportAppDialogOpen(true);
-        break;
+        case AppAction.Duplicate:
+          setCreateAppDialogOpen(true);
+          break;
 
-      case AppAction.Delete:
-        setDeleteAppDialogOpen(true);
-        break;
-    }
-  }, []);
+        case AppAction.Publish:
+          setPublishAppDialogOpen(true);
+          break;
+
+        case AppAction.CreateRelease:
+          if (app) openCreateRelease(app);
+          break;
+
+        case AppAction.ReleaseInfo:
+          setReleaseInfoDialogOpen(true);
+          break;
+
+        case AppAction.Export:
+          setExportAppDialogOpen(true);
+          break;
+
+        case AppAction.Delete:
+          setDeleteAppDialogOpen(true);
+          break;
+      }
+    },
+    [app, openCreateRelease],
+  );
 
   const onResetAppName = useCallback((): void => {
     setEditing(false);
@@ -225,6 +301,7 @@ export const useCreateAppTitleLogic: UseCreateAppTitleLogic = function (
     () => ({
       app,
       appStatus,
+      createReleaseDisabledReason,
       name,
       editing,
       hasError,
@@ -239,10 +316,13 @@ export const useCreateAppTitleLogic: UseCreateAppTitleLogic = function (
       deleteAppDialogLogic,
       createAppDialogLogic,
       exportAppDialogLogic,
+      publishAppDialogLogic,
+      releaseInfoDialogLogic,
     }),
     [
       app,
       appStatus,
+      createReleaseDisabledReason,
       name,
       editing,
       hasError,
@@ -257,6 +337,8 @@ export const useCreateAppTitleLogic: UseCreateAppTitleLogic = function (
       deleteAppDialogLogic,
       createAppDialogLogic,
       exportAppDialogLogic,
+      publishAppDialogLogic,
+      releaseInfoDialogLogic,
     ],
   );
 };

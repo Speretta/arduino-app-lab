@@ -1,6 +1,6 @@
 ---
 name: react-dom
-version: 18.2.0
+version: 18.3.1
 type: npm
 summary: React package for working with the DOM.
 homepage: https://reactjs.org/

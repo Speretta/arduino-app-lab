@@ -8,7 +8,7 @@ $librariesContainerHeight: calc(100% - $librariesContainerOffset);
 $librariesFiltersOverflow: var(--libraries-filters-overflow);
 $librariesFiltersHeight: 60px; // WIP, it will be 200px
 $librariesLateralPadding: 15px;
-$itemBorder: 4px solid white;
+$itemBorder: 4px solid var(--surface-bg-above);
 
 :root {
   --libraries-filters-overflow: hidden;
@@ -33,7 +33,7 @@ $itemBorder: 4px solid white;
   .libraries-filters-container {
     &:hover,
     &.expanded {
-      background: #ecf1f1;
+      background: var(--component-bg-below-1);
     }
 
     margin-bottom: 8px;
@@ -42,7 +42,7 @@ $itemBorder: 4px solid white;
       padding: 8px 16px;
       background: transparent;
       border: none;
-      color: #7f8c8d;
+      color: var(--text-subtle);
       display: flex;
       align-items: center;
       width: 100%;
@@ -107,11 +107,13 @@ $itemBorder: 4px solid white;
   }
 
   &:not(:last-child) > li {
-    border-bottom: 1px solid #dae3e3;
+    border-bottom: 1px solid var(--border-default);
   }
 }
 
 .libraries-list-item {
+  color: var(--text-default);
+
   display: flex;
   flex-direction: column;
   padding: 24px $librariesLateralPadding 18px;
@@ -129,6 +131,7 @@ $itemBorder: 4px solid white;
       display: flex;
       align-items: center;
       margin-right: auto;
+      color: var(--text-default, inherit);
     }
 
     .library-option-button-wrapper {
@@ -192,7 +195,7 @@ $itemBorder: 4px solid white;
   }
 
   .library-maintainer {
-    color: #7f8c8d;
+    color: var(--text-subtle);
   }
 
   .library-maintainer-icon {
@@ -217,7 +220,7 @@ $itemBorder: 4px solid white;
     opacity: 0.5;
     &:hover {
       cursor: default;
-      background-color: var(--button-primary-background) !important;
+      background-color: var(--accent-default) !important;
     }
   }
 }
@@ -264,6 +267,8 @@ $itemBorder: 4px solid white;
 
   .library-description {
     width: 100%;
+
+    color: var(--text-default);
 
     & > div {
       height: 15px;
@@ -333,9 +338,9 @@ $itemBorder: 4px solid white;
   justify-content: space-between;
   width: 124px;
   height: 28px;
-  background: white;
+  background: var(--component-bg-below-1);
   border-radius: 32px;
-  border: 1px solid #bdc7c7;
+  border: 1px solid var(--border-default);
   margin: 20px 8px 16px 0px;
   padding: 0px 4px 0px 12px;
   & > span {
@@ -346,7 +351,7 @@ $itemBorder: 4px solid white;
   }
 }
 .item-version-button-pinned {
-  background-color: #ecf1f1;
+  background-color: var(--component-bg-below-1);
 }
 
 .item-version-button-disabled {
@@ -384,7 +389,6 @@ $itemBorder: 4px solid white;
 }
 
 .item-default-version {
-  background-color: #ecf1f1;
   border-top: $itemBorder;
   border-left: $itemBorder;
   border-right: $itemBorder;
@@ -405,7 +409,7 @@ $itemBorder: 4px solid white;
 }
 
 .item-selected-version {
-  background-color: shared.theme-var(--dropdown-item-background-hover);
+  background-color: var(--dropdown-item-background-selected);
 }
 
 .item-selected-icon {
@@ -413,7 +417,7 @@ $itemBorder: 4px solid white;
 }
 
 .color-primary {
-  color: #008184;
+  color: var(--text-link);
 }
 
 .no-results-container {
@@ -435,7 +439,7 @@ $itemBorder: 4px solid white;
   align-items: center;
   justify-items: start;
   gap: 3px;
-  color: #7f8c8d;
+  color: var(--text-subtle);
   overflow: hidden;
 }
 

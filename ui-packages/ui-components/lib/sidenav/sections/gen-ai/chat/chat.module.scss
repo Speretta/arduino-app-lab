@@ -2,7 +2,7 @@
 @use "../../../../typography/typography.module.scss" as typography;
 
 // TODO: Use correct variables when available
-$scrollbarThumbBorderColor: #f7f9f9;
+$scrollbarThumbBorderColor: var(--sidebar-panel-background);
 
 :root {
     --message-thread-height: 0;
@@ -17,6 +17,7 @@ $scrollbarThumbBorderColor: #f7f9f9;
     height: 100%;
     grid-template-rows: 1fr min-content min-content;
     overflow: hidden;
+    color: var(--text-default);
 }
 
 .message-thread-container {
@@ -30,10 +31,6 @@ $scrollbarThumbBorderColor: #f7f9f9;
     line-height: 20px;
     white-space-collapse: preserve;
 
-    &::-webkit-scrollbar-track {
-        background-color: transparent;
-    }
-
     &::-webkit-scrollbar-thumb {
         border: 4px solid $scrollbarThumbBorderColor;
     }
@@ -41,7 +38,7 @@ $scrollbarThumbBorderColor: #f7f9f9;
 
 .survey-trigger {
     width: 100%;
-    color: #95a5a6;
+    color: var(--text-subtle);
     box-sizing: border-box;
     align-self: end;
     text-align: left;
@@ -62,7 +59,7 @@ $scrollbarThumbBorderColor: #f7f9f9;
 
 .loading-messages {
     width: 100%;
-    color: #95a5a6;
+    color: var(--text-subtle);
     box-sizing: border-box;
     align-self: end;
     text-align: left;
@@ -74,7 +71,7 @@ $scrollbarThumbBorderColor: #f7f9f9;
 
 .disclaimer-container {
     font-size: 12px;
-    color: #95a5a6;
+    color: var(--text-subtle);
     margin: 16px;
     text-align: center;
 }
@@ -100,7 +97,7 @@ $scrollbarThumbBorderColor: #f7f9f9;
     gap: 8px;
 
     button {
-        color: #008184;
+        color: var(--text-link);
         flex-direction: row-reverse;
         gap: unset !important;
 
@@ -109,7 +106,7 @@ $scrollbarThumbBorderColor: #f7f9f9;
             width: 26px;
 
             & > path {
-                fill: #008184;
+                fill: var(--text-link);
             }
         }
     }
@@ -118,7 +115,7 @@ $scrollbarThumbBorderColor: #f7f9f9;
 .hints-section {
     display: grid;
     gap: 8px;
-    color: #95a5a6;
+    color: var(--text-subtle);
     justify-content: center;
     align-content: center;
     justify-items: start;
@@ -148,7 +145,7 @@ $scrollbarThumbBorderColor: #f7f9f9;
     display: grid;
     justify-content: center;
     align-items: center;
-    background: linear-gradient(0deg, #f7f9f9 23%, rgba(247, 249, 249, 0) 100%);
+    background: linear-gradient(0deg, var(--sidebar-panel-background) 23%, transparent 100%);
 
     z-index: shared.$zIndex1;
     width: calc(var(--current-sidenav-panel-width) - 16px);
@@ -183,7 +180,7 @@ $scrollbarThumbBorderColor: #f7f9f9;
     align-items: center;
     gap: 12px;
 
-    background-color: #ecf1f1;
+    background-color: var(--component-bg-below-1);
     border-radius: 8px 8px 0px 0px;
     min-height: 36px;
 
@@ -215,7 +212,7 @@ $scrollbarThumbBorderColor: #f7f9f9;
     .content {
         display: grid;
         border-radius: 4px;
-        background-color: rgb(236, 241, 241);
+        background-color: var(--component-bg-below-1);
         padding: 8px 16px 10px 16px;
         width: fit-content;
     }
@@ -262,7 +259,7 @@ $scrollbarThumbBorderColor: #f7f9f9;
     }
 
     code {
-        color: shared.theme-var(--editor-syntax-highlight-string);
+        color: var(--editor-syntax-highlight-string);
         font-family: typography.$roboto-mono-font-family;
         font-size: 12px;
         font-style: normal;
@@ -275,14 +272,14 @@ $scrollbarThumbBorderColor: #f7f9f9;
 .retrieved-documents {
     display: grid;
     padding-top: 12px;
-    color: #7f8c8d;
+    color: var(--text-subtle);
 
     & svg {
         height: 16px;
         width: 16px;
 
         & path {
-            fill: #7f8c8d;
+            fill: var(--text-subtle);
         }
     }
 
@@ -297,9 +294,9 @@ $scrollbarThumbBorderColor: #f7f9f9;
         align-items: center;
         gap: 4px;
         padding: 2px 4px 2px 5px;
-        background-color: #ecf1f1;
+        background-color: var(--component-bg-below-1);
         border-radius: 4px;
-        color: #5d6a6b !important;
+        color: var(--text-subtle) !important;
         width: fit-content;
         text-decoration: none;
 

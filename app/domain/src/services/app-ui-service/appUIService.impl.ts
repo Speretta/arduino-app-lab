@@ -18,9 +18,19 @@ export let onAgentStartedApp: AppUIService['onAgentStartedApp'] = () => {
   return () => undefined;
 };
 
+export let onAgentWifiRequest: AppUIService['onAgentWifiRequest'] = () => {
+  return () => undefined;
+};
+
+export let onAgentModelImport: AppUIService['onAgentModelImport'] = () => {
+  return () => undefined;
+};
+
 export const setAppUIService = (service: AppUIService): void => {
   findPorts = service.findPorts;
   openUIWhenReady = service.openUIWhenReady;
   forwardNonUIPort = service.forwardNonUIPort;
   onAgentStartedApp = service.onAgentStartedApp;
+  onAgentWifiRequest = service.onAgentWifiRequest;
+  onAgentModelImport = service.onAgentModelImport;
 };

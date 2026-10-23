@@ -22,22 +22,29 @@
     margin-right: 12px;
 
     &:hover {
-        background-color: #fff;
+        background-color: var(--surface-bg-above);
+
     }
+
+    &[class*=disabled] {
+        opacity: 0.5;
+    }    
 }
 
 .serial-monitor-toolbar {
     height: serial-monitor-variables.$toolbarHeight;
-    background-color: shared.theme-var(--toolbar-background);
+    background-color: var(--component-bg-below-1);
     padding-left: calc(serial-monitor-variables.$serialMonitorPaddingLeft + 6px);
     padding-right: 24px;
-    border: 1px solid serial-monitor-variables.$borderColor;
+    border: 1px solid var(--editor-lines-background-selected);
     display: flex;
     align-items: center;
-
+    color: var(--text-default);
+    
     .play-pause-button {
-        background-color: #fff;
         @include toolbarButton(15px);
+        background-color: var(--surface-bg-above);
+        color: var(--text-default) !important;
         min-width: 40px;
 
         &:focus-visible {
@@ -46,7 +53,8 @@
 
         &:not([class*="disabled"]) {
             &:hover {
-                background-color: #dae3e3;
+                background-color: var(--dropdown-item-background-hover);
+                color: var(--text-default);
             }
         }
 
@@ -69,6 +77,7 @@
 
         .clear-log-button {
             @include toolbarButton(18px);
+            
         }
 
         .search-button-wrapper {

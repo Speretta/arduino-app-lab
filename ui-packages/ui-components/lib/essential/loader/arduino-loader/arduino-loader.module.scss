@@ -1,6 +1,3 @@
-
-@use "@cloud-editor-mono/arduino-sass";
-
 .arduino-loader {
   position: fixed;
   top: 0;
@@ -12,7 +9,7 @@
   justify-content: center;
 
   &.secondary {
-    --color: #{arduino-sass.$fog};
+    --color: #dae3e3;
   }
 
   svg :global {
@@ -22,7 +19,7 @@
     $move: 100px;
     $delay: calc(0.13 * #{$timing});
 
-    --color: #{arduino-sass.$teal3};
+    --color: #008184;
 
     width: $size;
     display: initial;
@@ -58,81 +55,78 @@
       transition: stroke 0.25s ease-in-out;
     }
 
-
     @keyframes minus {
       15% {
         opacity: 1;
         transform: translateY(0) rotate(0deg);
       }
-    
+
       35% {
         opacity: 0;
         transform: translateY(calc(1 * #{$move})) rotate(calc(-1 * #{$angle}));
       }
-    
+
       40% {
         transform: translateY(0) rotate(calc(-1 * #{$angle}));
         opacity: 0;
       }
-    
+
       55% {
         opacity: 0;
         transform: translateY(calc(-1 * #{$move})) rotate(calc(-1 * #{$angle}));
       }
-    
+
       75%,
       100% {
         opacity: 1;
         transform: translateY(0) rotate(0deg);
       }
     }
-    
+
     @keyframes plus {
       15% {
         opacity: 1;
         transform: translateY(0) rotate(0deg);
       }
-    
+
       35% {
         opacity: 0;
         transform: translateY(calc(-1 * #{$move})) rotate(calc(1 * #{$angle}));
       }
-    
+
       40% {
         transform: translateY(0) rotate(0deg);
         opacity: 0;
       }
-    
+
       55% {
         opacity: 0;
         transform: translateY(calc(1 * #{$move})) rotate(calc(1 * #{$angle}));
       }
-    
+
       75%,
       100% {
         opacity: 1;
         transform: translateY(0) rotate(0deg);
       }
     }
-    
+
     @keyframes dash {
       0% {
         stroke-dashoffset: 2;
       }
-    
+
       45% {
         stroke-dashoffset: 1.01;
       }
-    
+
       95% {
         stroke-dashoffset: 0;
       }
-    
+
       100% {
         stroke-dashoffset: 0;
       }
     }
-
   }
 }
-

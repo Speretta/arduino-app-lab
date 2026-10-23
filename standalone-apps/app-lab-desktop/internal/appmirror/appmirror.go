@@ -6,8 +6,10 @@ package appmirror
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,7 +21,8 @@ import (
 // BoardFS is the board-side file access the mirror needs, implemented by App Lab over its board connection.
 // Kept minimal so the mirror stays decoupled/testable and a future LSP-shared workspace can back it.
 type BoardFS interface {
-	// ListFiles returns the absolute board paths of every file (no directories) under root.
+	// ListFiles returns the absolute board paths of every file (no directories) under root. A walk that read
+	// everything but a few subtrees returns those paths together with an error implementing partialListing.
 	ListFiles(root string) ([]string, error)
 	ReadFile(path string) (string, error)
 	// WriteFile writes a file on the board; the parent directory must already exist (see MkDirAll).
@@ -33,19 +36,35 @@ type BoardFS interface {
 // skipDir names directories that never belong in the mirror (build output, VCS, deps).
 var skipDir = map[string]bool{".cache": true, ".git": true, "node_modules": true}
 
+// ParkedSuffix marks the local-only copy of an edit that lost a checkout conflict (see Reconcile); these files are never synced.
+const ParkedSuffix = ".claude-local"
+
 // contentHash fingerprints a file's bytes; it is the pivot for three-way reasoning — at checkout the local and board copies share this hash, so a later divergence says which side moved.
 func contentHash(content []byte) string {
 	sum := sha256.Sum256(content)
 	return hex.EncodeToString(sum[:])
 }
 
+// partialListing is the ListFiles error that still carries a usable list: some directories could not be read,
+// the rest of the walk is complete.
+type partialListing interface{ UnreadablePaths() []string }
+
 // Populate copies the app's files from the board (under remoteRoot) into localRoot and returns the baseline:
 // relative path → content hash of what was checked out. It doubles as the set of paths known to exist on the
 // board (for deletion detection) and as the "both sides agreed here" marker SyncBack compares against.
+//
+// A first checkout takes what the walk could read: one folder the board won't let us list (a root-owned .venv,
+// say) would otherwise leave the agent with no mirror at all, and the missing paths cost nothing here — they are
+// absent from the baseline, so SyncBack neither pushes nor deletes them.
 func Populate(bfs BoardFS, remoteRoot, localRoot string) (map[string]string, error) {
 	files, err := bfs.ListFiles(remoteRoot)
 	if err != nil {
-		return nil, fmt.Errorf("list board files: %w", err)
+		var partial partialListing
+		if !errors.As(err, &partial) {
+			return nil, fmt.Errorf("list board files: %w", err)
+		}
+		slog.Warn("checking out an app with directories the board would not list",
+			"root", remoteRoot, "dirs", partial.UnreadablePaths())
 	}
 	rels := make([]string, len(files)) // rels[i] pairs with files[i]; "" = not mirrored
 	for i, remote := range files {
@@ -80,17 +99,20 @@ func Populate(bfs BoardFS, remoteRoot, localRoot string) (map[string]string, err
 
 // Reconcile refreshes an existing mirror from the board so a re-checkout sees the user's editor saves instead of
 // the checkout-time copy: files the agent hasn't touched (local content still hashes to its baseline) are rewritten
-// from the board, files the board gained are added, and ones the board lost are dropped. Locally edited files are
-// left untouched for SyncBack to push or report as a conflict. Returns the updated baseline.
-func Reconcile(bfs BoardFS, remoteRoot, localRoot string, base map[string]string) (map[string]string, error) {
+// from the board, files the board gained are added, and ones the board lost are dropped. A locally edited file whose
+// board copy is still the checked-out one is left for SyncBack to push; one the board ALSO changed is resolved here —
+// the board wins, the local edit is parked as <rel>.claude-local — because SyncBack never picks a winner, so without
+// this no tool path could clear the conflict. Returns the updated baseline and the parked rel paths.
+func Reconcile(bfs BoardFS, remoteRoot, localRoot string, base map[string]string) (map[string]string, []string, error) {
 	files, err := bfs.ListFiles(remoteRoot)
 	if err != nil {
-		return nil, fmt.Errorf("list board files: %w", err)
+		return base, nil, fmt.Errorf("list board files: %w", err) // nothing touched: the old baseline still holds
 	}
 	next := make(map[string]string, len(base))
 	for rel, h := range base {
 		next[rel] = h
 	}
+	var parked []string
 	onBoard := map[string]bool{}
 	for _, remote := range files {
 		rel := relTo(remoteRoot, remote)
@@ -99,19 +121,32 @@ func Reconcile(bfs BoardFS, remoteRoot, localRoot string, base map[string]string
 		}
 		onBoard[rel] = true
 		local := filepath.Join(localRoot, filepath.FromSlash(rel))
-		if baseHash, tracked := base[rel]; tracked && !localMatches(local, baseHash) {
-			continue // edited locally: SyncBack decides between pushing it and reporting a conflict
-		}
+		baseHash, tracked := base[rel]
+		edited := tracked && !localMatches(local, baseHash)
 		content, err := bfs.ReadFile(remote)
 		if err != nil {
 			// Return what we have: files already rewritten are on disk, and an old baseline would make SyncBack read them as local edits.
-			return next, fmt.Errorf("read %s: %w", remote, err)
+			return next, parked, fmt.Errorf("read %s: %w", remote, err)
+		}
+		if edited && contentHash([]byte(content)) == baseHash {
+			continue // only the local side moved: SyncBack pushes the edit
+		}
+		// Park what the write below would overwrite — a conflicted tracked edit, or an untracked local change (stranded
+		// edits on a reattached mirror; nil base is the read-only restore, which deliberately parks nothing) — and only
+		// content that differs from the incoming copy, so a re-run can't clobber a parked copy with board bytes.
+		if edited || (!tracked && base != nil) {
+			if cur, rerr := os.ReadFile(local); rerr == nil && contentHash(cur) != contentHash([]byte(content)) {
+				if err := os.Rename(local, local+ParkedSuffix); err != nil {
+					return next, parked, err
+				}
+				parked = append(parked, rel)
+			}
 		}
 		if err := os.MkdirAll(filepath.Dir(local), 0o755); err != nil {
-			return next, err
+			return next, parked, err
 		}
 		if err := os.WriteFile(local, []byte(content), 0o644); err != nil {
-			return next, err
+			return next, parked, err
 		}
 		next[rel] = contentHash([]byte(content))
 	}
@@ -122,7 +157,7 @@ func Reconcile(bfs BoardFS, remoteRoot, localRoot string, base map[string]string
 			delete(next, rel)
 		}
 	}
-	return next, nil
+	return next, parked, nil
 }
 
 // localMatches reports whether the local file still holds exactly what was checked out (an unreadable file counts as changed).
@@ -148,13 +183,17 @@ type SyncResult struct {
 // matches the baseline both sides moved, so it is reported as a conflict and left alone.
 //
 // `since` still gates the incremental path (zero considers every file); it is a cheap pre-filter, the hashes are
-// the authority. On a write failure it aborts before deleting and keeps `base`.
+// the authority. Every write is verified by reading the file back and comparing hashes; only then does the file's
+// baseline advance. A file whose write or read-back fails is recorded and skipped so the rest keep pushing; the
+// run then errors naming the failures, keeping `base` plus the advances that did get through, and deletions are
+// skipped entirely.
 func SyncBack(bfs BoardFS, remoteRoot, localRoot string, since time.Time, base map[string]string) (SyncResult, error) {
 	res := SyncResult{}
 	current := map[string]bool{}
 	newBase := map[string]string{}
 	root := path.Clean(remoteRoot)
 	madeDirs := map[string]bool{} // board dirs ensured this run — the board write seam can't create parents itself
+	var failed []string
 	err := filepath.WalkDir(localRoot, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -164,6 +203,9 @@ func SyncBack(bfs BoardFS, remoteRoot, localRoot string, since time.Time, base m
 				return filepath.SkipDir
 			}
 			return nil
+		}
+		if strings.HasSuffix(d.Name(), ParkedSuffix) {
+			return nil // parked conflict copies stay local: never pushed, never counted in current
 		}
 		rel, err := filepath.Rel(localRoot, p)
 		if err != nil {
@@ -201,19 +243,41 @@ func SyncBack(bfs BoardFS, remoteRoot, localRoot string, since time.Time, base m
 		remote := path.Join(remoteRoot, relSlash)
 		if dir := path.Dir(remote); dir != root && !madeDirs[dir] {
 			if err := bfs.MkDirAll(dir); err != nil {
-				return err
+				failed = append(failed, fmt.Sprintf("%s: %v", relSlash, err))
+				return nil // record and keep walking: one bad file must not strand the rest
 			}
 			madeDirs[dir] = true
 		}
 		if err := bfs.WriteFile(remote, string(content)); err != nil {
-			return err
+			failed = append(failed, fmt.Sprintf("%s: %v", relSlash, err))
+			return nil
+		}
+		// Read back before advancing the baseline: an unpersisted write recorded as "in sync" is never retried, and the next Reconcile overwrites the local edit with the stale board copy.
+		if back, rerr := bfs.ReadFile(remote); rerr != nil || contentHash([]byte(back)) != localHash {
+			failed = append(failed, relSlash+": write did not persist on the board (disk full? permissions?)")
+			return nil
 		}
 		newBase[relSlash] = localHash
 		res.Written = append(res.Written, remote)
 		return nil
 	})
+	if err == nil && len(failed) > 0 {
+		detail := failed
+		if len(detail) > 3 {
+			detail = append(detail[:3:3], fmt.Sprintf("and %d more", len(failed)-3))
+		}
+		err = fmt.Errorf("could not sync some files to the board: %s", strings.Join(detail, "; "))
+	}
 	if err != nil {
-		res.NewBase = base // writes failed: skip deletions and keep the old baseline
+		// Keep the advances of the files that were written and verified: reverting them makes the retry misread them as conflicts (local edit + moved board copy).
+		merged := make(map[string]string, len(base))
+		for rel, h := range base {
+			merged[rel] = h
+		}
+		for rel, h := range newBase {
+			merged[rel] = h
+		}
+		res.NewBase = merged // deletions still skipped
 		return res, err
 	}
 	// A suddenly-empty mirror is almost certainly a local error, not the agent deleting every file — don't wipe the board.
@@ -238,6 +302,16 @@ func SyncBack(bfs BoardFS, remoteRoot, localRoot string, since time.Time, base m
 	}
 	res.NewBase = newBase
 	return res, nil
+}
+
+// RemoveParked best-effort deletes every parked conflict copy under localRoot, leaving everything else alone.
+func RemoveParked(localRoot string) {
+	_ = filepath.WalkDir(localRoot, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(d.Name(), ParkedSuffix) {
+			_ = os.Remove(p)
+		}
+		return nil
+	})
 }
 
 // mirrorable refuses the checkout before anything is written when the local filesystem can't hold the board's
@@ -339,8 +413,11 @@ func relTo(root, child string) string {
 	return strings.TrimPrefix(child, root+"/")
 }
 
-// skipped reports whether a relative board path sits inside a skipped directory.
+// skipped reports whether a relative board path sits inside a skipped directory or carries the parked suffix.
 func skipped(rel string) bool {
+	if strings.HasSuffix(rel, ParkedSuffix) {
+		return true // never track a board file with our suffix: SyncBack skips it locally, so a baseline entry would read as a deletion and remove it from the board
+	}
 	for _, seg := range strings.Split(rel, "/") {
 		if skipDir[seg] {
 			return true

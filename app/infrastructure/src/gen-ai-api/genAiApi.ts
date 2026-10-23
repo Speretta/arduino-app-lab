@@ -158,12 +158,12 @@ export async function genAISendMessageStreamGenericRequest(
   const endpoint = `/v2/${sourceType}/${sourceId}/conversation/messages`;
   const sseUrl = `${Config.GEN_AI_API_URL}${endpoint}`;
 
-  return postEventSource(
-    messageId ? `${sseUrl}/${messageId}` : sseUrl,
+  return postEventSource({
+    url: messageId ? `${sseUrl}/${messageId}` : sseUrl,
     handlers,
-    message,
+    body: message,
     token,
     abortController,
     headers,
-  );
+  });
 }

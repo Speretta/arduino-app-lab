@@ -1,4 +1,13 @@
-// Parsing the agent's JSON-RPC prompt errors (message/kind/code) and spotting auth failures.
+// Parsing the agent's JSON-RPC prompt errors (message/kind/code) and spotting the two failures the UI
+// answers differently: auth (re-authenticate) and network (reconnect and retry).
+
+// The request never reached the provider (no route, DNS down, connection dropped mid-flight) rather
+// than being rejected by it — the failure is the network's, so the copy points at the connection.
+const NETWORK_ERROR =
+  /fetch failed|failed to fetch|network ?error|connection (error|refused|reset|closed)|socket hang up|getaddrinfo|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|ENETDOWN|ERR_INTERNET_DISCONNECTED/i;
+
+export const isNetworkError = (message: string): boolean =>
+  NETWORK_ERROR.test(message);
 
 // The turn failed auth (expired/revoked token, bad key): ACP authRequired (-32000) or a 401/auth message.
 export const isAuthError = (message: string, code?: number): boolean =>

@@ -73,7 +73,6 @@ export const Bottom = ({
           button: clsx({
             [styles['selected']]: activeItemId === SidePanelItemId.Settings,
           }),
-          icon: styles['settings-icon'],
         }}
         onClick={(): void => {
           void navigate({ to: '/settings' });

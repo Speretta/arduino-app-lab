@@ -1,5 +1,6 @@
 import './App.css';
 import '@cloud-editor-mono/ui-components/public/index.scss';
+import '@cloud-editor-mono/ui-components/public/al-tokens.scss';
 
 import AppLab from '@cloud-editor-mono/core-ui/app-lab';
 

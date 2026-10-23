@@ -1,6 +1,7 @@
 import { Config } from '@cloud-editor-mono/common';
 import {
   checkCoreEndpoints,
+  CoreEndpointsCheckResponse,
   dismissToastNotification,
   EndpointStatus,
   getNewWindow,
@@ -24,10 +25,12 @@ export function useCoreEndpointsStatus(
   enabled: boolean,
   intervalMS: number,
 ): ReturnType<UseCoreEndpointsStatus> {
-  const { data } = useQuery(['endpoints-status'], checkCoreEndpoints, {
+  const { data } = useQuery<CoreEndpointsCheckResponse>({
+    queryKey: ['endpoints-status'],
+    queryFn: checkCoreEndpoints,
     refetchInterval: intervalMS,
     enabled,
-    cacheTime: 0,
+    gcTime: 0,
   });
 
   const { formatMessage } = useContext(IntlContext);

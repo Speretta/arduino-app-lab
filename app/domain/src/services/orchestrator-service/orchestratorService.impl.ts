@@ -26,13 +26,53 @@ export let deleteApp: OrchestratorService['deleteApp'] = async function () {
   throw new Error('deleteApp service not implemented');
 };
 
+export let startReleaseBuild: OrchestratorService['startReleaseBuild'] =
+  async function () {
+    throw new Error('startReleaseBuild service not implemented');
+  };
+
+export let getReleaseBuildEvents: OrchestratorService['getReleaseBuildEvents'] =
+  async function () {
+    throw new Error('getReleaseBuildEvents service not implemented');
+  };
+
+export let chooseReleaseSavePath: OrchestratorService['chooseReleaseSavePath'] =
+  async function () {
+    throw new Error('chooseReleaseSavePath service not implemented');
+  };
+
+export let writeReleaseFile: OrchestratorService['writeReleaseFile'] =
+  async function () {
+    throw new Error('writeReleaseFile service not implemented');
+  };
+
+export let prepareApp: OrchestratorService['prepareApp'] = async function () {
+  throw new Error('prepareApp service not implemented');
+};
+
+export let readReleaseManifest: OrchestratorService['readReleaseManifest'] =
+  async function () {
+    throw new Error('readReleaseManifest service not implemented');
+  };
+
+export let readReleaseArchive: OrchestratorService['readReleaseArchive'] =
+  async function () {
+    throw new Error('readReleaseArchive service not implemented');
+  };
+
+export let installRelease: OrchestratorService['installRelease'] =
+  async function () {
+    throw new Error('installRelease service not implemented');
+  };
+
 export let exportApp: OrchestratorService['exportApp'] = async function () {
   throw new Error('exportApp service not implemented');
 };
 
-export let getFiles: OrchestratorService['getFiles'] = async function () {
-  throw new Error('getFiles service not implemented');
-};
+export let exportAppArchive: OrchestratorService['exportAppArchive'] =
+  async function () {
+    throw new Error('exportAppArchive service not implemented');
+  };
 
 export let getFileContent: OrchestratorService['getFileContent'] =
   async function () {
@@ -204,9 +244,14 @@ export let deleteAIModel: OrchestratorService['deleteAIModel'] =
     throw new Error('deleteAIModel service not implemented');
   };
 
-export let uploadAIModel: OrchestratorService['uploadAIModel'] =
+export let installAIModel: OrchestratorService['installAIModel'] =
   async function () {
-    throw new Error('uploadAIModel service not implemented');
+    throw new Error('installAIModel service not implemented');
+  };
+
+export let downloadAIModel: OrchestratorService['downloadAIModel'] =
+  async function () {
+    throw new Error('downloadAIModel service not implemented');
   };
 
 export const setOrchestratorService = (service: OrchestratorService): void => {
@@ -217,8 +262,16 @@ export const setOrchestratorService = (service: OrchestratorService): void => {
   createApp = service.createApp;
   cloneApp = service.cloneApp;
   deleteApp = service.deleteApp;
+  startReleaseBuild = service.startReleaseBuild;
+  getReleaseBuildEvents = service.getReleaseBuildEvents;
+  chooseReleaseSavePath = service.chooseReleaseSavePath;
+  writeReleaseFile = service.writeReleaseFile;
+  prepareApp = service.prepareApp;
+  readReleaseManifest = service.readReleaseManifest;
+  readReleaseArchive = service.readReleaseArchive;
+  installRelease = service.installRelease;
   exportApp = service.exportApp;
-  getFiles = service.getFiles;
+  exportAppArchive = service.exportAppArchive;
   getFileContent = service.getFileContent;
   getAppBricks = service.getAppBricks;
   getConfig = service.getConfig;
@@ -254,5 +307,6 @@ export const setOrchestratorService = (service: OrchestratorService): void => {
   installEIModel = service.installEIModel;
   getAIModels = service.getAIModels;
   deleteAIModel = service.deleteAIModel;
-  uploadAIModel = service.uploadAIModel;
+  installAIModel = service.installAIModel;
+  downloadAIModel = service.downloadAIModel;
 };

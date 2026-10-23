@@ -47,14 +47,26 @@ const SerialMonitorActions: React.FC<SerialMonitorActionsProps> = (
         selectedBaudRate={selectedBaudRate}
         disabled={disabledOrPaused}
         onBaudRateSelected={onBaudRateSelected}
-        classes={classes?.selector}
+        classes={{
+          ...classes?.selector,
+          menuPopover: clsx(
+            styles['menu-popover'],
+            classes?.selector?.menuPopover,
+          ),
+        }}
       />
       <LineEndingSelector
         lineEndings={lineEndings}
         onLineEndingSelected={onLineEndingSelected}
         disabled={disabledOrPaused}
         selectedLineEnding={selectedLineEnding}
-        classes={classes?.selector}
+        classes={{
+          ...classes?.selector,
+          menuPopover: clsx(
+            styles['menu-popover'],
+            classes?.selector?.menuPopover,
+          ),
+        }}
       />
       <Send
         onSend={onMessageSend}

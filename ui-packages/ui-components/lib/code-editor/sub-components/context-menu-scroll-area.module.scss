@@ -1,0 +1,61 @@
+@use "../code-editor-variables.module.scss";
+
+.context-menu-scroll-area {
+  // Anchors the chevrons, which overlay the list so appearing never changes the menu height
+  position: relative;
+}
+
+.context-menu-scroll-viewport {
+  // Radix shifts the menu vertically, so the available height is the window height. The
+  // .context-menu padding above and below this list is outside it.
+  max-height: calc(
+    var(--radix-context-menu-content-available-height, 100vh) -
+      2 * code-editor-variables.$contextMenuPadding
+  );
+  overflow-y: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.context-menu-scroll-chevron {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  border: 0;
+  padding: 0;
+  background-color: transparent;
+  color: var(--text-default, #fff);
+}
+
+.context-menu-scroll-chevron-up {
+  top: 0;
+  // Fades the row underneath out instead of covering it with an opaque band
+  background: linear-gradient(
+    to bottom,
+    var(--component-bg-above, #374146) 60%,
+    transparent
+  );
+  cursor: n-resize;
+
+  // Both directions use the same glyph, since the up and down assets differ in size
+  & > svg {
+    transform: rotate(180deg);
+  }
+}
+
+.context-menu-scroll-chevron-down {
+  bottom: 0;
+  background: linear-gradient(
+    to top,
+    var(--component-bg-above, #374146) 60%,
+    transparent
+  );
+  cursor: s-resize;
+}

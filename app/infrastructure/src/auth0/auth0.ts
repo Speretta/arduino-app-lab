@@ -26,7 +26,10 @@ export async function createAuth0Instance(
           config,
         },
         deploymentPath.customKey,
-        { API_URL: Config.WL_API_URL },
+        // The customization API is reachable through the same per-environment
+        // base URL as the rest of the cloud APIs, so reuse API_URL (which the
+        // host app injects in the component case) instead of a dedicated var.
+        { API_URL: Config.API_URL },
       ).catch(() => AuthClient.create({ config }))
     : AuthClient.create({
         config,

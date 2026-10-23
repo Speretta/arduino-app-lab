@@ -7,6 +7,7 @@ import {
   ButtonVariant,
   ProgressBar,
   useI18n,
+  useTooltip,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { IntRange } from 'type-fest';
 
@@ -38,6 +39,12 @@ export const AiModelStandardActions: React.FC<AiModelStandardActionsProps> = ({
 }: AiModelStandardActionsProps) => {
   const { formatMessage } = useI18n();
 
+  const { props: tooltipPropsDownload, renderTooltip: renderTooltipDownload } =
+    useTooltip({
+      content: formatMessage(messages.aiModelDownloadLabel),
+      timeout: 0,
+    });
+
   // order matters here: uninstalling takes precedence over installed,
   // since a model in the process of being uninstalled is still technically installed
   // but we want to show the uninstalling state instead of the installed state.
@@ -52,7 +59,7 @@ export const AiModelStandardActions: React.FC<AiModelStandardActionsProps> = ({
     );
   }
 
-  if (modelDownloadInfo?.isDownloading) {
+  if (modelDownloadInfo?.isDownloading || model.isPlaceholder) {
     return (
       <div className={styles['download-progress']}>
         <ArcSpinner />
@@ -74,21 +81,24 @@ export const AiModelStandardActions: React.FC<AiModelStandardActionsProps> = ({
 
   return (
     <>
-      <Button
-        variant={ButtonVariant.Secondary}
-        appearance={ButtonAppearance.Action}
-        size={ButtonSize.XXSmall}
-        onClick={(e): void => {
-          e.stopPropagation();
-          downloadGenericModel && downloadGenericModel(model.id);
-        }}
-        classes={{
-          button: styles['ai-model-download-button'],
-        }}
-      >
-        <span>{formatMessage(messages.aiModelDownloadLabel)}</span>
-        <IconFileLoadDownloadArrow />
-      </Button>
+      <div {...tooltipPropsDownload}>
+        <Button
+          variant={ButtonVariant.Secondary}
+          appearance={ButtonAppearance.Action}
+          size={ButtonSize.XSmall}
+          onClick={(e): void => {
+            e.stopPropagation();
+            downloadGenericModel?.(model.id);
+          }}
+          classes={{
+            button: styles['ai-model-download-button'],
+          }}
+        >
+          <span>{formatMessage(messages.aiModelDownloadLabel)}</span>
+          <IconFileLoadDownloadArrow />
+        </Button>
+        {renderTooltipDownload()}
+      </div>
       {diskUsageWarning && (
         <div className={styles['disk-warning']}>
           <Warning />

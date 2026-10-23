@@ -50,10 +50,4 @@ export const messages = defineMessages({
     description:
       'Specific for Arduino RP2040. Positive button text for the dialog, shown when the user needs to choose the RPI-RP2 drive to save the UF2 file',
   },
-  uf2DialogNegativeButton: {
-    id: 'webSerial.uf2DialogNegativeButton',
-    defaultMessage: 'Cancel',
-    description:
-      'Specific for Arduino RP2040. Negative button text for the dialog, shown when the user needs to choose the RPI-RP2 drive to save the UF2 file',
-  },
 });

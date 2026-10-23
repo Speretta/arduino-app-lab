@@ -23,8 +23,8 @@ func TestReleaseCSPPolicyDeniesScriptSinks(t *testing.T) {
 }
 
 // connect-src is the one directive that can break the app rather than just
-// harden it: the orchestrator, the serial monitor socket, login, Edge Impulse
-// and the downloads bucket are all reached by the webview itself.
+// harden it: the orchestrator, the serial monitor socket, login, Edge Impulse,
+// the downloads bucket and Project Hub are all reached by the webview itself.
 func TestReleaseCSPPolicyKeepsReachableOriginsConnectable(t *testing.T) {
 	connectSrc := ""
 	for _, directive := range strings.Split(cspPolicy, "; ") {
@@ -37,13 +37,14 @@ func TestReleaseCSPPolicyKeepsReachableOriginsConnectable(t *testing.T) {
 	}
 
 	for _, source := range []string{
-		"http://localhost:*",             // orchestrator and cloud connector, on a runtime port
-		"http://127.0.0.1:*",             // the same, under the numeric address CSP will not infer
-		"ws://localhost:*",               // serial monitor, which an http: source would not cover
-		"ws://127.0.0.1:*",               // and its numeric spelling, for the same reason
-		"https://login.arduino.cc",       // auth0 token endpoint
-		"https://studio.edgeimpulse.com", // edge impulse api and oauth
-		"https://downloads.arduino.cc",   // startup message, release notes, mandatory updates
+		"http://localhost:*",                // orchestrator and cloud connector, on a runtime port
+		"http://127.0.0.1:*",                // the same, under the numeric address CSP will not infer
+		"ws://localhost:*",                  // serial monitor, which an http: source would not cover
+		"ws://127.0.0.1:*",                  // and its numeric spelling, for the same reason
+		"https://login.arduino.cc",          // auth0 token endpoint
+		"https://studio.edgeimpulse.com",    // edge impulse api and oauth
+		"https://downloads.arduino.cc",      // startup message, release notes, mandatory updates
+		"https://projecthub-api.arduino.cc", // app publishing uploads the archive from the webview
 	} {
 		if !strings.Contains(connectSrc, source) {
 			t.Errorf("connect-src %q is missing %q", connectSrc, source)

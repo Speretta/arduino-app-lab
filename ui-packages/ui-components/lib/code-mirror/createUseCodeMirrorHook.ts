@@ -35,6 +35,7 @@ import {
 import {
   FileExt,
   fileExtCodeMirrorExtensionMap,
+  fileExtLinterMap,
 } from './extensions/language/setup';
 import { createLineHighlightStateField } from './extensions/line-highlight/lineHighlight';
 import { createLspClient } from './extensions/lsp/lsp-client/lsp-client';
@@ -101,15 +102,16 @@ export function createUseCodeMirrorHook(setup: Extension): UseCodeMirrorHook {
     isLspEnabled,
     selectFile,
     lspClients,
-    filesList,
     startLSP,
     sendLspMessage,
     subscribeLspMessages,
     getLspWorkspaceFile,
     setLspFileValue,
     ensureLspFileValue,
-    getActivePane,
+    getActiveEditorPanel,
     onLspStateChange,
+    showLspReferences,
+    closeLspReferences,
   }: UseCodeEditorParams): React.RefObject<HTMLDivElement> {
     const ref = useRef<HTMLDivElement>(null);
     const { formatMessage } = useI18n();
@@ -187,7 +189,7 @@ export function createUseCodeMirrorHook(setup: Extension): UseCodeMirrorHook {
 
         const getActiveView = (): EditorView | null => {
           const activeInstanceId =
-            getActivePane?.() === 'B'
+            getActiveEditorPanel?.() === 'B'
               ? ViewInstances.Editor2
               : ViewInstances.Editor;
           return viewInstances[activeInstanceId].instance;
@@ -198,7 +200,6 @@ export function createUseCodeMirrorHook(setup: Extension): UseCodeMirrorHook {
           lspId: lspId,
           fileId: fileId,
           selectFile,
-          filesList,
           sendLspMessage,
           subscribeLspMessages,
           getLspWorkspaceFile,
@@ -262,13 +263,15 @@ export function createUseCodeMirrorHook(setup: Extension): UseCodeMirrorHook {
         formatMessage,
         onHoverLinkClick: openLinkExternal,
         readOnly,
+        showLspReferences,
+        closeLspReferences,
       });
 
       return lspExtensions;
     }, [
-      filesList,
+      ensureLspFileValue,
       formatMessage,
-      getActivePane,
+      getActiveEditorPanel,
       getExt,
       getFileId,
       getLspWorkspaceFile,
@@ -278,8 +281,11 @@ export function createUseCodeMirrorHook(setup: Extension): UseCodeMirrorHook {
       readOnly,
       selectFile,
       sendLspMessage,
+      setLspFileValue,
       subscribeLspMessages,
       startLSP,
+      showLspReferences,
+      closeLspReferences,
     ]);
 
     const createState = useCallback((): [EditorState, Extension[]] => {
@@ -316,6 +322,10 @@ export function createUseCodeMirrorHook(setup: Extension): UseCodeMirrorHook {
       const matchedExt = Object.values(FileExt).find((fe) => fileExt === fe);
       if (matchedExt) {
         extensions.push(fileExtCodeMirrorExtensionMap[matchedExt]);
+        const linterExt = fileExtLinterMap[matchedExt];
+        if (linterExt) {
+          extensions.push(linterExt);
+        }
         extensions.push(
           syntaxHighlighting(highlightStyle(customTags), { fallback: true }),
         );
@@ -553,12 +563,12 @@ export function createUseCodeMirrorHook(setup: Extension): UseCodeMirrorHook {
 
               // The rxjs code subject is the source of truth for a file's
               // content. The cached EditorState can fall out of sync when
-              // another pane (eg. Editor2 in split view) writes to the same
-              // file, because edits made there do not refresh this pane's
+              // another panel (eg. Editor2 in split view) writes to the same
+              // file, because edits made there do not refresh this panel's
               // cache. Drop the stale cache so we rehydrate from the
               // subject via createState() below — otherwise switching back
               // to the file would restore old content and (via the
-              // split-sync link effect) clobber the peer pane too.
+              // split-sync link effect) clobber the peer panel too.
               //
               // Compare via CodeMirror's `Text.eq()` rather than
               // materialising the full doc with `.toString()`: equality on

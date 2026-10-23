@@ -9,12 +9,48 @@ import { CloudConnectorOrganization } from '@cloud-editor-mono/infrastructure';
 import clsx from 'clsx';
 import { useEffect, useMemo, useState } from 'react';
 
+import { getInitials } from '../../../common/utils';
 import { Button, DropdownMenuButton } from '../../../components-by-app/app-lab';
 import { useI18n } from '../../../i18n/useI18n';
 import { Medium, XSmall, XXSmall, XXXSmall } from '../../../typography';
 import { AppLabDialog } from '../app-lab-dialog/AppLabDialog';
 import { cloudConnectorConnectDialogMessages as messages } from '../messages';
 import styles from './cloud-connector-connect-dialog.module.scss';
+
+const organizationBackgroundAvatar = (
+  orgName: string,
+): { [x: string]: boolean } => {
+  return {
+    [styles['organizations-avatar-fallback--pro']]: orgName === 'pro',
+    [styles['organizations-avatar-fallback--edu']]: orgName === 'edu',
+  };
+};
+
+const organizationAvatar = (
+  organization: CloudConnectorOrganization,
+): JSX.Element =>
+  organization.logo ? (
+    <img
+      className={clsx(
+        styles['organizations-avatar-fallback'],
+        organizationBackgroundAvatar(organization.space),
+      )}
+      /* background color is useful with images with transparency */
+      src={organization.logo}
+      alt={organization.name}
+    />
+  ) : (
+    <div
+      role="img"
+      aria-label={organization.name}
+      className={clsx(
+        styles['organizations-avatar-fallback'],
+        organizationBackgroundAvatar(organization.space),
+      )}
+    >
+      {getInitials(organization.name)}
+    </div>
+  );
 
 export type CloudConnectorConnectDialogLogic = () => {
   open: boolean;
@@ -64,11 +100,7 @@ export const CloudConnectorConnectDialog: React.FC<
           node: (
             <div className={styles['organizations-select-item']}>
               <div className={styles['organizations-select-item-icon']}>
-                {organization.logo ? (
-                  <img src={organization.logo} alt={organization.name} />
-                ) : (
-                  appLabCloudConnectorOrganization
-                )}
+                {organizationAvatar(organization)}
               </div>
               <div className={styles['organizations-select-item-info']}>
                 <XXSmall className={styles['organizations-select-item-name']}>
@@ -210,14 +242,9 @@ export const CloudConnectorConnectDialog: React.FC<
             }}
           >
             <div className={styles['organizations-select-icon']}>
-              {selectedOrganization?.logo ? (
-                <img
-                  src={selectedOrganization.logo}
-                  alt={selectedOrganization?.name}
-                />
-              ) : (
-                appLabCloudConnectorOrganization
-              )}
+              {selectedOrganization
+                ? organizationAvatar(selectedOrganization)
+                : appLabCloudConnectorOrganization}
             </div>
             <div className={styles['organizations-select-info']}>
               <XSmall className={styles['organizations-select-info-name']}>

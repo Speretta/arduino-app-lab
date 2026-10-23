@@ -3,10 +3,12 @@ package lsp
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -247,6 +249,52 @@ func TestWaitForLSPReadyToleratesDeadFormatter(t *testing.T) {
 	}
 }
 
+func TestWaitForLSPReadyWaitsThroughSketchRestart(t *testing.T) {
+	_, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	// Between restartLSP's stop and its start: inactive, no process.
+	h := NewLSPHandler(nil, nil, nil)
+	h.restarting[LSP_Arduino] = true
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		h.stateMu.Lock()
+		h.activeLSPs[LSP_Arduino] = true
+		h.processes[ProcessId(LSP_Arduino)] = &lspProcess{processId: ProcessId(LSP_Arduino), stdin: w}
+		h.stateMu.Unlock()
+	}()
+
+	mainProc, _, err := h.waitForLSPReady(LSP_Arduino)
+	if err != nil {
+		t.Fatalf("a send during a sketch restart must wait for the new process, got %v", err)
+	}
+	if mainProc == nil {
+		t.Fatal("want the restarted process")
+	}
+}
+
+func TestWaitForLSPReadyStopsWaitingAtStopAll(t *testing.T) {
+	h := NewLSPHandler(nil, nil, nil)
+	h.restarting[LSP_Arduino] = true
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		h.StopAll()
+	}()
+
+	start := time.Now()
+	if _, _, err := h.waitForLSPReady(LSP_Arduino); err == nil {
+		t.Fatal("want an error once StopAll ran")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("want the wait to end at StopAll, it took %v", elapsed)
+	}
+}
+
 // readFramed reads one Content-Length framed message body from r.
 func readFramed(t *testing.T, r *bufio.Reader) map[string]any {
 	t.Helper()
@@ -318,8 +366,12 @@ func TestFormatterStateSyncIsHeldUntilInitialize(t *testing.T) {
 	// Its initialize answer releases the queue, in order.
 	h.markFormatterReady(formatterProc)
 
-	if got := readFramed(t, bufio.NewReader(fmtR)); got["method"] != "textDocument/didOpen" {
-		t.Fatalf("formatter got %v after initialize, want the held didOpen", got["method"])
+	fmtReader := bufio.NewReader(fmtR)
+	if got := readFramed(t, fmtReader); got["method"] != methodInitialized {
+		t.Fatalf("formatter got %v after initialize, want initialized", got["method"])
+	}
+	if got := readFramed(t, fmtReader); got["method"] != "textDocument/didOpen" {
+		t.Fatalf("formatter got %v after initialized, want the held didOpen", got["method"])
 	}
 	h.stateMu.RLock()
 	remaining := len(h.formatterQueue[formatterId])
@@ -328,6 +380,84 @@ func TestFormatterStateSyncIsHeldUntilInitialize(t *testing.T) {
 	if remaining != 0 || !ready {
 		t.Fatalf("after flush: queued=%d ready=%v, want 0/true", remaining, ready)
 	}
+}
+
+// readMethods closes w and returns the method of every framed message left in r.
+func readMethods(t *testing.T, w *os.File, r *os.File) []string {
+	t.Helper()
+	w.Close()
+	reader := bufio.NewReader(r)
+	var methods []string
+	for {
+		if _, err := reader.Peek(1); err == io.EOF {
+			return methods
+		}
+		method, _ := readFramed(t, reader)["method"].(string)
+		methods = append(methods, method)
+	}
+}
+
+// ruff accepts nothing but `initialized` right after its initialize answer, and
+// exits on anything else ("expected initialized notification, got: ...
+// textDocument/didOpen"). The client sends `initialized` and its didOpens in the
+// same tick, and Wails runs each binding call on its own goroutine, so they can
+// reach sendToProcesses in either order, before or after the formatter answers.
+func TestFormatterGetsInitializedFirstInAnyClientOrder(t *testing.T) {
+	formatterId := getFormatterProcessId(LSP_Python)
+	didOpen := map[string]any{"method": methodDidOpen, "params": map[string]any{"uri": "file:///ws/main.py"}}
+	initialized := map[string]any{"method": methodInitialized, "params": map[string]any{}}
+
+	setup := func(t *testing.T) (h *LSPHandler, mainProc, formatterProc *lspProcess, fmtR, fmtW *os.File) {
+		_, mainW, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { mainW.Close() })
+		fmtR, fmtW, err = os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { fmtR.Close() })
+		formatterProc = &lspProcess{processId: formatterId, eventLspId: LSP_Python, stdin: fmtW}
+		mainProc = &lspProcess{processId: ProcessId(LSP_Python), stdin: mainW}
+		h = &LSPHandler{
+			activeLSPs:     map[LspId]bool{LSP_Python: true},
+			processes:      map[ProcessId]*lspProcess{ProcessId(LSP_Python): mainProc, formatterId: formatterProc},
+			formatterReady: map[ProcessId]bool{},
+			formatterQueue: map[ProcessId][]any{},
+		}
+		return h, mainProc, formatterProc, fmtR, fmtW
+	}
+
+	t.Run("didOpen arrives first, formatter answers after both", func(t *testing.T) {
+		h, mainProc, formatterProc, fmtR, fmtW := setup(t)
+		for _, msg := range []any{didOpen, initialized} {
+			if err := h.sendToProcesses(LSP_Python, mainProc, formatterProc, msg); err != nil {
+				t.Fatalf("sendToProcesses: %v", err)
+			}
+		}
+		h.markFormatterReady(formatterProc)
+
+		got := readMethods(t, fmtW, fmtR)
+		if want := []string{methodInitialized, methodDidOpen}; !slices.Equal(got, want) {
+			t.Fatalf("formatter got %v, want %v", got, want)
+		}
+	})
+
+	t.Run("formatter answers before the client sends anything", func(t *testing.T) {
+		h, mainProc, formatterProc, fmtR, fmtW := setup(t)
+		h.markFormatterReady(formatterProc)
+		for _, msg := range []any{didOpen, initialized} {
+			if err := h.sendToProcesses(LSP_Python, mainProc, formatterProc, msg); err != nil {
+				t.Fatalf("sendToProcesses: %v", err)
+			}
+		}
+
+		got := readMethods(t, fmtW, fmtR)
+		if want := []string{methodInitialized, methodDidOpen}; !slices.Equal(got, want) {
+			t.Fatalf("formatter got %v, want %v", got, want)
+		}
+	})
 }
 
 // Once the handshake is done, nothing is held — a formatter that has to wait for
@@ -493,4 +623,128 @@ func TestVerifyNodeExecutableRejectsAnUnexpectedAnswer(t *testing.T) {
 	if err := verifyNodeExecutableAt(node, toolVerifyTimeout); err == nil {
 		t.Fatal("verifyNodeExecutableAt() = nil, want an error")
 	}
+}
+
+func TestStopAllDropsTheRecoverySnapshot(t *testing.T) {
+	h := NewLSPHandler(nil, nil, nil)
+	h.initializeRequests[LSP_Arduino] = map[string]any{"method": methodInitialize}
+	h.openFiles[LSP_Arduino] = map[string]any{"file:///ws/app/sketch/helper.h": map[string]any{}}
+
+	h.StopAll()
+
+	if len(h.initializeRequests) != 0 || len(h.openFiles) != 0 {
+		t.Errorf("want the snapshot gone after StopAll, got %v / %v", h.initializeRequests, h.openFiles)
+	}
+}
+
+func TestRestartStartedBeforeStopAllDoesNotStartAgain(t *testing.T) {
+	h := NewLSPHandler(nil, nil, nil)
+	gen := h.stopGen
+
+	h.StopAll()
+
+	if err := h.startIfCurrent(LSP_Arduino, "/ws/app", gen); !errors.Is(err, errStoppedMeanwhile) {
+		t.Fatalf("got %v, want errStoppedMeanwhile", err)
+	}
+	if h.activeLSPs[LSP_Arduino] {
+		t.Error("want the LSP left inactive")
+	}
+}
+
+func TestSketchWatchedChangeCountsDeletedFolders(t *testing.T) {
+	h := &LSPHandler{appDir: filepath.FromSlash("/home/me/ws")}
+	message := func(rel string, changeType float64) map[string]any {
+		return map[string]any{
+			"method": methodDidChangeWatchedFiles,
+			"params": map[string]any{"changes": []any{map[string]any{
+				"uri":  "file:///home/me/ws/" + rel,
+				"type": changeType,
+			}}},
+		}
+	}
+	const created, deleted = float64(1), float64(3)
+
+	for _, tt := range []struct {
+		rel        string
+		changeType float64
+		want       bool
+	}{
+		{"sketch/src", deleted, true},
+		{"sketch/src/x.h", deleted, true},
+		{"sketch/src/x.h", created, true},
+		// The client announces a created folder's sources itself, which
+		// restarts once; the folder event must not restart a second time.
+		{"sketch/src", created, false},
+		{"sketch/notes.txt", deleted, false},
+		{"python/pkg", deleted, false},
+	} {
+		if got := h.isSketchWatchedChange(message(tt.rel, tt.changeType)); got != tt.want {
+			t.Errorf("%s (type %v): got %v, want %v", tt.rel, tt.changeType, got, tt.want)
+		}
+	}
+}
+
+func TestPendingSketchRestartAfterStopAllDoesNothing(t *testing.T) {
+	h := NewLSPHandler(nil, nil, nil)
+	gen := h.stopGen
+	h.restartPending[LSP_Arduino] = true
+
+	h.StopAll()
+	h.restartLSP(LSP_Arduino, gen)
+
+	if h.restartPending[LSP_Arduino] {
+		t.Error("want StopAll to drop the pending restart")
+	}
+	if h.activeLSPs[LSP_Arduino] {
+		t.Error("want the LSP left inactive")
+	}
+}
+
+func TestSendsToADeadLSPFailAtOnce(t *testing.T) {
+	// Start set it active, and then its process died for good.
+	h := NewLSPHandler(nil, nil, nil)
+	h.activeLSPs[LSP_Arduino] = true
+
+	h.deactivateIfDead(LSP_Arduino, h.stopGen)
+
+	start := time.Now()
+	if _, _, err := h.waitForLSPReady(LSP_Arduino); err == nil {
+		t.Fatal("want an error for a dead LSP")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("want the send to fail at once, it waited %v", elapsed)
+	}
+}
+
+func TestDeactivateIfDeadKeepsALiveLSP(t *testing.T) {
+	_, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	t.Run("its process runs", func(t *testing.T) {
+		h := NewLSPHandler(nil, nil, nil)
+		h.activeLSPs[LSP_Arduino] = true
+		h.processes[ProcessId(LSP_Arduino)] = &lspProcess{processId: ProcessId(LSP_Arduino), stdin: w}
+
+		h.deactivateIfDead(LSP_Arduino, h.stopGen)
+
+		if !h.activeLSPs[LSP_Arduino] {
+			t.Error("want a running LSP left active")
+		}
+	})
+
+	t.Run("it belongs to the next app", func(t *testing.T) {
+		h := NewLSPHandler(nil, nil, nil)
+		gen := h.stopGen
+		h.StopAll()
+		h.activeLSPs[LSP_Arduino] = true
+
+		h.deactivateIfDead(LSP_Arduino, gen)
+
+		if !h.activeLSPs[LSP_Arduino] {
+			t.Error("want the next app's LSP left active")
+		}
+	})
 }

@@ -1,31 +1,35 @@
+import { BOARD_FQBN } from '@cloud-editor-mono/common';
 import {
-  disableCarriers,
-  enableCarriers,
-  getCarriers,
-  getCarriersStatus,
   getConnectionName,
+  getHwList,
+  getHwStatus,
   getIPAddress,
   getKernelVersion,
   getLinuxDistribution,
   getOSImageVersion,
+  isHwSupported,
   isNetworkModeEnabled,
   listCloudConnectorOrganizations,
   openLinkExternal,
   rebootBoard,
   reloadApp,
+  setHwStatus,
   setNetworkMode,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import { CloudConnectorOrganization } from '@cloud-editor-mono/infrastructure';
 import {
-  AttachCarrierDialogLogic,
-  CarriersStatus,
+  BoardExtensionsAttachDialogLogic,
+  ChangePasswordDialogLogic,
   CloudConnectorConnectDialogLogic,
   CloudConnectorDisconnectDialogLogic,
+  HwError,
+  HwErrorCode,
+  HwStatus,
+  PasswordDialogError,
   PasswordDialogLogic,
   snackbar,
-  UnsupportedCarrierDialogLogic,
+  UseBoardExtensionsSettingsLogic,
   UseBoardSettingsLogic,
-  UseCarrierSettingsLogic,
   UseCloudConnectorSettingsLogic,
   useI18n,
   UseNetworkModeLogic,
@@ -44,16 +48,25 @@ import { useIsBoard } from '../../hooks/useIsBoard';
 import { useSystemProps } from '../../hooks/useSystemProps';
 import { AuthContext } from '../../providers/auth/authContext';
 import { BoardConfigurationContext } from '../../providers/board-configuration/boardConfigurationContext';
-import { BoardResourcesContext } from '../../providers/board-resources/boardResourcesContext';
-import { bytesToGiB } from '../../providers/board-resources/boardResourcesContextProvider.logic';
 import { CloudConnectorContext } from '../../providers/cloud-connector/cloudConnectorContext';
 import { LinuxCredentialsContext } from '../../providers/linux-credentials/linuxCredentialsContext';
 import { NetworkContext } from '../../providers/network/networkContext';
-import { SetupContext } from '../../providers/setup/setupContext';
 import { UpdaterContext } from '../../providers/updater/updaterContext';
 import { useBoardLifecycleStore } from '../../store/boardLifecycle';
+import { bytesToGiB, useBoardResourcesStore } from '../../store/boardResources';
+import { useNetworkSettingsDialogStore } from '../../store/networkSettingsDialog';
 import { SystemPropKey } from '../../store/systemProps';
 import { systemMessages } from './messages';
+
+const toPasswordDialogError = (
+  error: Error | null,
+): PasswordDialogError | undefined => {
+  if (!error) return undefined;
+  if (!(error instanceof HwError)) return { kind: 'generic' };
+  return error.code === HwErrorCode.IncorrectPassword
+    ? { kind: 'password' }
+    : { kind: 'generic', message: error.message };
+};
 
 export const createUseSettingsLogic = function (): UseSettingsLogic {
   return function useSettingsLogic(): ReturnType<UseSettingsLogic> {
@@ -87,7 +100,7 @@ export const createUseSettingsLogic = function (): UseSettingsLogic {
           userPasswordConfirmationErrorMsg: confirmationErrorMsg,
         } = useContext(LinuxCredentialsContext);
 
-        return {
+        const changePasswordLogic: ChangePasswordDialogLogic = () => ({
           setUserPassword,
           isLoading,
           confirmationIsError,
@@ -97,18 +110,24 @@ export const createUseSettingsLogic = function (): UseSettingsLogic {
           confirmationErrorMsg,
           open,
           onOpenChange: setOpen,
+        });
+
+        return {
+          changePasswordLogic,
           openChangePasswordDialog: () => setOpen(true),
         };
       };
 
     const useBoardSettingsLogic = (): ReturnType<UseBoardSettingsLogic> => {
-      const { resources } = useContext(BoardResourcesContext);
+      const resources = useBoardResourcesStore((state) => state.resources);
       const {
         keyboardLayout,
         keyboardLayouts,
         boardName,
         setBoardName,
         setKeyboardLayout,
+        setBoardNameIsError,
+        boardNameErrorMsg,
       } = useContext(BoardConfigurationContext);
 
       return {
@@ -123,245 +142,343 @@ export const createUseSettingsLogic = function (): UseSettingsLogic {
         bytesToGiB,
         setBoardName,
         setKeyboardLayout,
+        setBoardNameIsError,
+        boardNameErrorMsg,
       };
     };
 
-    const useCarrierSettingsLogic = (): ReturnType<UseCarrierSettingsLogic> => {
-      const [unsupported, setUnsupported] = useState(false);
-      const [unsupportedOpen, setUnsupportedOpen] = useState(false);
-      const [attachOpen, setAttachOpen] = useState(false);
-      const [passwordOpen, setPasswordOpen] = useState(false);
-      const [status, setStatus] = useState<CarriersStatus>({ carriers: [] });
+    const useBoardExtensionsSettingsLogic =
+      (): ReturnType<UseBoardExtensionsSettingsLogic> => {
+        const [carrierEnabled, setCarrierEnabled] = useState(false);
+        const [hatEnabled, setHatEnabled] = useState(false);
+        // enableOnConfirm: only the toggle switches the extension on when the dialog is
+        // confirmed; the "How to attach" buttons and the HAT type menu open it to inform.
+        const [attachOpen, setAttachOpen] = useState<
+          false | { type: 'carrier' | 'hat'; enableOnConfirm: boolean }
+        >(false);
+        const [passwordOpen, setPasswordOpen] = useState(false);
+        const [status, setStatus] = useState<HwStatus>({
+          mounts: [],
+        });
 
-      const enabled = status.carriers.some((carrier) => carrier.nextEnabled);
-      const pristine = status.carriers.every(
-        (carrier) =>
-          carrier.nextEnabled === carrier.currentEnabled &&
-          carrier.next.every((media) =>
-            carrier.current.some(
-              (currentMedia) =>
-                currentMedia.device === media.device &&
-                currentMedia.option === media.option,
+        const { systemProps, upsertProp } = useSystemProps();
+
+        // No initialData: a `false` placeholder would show the "needs a board update" banner
+        // until the first answer arrives.
+        const { data: hwSupported } = useQuery({
+          queryKey: [BoardScopedQuery.HARDWARE_SUPPORTED],
+          queryFn: async () => isHwSupported(),
+          enabled: boardIsReachable,
+        });
+
+        const carrierPristine = status.mounts
+          .filter((mount) => mount.kind === 'carrier')
+          .every(
+            (carrier) =>
+              carrier.nextEnabled === carrier.currentEnabled &&
+              carrier.nextDevices.every((media) =>
+                carrier.currentDevices.some(
+                  (currentMedia) =>
+                    currentMedia.device === media.device &&
+                    currentMedia.option === media.option,
+                ),
+              ),
+          );
+
+        const hatPristine = status.mounts
+          .filter((mount) => mount.kind === 'hat')
+          .every((hat) => hat.nextEnabled === hat.currentEnabled);
+
+        const { data: hwList } = useQuery({
+          queryKey: [BoardScopedQuery.HARDWARE_LIST],
+          queryFn: async () => getHwList(),
+          enabled: boardIsReachable && hwSupported === true,
+          initialData: { mounts: [] },
+        });
+
+        const carriers = hwList.mounts
+          .filter(
+            (mount) =>
+              mount.kind === 'carrier' &&
+              mount.osSupport &&
+              mount.devices.some((device) => device.osSupport),
+          )
+          .map((mount) => ({
+            ...mount,
+            devices: mount.devices.filter((device) => device.osSupport),
+          }));
+        const hats = hwList.mounts.filter(
+          (mount) => mount.kind === 'hat' && mount.osSupport,
+        );
+
+        const { data: hwStatus } = useQuery({
+          queryKey: [BoardScopedQuery.HARDWARE_STATUS],
+          queryFn: async () => getHwStatus(),
+          enabled: boardIsReachable && hwSupported === true,
+          initialData: { mounts: [] },
+        });
+
+        useEffect(() => {
+          setStatus({
+            mounts: hwStatus.mounts.map((mount) => ({
+              ...mount,
+              nextDevices: mount.currentDevices,
+              nextEnabled: mount.currentEnabled,
+            })),
+          });
+          setCarrierEnabled(
+            hwStatus.mounts.some(
+              (mount) => mount.kind === 'carrier' && mount.currentEnabled,
             ),
-          ),
-      );
+          );
+          setHatEnabled(
+            hwStatus.mounts.some(
+              (mount) => mount.kind === 'hat' && mount.currentEnabled,
+            ),
+          );
+        }, [hwStatus]);
 
-      const setEnabled = (isEnabled: boolean): void => {
-        setStatus((status) => ({
-          ...status,
-          carriers: status.carriers.map((carrier) => ({
-            ...carrier,
-            nextEnabled: isEnabled,
-          })),
-        }));
-      };
-
-      const { data: carriers } = useQuery(
-        [BoardScopedQuery.CARRIERS],
-        async () => getCarriers(),
-        {
-          enabled: boardIsReachable,
-          initialData: [],
-          onError: () => {
-            setUnsupported(true);
-          },
-        },
-      );
-
-      useQuery(
-        [BoardScopedQuery.CARRIERS_STATUS],
-        async () => getCarriersStatus(),
-        {
-          enabled: boardIsReachable,
-          onSuccess: (data) => {
-            if (data) {
-              setStatus({
-                carriers: data.carriers.map((carrier) => ({
-                  ...carrier,
-                  next: carrier.current,
-                  nextEnabled: carrier.currentEnabled,
-                })),
-              });
+        const setEnabled = (
+          isEnabled: boolean,
+          type: 'carrier' | 'hat',
+        ): void => {
+          const setEnabled = (isEnabled: boolean): void => {
+            if (type === 'carrier') {
+              setCarrierEnabled(isEnabled);
+            } else {
+              setHatEnabled(isEnabled);
             }
-          },
-          onError: () => {
-            setUnsupported(true);
-          },
-        },
-      );
+          };
+          setEnabled(isEnabled);
 
-      const { systemProps, upsertProp } = useSystemProps();
-
-      const { boardUpdates, startUpdate } = useContext(UpdaterContext);
-      const unsupportedLogic: UnsupportedCarrierDialogLogic = () => {
-        return {
-          open: unsupportedOpen,
-          confirm: async (): Promise<void> => {
-            setUnsupportedOpen(false);
-            if (boardUpdates) {
-              startUpdate();
-            }
-          },
-          onOpenChange: setUnsupportedOpen,
-        };
-      };
-
-      const attachLogic: AttachCarrierDialogLogic = () => {
-        return {
-          open: attachOpen,
-          confirm: async (remember: boolean): Promise<void> => {
-            if (remember) {
-              upsertProp({
-                key: SystemPropKey.CarrierAcknowledged,
-                value: 'true',
-              });
-            }
-            setAttachOpen(false);
-            setEnabled(true);
-          },
-          onOpenChange: setAttachOpen,
-        };
-      };
-
-      const reboot = async (password: string): Promise<void> => {
-        await rebootBoard(password);
-        reloadApp();
-      };
-
-      const {
-        isError: isEnablingCarriersError,
-        isLoading: isEnablingCarriers,
-        isSuccess: isEnablingCarriersSuccess,
-        mutateAsync: setCarriers,
-      } = useMutation({
-        mutationFn: (password: string) => enableCarriers(status, password),
-        onSuccess: async (_, password) => {
-          await reboot(password);
-        },
-      });
-
-      const {
-        isError: isDisablingCarriersError,
-        isLoading: isDisablingCarriers,
-        isSuccess: isDisablingCarriersSuccess,
-        mutateAsync: resetCarriers,
-      } = useMutation({
-        mutationFn: (password: string) => disableCarriers(carriers, password),
-        onSuccess: async (_, password) => {
-          await reboot(password);
-        },
-      });
-
-      const passwordLogic: PasswordDialogLogic = {
-        open: passwordOpen,
-        onOpenChange: setPasswordOpen,
-        onConfirm: async (password: string): Promise<void> =>
-          enabled ? setCarriers(password) : resetCarriers(password),
-        isLoading: enabled ? isEnablingCarriers : isDisablingCarriers,
-        isSuccess: enabled
-          ? isEnablingCarriersSuccess
-          : isDisablingCarriersSuccess,
-        error:
-          (enabled && isEnablingCarriersError) ||
-          (!enabled && isDisablingCarriersError)
-            ? 'password'
-            : undefined,
-      };
-
-      const handleEnabledChange = (isEnabled: boolean): void => {
-        if (isEnabled) {
-          if (unsupported) {
-            setUnsupportedOpen(true);
-          } else if (!systemProps?.[SystemPropKey.CarrierAcknowledged]) {
-            setAttachOpen(true);
-          } else {
-            setEnabled(true);
-          }
-        } else {
-          setEnabled(false);
-        }
-      };
-
-      const handleStatusChange = (
-        carrierName: string,
-        device: string,
-        option: string,
-      ): void => {
-        setStatus((prev) => ({
-          carriers: prev.carriers.map((carrier) => {
-            if (carrier.carrierName !== carrierName) return carrier;
-
-            return {
-              ...carrier,
-              next: carrier.next.map((media) => {
-                if (media.device !== device) return media;
+          if (isEnabled) {
+            setStatus((prev) => ({
+              ...prev,
+              mounts: prev.mounts.map((mount) => {
+                if (mount.kind !== type) return mount;
 
                 return {
-                  ...media,
-                  option,
+                  ...mount,
+                  nextEnabled: type === 'carrier' ? true : mount.currentEnabled,
+                  nextDevices: mount.currentDevices,
+                };
+              }),
+            }));
+          } else {
+            setEnabled(false);
+            setStatus((prev) => ({
+              ...prev,
+              mounts: prev.mounts.map((mount) => {
+                if (mount.kind !== type) return mount;
+
+                return {
+                  ...mount,
+                  nextEnabled: false,
+                  nextDevices: mount.nextDevices.map((device) => ({
+                    ...device,
+                    option: 'none',
+                  })),
+                };
+              }),
+            }));
+          }
+        };
+
+        const attachLogic: BoardExtensionsAttachDialogLogic = () => {
+          const isVentunoQ =
+            selectedConnectedBoard?.fqbn === BOARD_FQBN.VENTUNO_Q;
+
+          return {
+            open: attachOpen !== false,
+            isHat: attachOpen !== false && attachOpen.type === 'hat',
+            isVentunoQ,
+            confirm: (): void => {
+              if (attachOpen === false) return;
+              upsertProp({
+                key:
+                  attachOpen.type === 'hat'
+                    ? SystemPropKey.HatAcknowledged
+                    : SystemPropKey.CarrierAcknowledged,
+                value: 'true',
+              });
+              if (attachOpen.enableOnConfirm) {
+                setEnabled(true, attachOpen.type);
+              }
+              setAttachOpen(false);
+            },
+            onOpenChange: () => setAttachOpen(false),
+          };
+        };
+
+        const reboot = async (password: string): Promise<void> => {
+          await rebootBoard(password);
+          reloadApp();
+        };
+
+        const {
+          error: savingHwStatusError,
+          isPending: isSavingHwStatus,
+          isSuccess: isSavingHwStatusSuccess,
+          mutateAsync: saveHwStatus,
+        } = useMutation({
+          mutationFn: (password: string) => setHwStatus(status, password),
+          onSuccess: async (_, password) => {
+            await reboot(password);
+          },
+        });
+
+        const passwordLogic: PasswordDialogLogic = () => ({
+          open: passwordOpen,
+          onOpenChange: setPasswordOpen,
+          onConfirm: async (password: string): Promise<void> =>
+            saveHwStatus(password),
+          isLoading: isSavingHwStatus,
+          isSuccess: isSavingHwStatusSuccess,
+          error: toPasswordDialogError(savingHwStatusError),
+        });
+
+        const handleEnabledChange =
+          (type: 'carrier' | 'hat') =>
+          (isEnabled: boolean): void => {
+            if (isEnabled) {
+              if (
+                (type === 'carrier' &&
+                  !systemProps?.[SystemPropKey.CarrierAcknowledged]) ||
+                (type === 'hat' &&
+                  !systemProps?.[SystemPropKey.HatAcknowledged])
+              ) {
+                setAttachOpen({ type, enableOnConfirm: true });
+              } else {
+                setEnabled(true, type);
+              }
+            } else {
+              setEnabled(false, type);
+            }
+          };
+
+        const handleCarrierStatusChange = (
+          carrierName: string,
+          device: string,
+          option: string,
+        ): void => {
+          setStatus((prev) => ({
+            mounts: prev.mounts.map((carrier) => {
+              if (carrier.name !== carrierName) return carrier;
+
+              return {
+                ...carrier,
+                nextDevices: carrier.nextDevices.map((media) => {
+                  if (media.device !== device) return media;
+
+                  return {
+                    ...media,
+                    option,
+                  };
+                }),
+              };
+            }),
+          }));
+        };
+
+        const handleHatStatusChange = (option: string): void => {
+          if (option !== 'none') {
+            const mounts = status.mounts.filter(
+              (mount) => mount.kind === 'hat',
+            );
+            if (
+              !systemProps?.[SystemPropKey.HatAcknowledged] &&
+              mounts.every((mount) => !mount.nextEnabled)
+            ) {
+              setAttachOpen({ type: 'hat', enableOnConfirm: false });
+            }
+          }
+
+          setStatus((prev) => {
+            return {
+              mounts: prev.mounts.map((mount) => {
+                if (mount.kind !== 'hat') return mount;
+
+                return {
+                  ...mount,
+                  nextEnabled: option === mount.name,
                 };
               }),
             };
-          }),
-        }));
-      };
+          });
+        };
 
-      return {
-        enabled,
-        pristine,
-        onEnabledChange: handleEnabledChange,
-        carriers,
-        status,
-        setStatus: handleStatusChange,
-        unsupportedLogic,
-        attachLogic,
-        passwordLogic,
+        return {
+          status,
+          carrierEnabled,
+          carrierPristine,
+          onCarrierEnabledChange: handleEnabledChange('carrier'),
+          openAttachHatDialog: () =>
+            setAttachOpen({ type: 'hat', enableOnConfirm: false }),
+          carriers,
+          hatEnabled,
+          hatPristine,
+          onHatEnabledChange: handleEnabledChange('hat'),
+          hats,
+          setHatStatus: handleHatStatusChange,
+          setCarrierStatus: handleCarrierStatusChange,
+          supported: hwSupported !== false,
+          attachLogic,
+          openAttachCarrierDialog: () =>
+            setAttachOpen({ type: 'carrier', enableOnConfirm: false }),
+          passwordLogic,
+          openPasswordDialog: () => setPasswordOpen(true),
+        };
       };
-    };
 
     const useNetworkModeLogic = (): ReturnType<UseNetworkModeLogic> => {
       const [open, setOpen] = useState(false);
 
-      const { data: networkModeEnabled } = useQuery(
-        [BoardScopedQuery.NETWORK_MODE_ENABLED],
-        async () => isNetworkModeEnabled(),
-        {
-          enabled: boardIsReachable,
-        },
-      );
+      const { data: networkModeEnabled } = useQuery({
+        queryKey: [BoardScopedQuery.NETWORK_MODE_ENABLED],
+        queryFn: async () => isNetworkModeEnabled(),
+        enabled: boardIsReachable,
+      });
 
       const {
         error: networkModeError,
         isError: isNetworkModeError,
-        isLoading: isSettingNetworkMode,
+        isPending: isSettingNetworkMode,
         isSuccess: isSettingNetworkModeSuccess,
         mutateAsync: updateNetworkMode,
       } = useMutation({
         mutationFn: (prop: { enabled: boolean; password: string }) =>
           setNetworkMode(prop.enabled, prop.password),
-        onSuccess: (enabled: boolean) => {
-          queryClient.setQueryData(
-            [BoardScopedQuery.NETWORK_MODE_ENABLED],
-            enabled,
-          );
-          snackbar({
-            message: formatMessage(systemMessages.remoteAccessToggle, {
-              enabled: enabled ? 'enabled' : 'disabled',
-            }),
-            variant: 'success',
-          });
+        onSuccess: (success: boolean, variables) => {
+          if (success) {
+            queryClient.setQueryData(
+              [BoardScopedQuery.NETWORK_MODE_ENABLED],
+              variables.enabled,
+            );
+            snackbar({
+              message: formatMessage(systemMessages.remoteAccessToggle, {
+                enabled: variables.enabled ? 'enabled' : 'disabled',
+              }),
+              variant: 'success',
+            });
+          } else {
+            snackbar({
+              message: formatMessage(systemMessages.remoteAccessToggleError, {
+                enabled: variables.enabled ? 'enabled' : 'disabled',
+              }),
+              variant: 'error',
+            });
+          }
         },
         onSettled: () => {
-          queryClient.invalidateQueries([
-            BoardScopedQuery.NETWORK_MODE_ENABLED,
-          ]);
+          queryClient.invalidateQueries({
+            queryKey: [BoardScopedQuery.NETWORK_MODE_ENABLED],
+          });
         },
       });
 
-      return {
+      const passwordLogic: PasswordDialogLogic = () => ({
         open,
         onOpenChange: setOpen,
-        isNetworkModeEnabled: networkModeEnabled,
         onConfirm: (password: string) =>
           updateNetworkMode({ enabled: !networkModeEnabled, password }),
         isLoading: isSettingNetworkMode,
@@ -371,38 +488,26 @@ export const createUseSettingsLogic = function (): UseSettingsLogic {
               ? networkModeError
               : [String(networkModeError)]
             ).some((error) => error.includes('password'))
-            ? 'password'
-            : 'generic'
+            ? { kind: 'password' }
+            : { kind: 'generic' }
           : undefined,
+      });
+
+      return {
+        isNetworkModeEnabled: networkModeEnabled,
+        passwordLogic,
+        openPasswordDialog: () => setOpen(true),
       };
     };
 
-    const [networkSettingsDialogOpen, setNetworkSettingsDialogOpen] =
-      useState(false);
     const useNetworkSettingsLogic = (): ReturnType<UseNetworkSettingsLogic> => {
-      const networkContext = useContext(NetworkContext);
+      const { isConnected } = useContext(NetworkContext);
       const router = useRouter();
-      const { offlineWarningOpen } = useContext(SetupContext);
-
-      useEffect(() => {
-        networkContext.setManualNetworkSetup(false);
-        networkContext.setSelectedNetwork(undefined);
-        networkContext.setScanningIsEnabled(networkSettingsDialogOpen);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [networkSettingsDialogOpen]);
-
-      useEffect(() => {
-        if (networkContext.connectRequestIsSuccess) {
-          setNetworkSettingsDialogOpen(false);
-        }
-      }, [networkContext.connectRequestIsSuccess]);
-
-      // Close network settings dialog when offline warning opens
-      useEffect(() => {
-        if (offlineWarningOpen) {
-          setNetworkSettingsDialogOpen(false);
-        }
-      }, [offlineWarningOpen]);
+      // The dialog itself is rendered once, app-wide, by main; the settings
+      // screen only opens it through the shared store.
+      const setNetworkSettingsDialogOpen = useNetworkSettingsDialogStore(
+        (state) => state.setOpen,
+      );
 
       // Check for search params to open network dialog
       useEffect(() => {
@@ -412,30 +517,24 @@ export const createUseSettingsLogic = function (): UseSettingsLogic {
         if (search?.openNetworkDialog) {
           setNetworkSettingsDialogOpen(true);
         }
-      }, [router]);
+      }, [router, setNetworkSettingsDialogOpen]);
 
-      const { data: selectedConnectedNetwork } = useQuery(
-        [BoardScopedQuery.CONNECTION_NAME],
-        async () => getConnectionName(),
-        {
-          enabled: boardIsReachable && networkContext.isConnected,
-        },
-      );
+      const { data: selectedConnectedNetwork } = useQuery({
+        queryKey: [BoardScopedQuery.CONNECTION_NAME],
+        queryFn: async () => getConnectionName(),
+        enabled: boardIsReachable && isConnected,
+      });
 
-      const { data: selectedConnectedIPAddress } = useQuery(
-        [BoardScopedQuery.IP_ADDRESS],
-        async () => getIPAddress(),
-        {
-          enabled: boardIsReachable && networkContext.isConnected,
-        },
-      );
+      const { data: selectedConnectedIPAddress } = useQuery({
+        queryKey: [BoardScopedQuery.IP_ADDRESS],
+        queryFn: async () => getIPAddress(),
+        enabled: boardIsReachable && isConnected,
+      });
 
       return {
-        ...networkContext,
+        isConnected,
         selectedConnectedNetwork,
         selectedConnectedIPAddress,
-        open: networkSettingsDialogOpen,
-        onOpenChange: setNetworkSettingsDialogOpen,
         openNetworkSettingsDialog: () => setNetworkSettingsDialogOpen(true),
       };
     };
@@ -457,29 +556,23 @@ export const createUseSettingsLogic = function (): UseSettingsLogic {
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [canStartUpdate]);
 
-      const { data: osImageVersion } = useQuery(
-        [BoardScopedQuery.OS_IMAGE_VERSION],
-        async () => getOSImageVersion(),
-        {
-          enabled: boardIsReachable,
-        },
-      );
+      const { data: osImageVersion } = useQuery({
+        queryKey: [BoardScopedQuery.OS_IMAGE_VERSION],
+        queryFn: async () => getOSImageVersion(),
+        enabled: boardIsReachable,
+      });
 
-      const { data: kernelVersion } = useQuery(
-        [BoardScopedQuery.KERNEL_VERSION],
-        async () => getKernelVersion(),
-        {
-          enabled: boardIsReachable,
-        },
-      );
+      const { data: kernelVersion } = useQuery({
+        queryKey: [BoardScopedQuery.KERNEL_VERSION],
+        queryFn: async () => getKernelVersion(),
+        enabled: boardIsReachable,
+      });
 
-      const { data: linuxDistribution } = useQuery(
-        [BoardScopedQuery.LINUX_DISTRIBUTION],
-        async () => getLinuxDistribution(),
-        {
-          enabled: boardIsReachable,
-        },
-      );
+      const { data: linuxDistribution } = useQuery({
+        queryKey: [BoardScopedQuery.LINUX_DISTRIBUTION],
+        queryFn: async () => getLinuxDistribution(),
+        enabled: boardIsReachable,
+      });
 
       const formatReleaseDate = (
         dateString: string | undefined,
@@ -535,12 +628,14 @@ export const createUseSettingsLogic = function (): UseSettingsLogic {
           }
         }, [router]);
 
-        const { data: organizations } = useQuery(
-          ['cloud-connector-organizations'],
-          async () => listCloudConnectorOrganizations(),
-          {
-            enabled: boardIsReachable && !!user,
-          },
+        const { data: organizations } = useQuery({
+          queryKey: ['cloud-connector-organizations'],
+          queryFn: async () => listCloudConnectorOrganizations(),
+          enabled: boardIsReachable && !!user,
+        });
+
+        const setNetworkSettingsDialogOpen = useNetworkSettingsDialogStore(
+          (state) => state.setOpen,
         );
 
         const connectDialogLogic: CloudConnectorConnectDialogLogic = () => ({
@@ -588,7 +683,7 @@ export const createUseSettingsLogic = function (): UseSettingsLogic {
     return {
       cloudConnectorSettingsLogic: useCloudConnectorSettingsLogic,
       boardSettingsLogic: useBoardSettingsLogic,
-      carrierSettingsLogic: useCarrierSettingsLogic,
+      boardExtensionsSettingsLogic: useBoardExtensionsSettingsLogic,
       networkModeLogic: useNetworkModeLogic,
       networkSettingsLogic: useNetworkSettingsLogic,
       systemSettingsLogic: useSystemSettingsLogic,

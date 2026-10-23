@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -109,11 +110,6 @@ var nodeBackedLSPs = map[LspId]bool{
 	LSP_CSS:        true,
 }
 
-var LspNeedsProvideFormatterInitOption = map[LspId]bool{
-	LSP_HTML: true,
-	LSP_CSS:  true,
-}
-
 var lspEnabledSbcFQBNs = []string{board.FQBNVentunoQ}
 
 // arduinoSourceExts and sketchDirName define what counts as a sketch move-in for
@@ -124,6 +120,10 @@ var arduinoSourceExts = []string{".ino", ".c", ".cpp", ".h", ".hpp"}
 
 const sketchDirName = "sketch"
 
+// fileChangeDeleted is the LSP FileChangeType of a deleted path, as it
+// arrives in a decoded didChangeWatchedFiles message.
+const fileChangeDeleted = float64(3)
+
 type lspProcess struct {
 	processId       ProcessId
 	eventLspId      LspId
@@ -133,6 +133,9 @@ type lspProcess struct {
 	intentionalExit bool
 	sendMu          sync.Mutex
 }
+
+// errStoppedMeanwhile rejects a start that StopAll overtook.
+var errStoppedMeanwhile = errors.New("LSP start aborted: stopped meanwhile")
 
 type LspId string
 type ProcessId string
@@ -149,6 +152,9 @@ type LSPHandler struct {
 	restartCounts      map[ProcessId]int
 	restarting         map[LspId]bool
 	restartPending     map[LspId]bool
+	// stopGen counts StopAll calls. A deliberate restart started before one
+	// must not start its LSP again afterwards, for an app that has closed.
+	stopGen uint64
 	// formatterReady records that a formatter process has answered `initialize`,
 	// and formatterQueue holds the state-sync notifications addressed to it until
 	// then. See queueForFormatter.
@@ -158,6 +164,9 @@ type LSPHandler struct {
 	resourcesMu            sync.Mutex
 	ensurePythonStubsMu    sync.Mutex
 	initArduinoCliConfigMu sync.Mutex
+	// coreIndexRefreshed records that `core update-index` ran this launch.
+	// Guarded by initArduinoCliConfigMu.
+	coreIndexRefreshed bool
 
 	// sendMus serializes, per LSP, a message's [fold-into-recovery-snapshot +
 	// write] against a restart's [start + state replay]. Without it a message
@@ -270,13 +279,31 @@ func (h *LSPHandler) ensureResources() error {
 }
 
 func (h *LSPHandler) Start(lspId LspId, workspaceDir string) (err error) {
+	h.stateMu.RLock()
+	gen := h.stopGen
+	h.stateMu.RUnlock()
+	return h.startIfCurrent(lspId, workspaceDir, gen)
+}
+
+// startIfCurrent is Start, refused when StopAll has run since gen was read.
+func (h *LSPHandler) startIfCurrent(lspId LspId, workspaceDir string, gen uint64) (err error) {
 	slog.Info("Start", "lspId", lspId, "workspaceDir", workspaceDir)
 
 	h.stateMu.Lock()
+	if h.stopGen != gen {
+		h.stateMu.Unlock()
+		slog.Info("LSP start aborted: all LSPs were stopped meanwhile", "lspId", lspId)
+		return errStoppedMeanwhile
+	}
 	h.activeLSPs[lspId] = true
 	// remember the app dir so crash-restarts can reuse it without the frontend
 	h.appDir = workspaceDir
 	h.stateMu.Unlock()
+	defer func() {
+		if err != nil {
+			h.deactivateIfDead(lspId, gen)
+		}
+	}()
 
 	if err := h.ensureResources(); err != nil {
 		return err
@@ -769,31 +796,6 @@ func (h *LSPHandler) Send(lspId LspId, message any) error {
 	return h.send(lspId, message)
 }
 
-// vscode-langservers-extracted servers (html,css) only advertise their formatting capability
-// when the client asks for it via initializationOptions.provideFormatter.
-func injectProvideFormatterInitOption(lspId LspId, message any) {
-	if !LspNeedsProvideFormatterInitOption[lspId] {
-		return
-	}
-	msgMap, ok := message.(map[string]any)
-	if !ok {
-		return
-	}
-	if method, _ := msgMap["method"].(string); method != methodInitialize {
-		return
-	}
-	params, ok := msgMap["params"].(map[string]any)
-	if !ok {
-		return
-	}
-	opts, ok := params["initializationOptions"].(map[string]any)
-	if !ok {
-		opts = make(map[string]any)
-		params["initializationOptions"] = opts
-	}
-	opts["provideFormatter"] = true
-}
-
 // record state for auto-restart
 func (h *LSPHandler) recordRecoveryState(lspId LspId, message any) {
 	msgMap, ok := message.(map[string]any)
@@ -953,7 +955,6 @@ func (h *LSPHandler) sendSerialized(lspId LspId, message any) error {
 // own it as part of a restart (replayStateAfterRestart), so the fold and the
 // write can't straddle a concurrent restart's replay.
 func (h *LSPHandler) deliver(lspId LspId, mainProc, formatterProc *lspProcess, message any) error {
-	injectProvideFormatterInitOption(lspId, message)
 	h.recordRecoveryState(lspId, message)
 
 	// The Arduino LS does not implement workspace/didChangeWatchedFiles: its
@@ -1106,7 +1107,11 @@ func (h *LSPHandler) send(lspId LspId, message any) error {
 // inside the app's top-level `sketch/` folder — the files whose on-disk state
 // feeds the sketch build. Any such change (Created, Changed or Deleted) needs
 // the deliberate restart, because the suppressed notification (see deliver)
-// leaves the Arduino LS no other way to learn the disk changed.
+// leaves the Arduino LS no other way to learn the disk changed. A Deleted uri
+// with no extension counts too: it is how a folder moved or deleted in one
+// step is reported, and the untracked sources inside it are gone without
+// events of their own. A Created folder does not count: the client lists the
+// folder and announces its sources, which restarts once.
 func (h *LSPHandler) isSketchWatchedChange(message any) bool {
 	msgMap, ok := message.(map[string]any)
 	if !ok {
@@ -1134,7 +1139,9 @@ func (h *LSPHandler) isSketchWatchedChange(message any) bool {
 			continue
 		}
 		uri, _ := cm["uri"].(string)
-		if IsURIWithinDir(uri, sketchDir) && isArduinoSourceURI(uri) {
+		changeType, _ := cm["type"].(float64)
+		folderGone := changeType == fileChangeDeleted && path.Ext(uri) == ""
+		if IsURIWithinDir(uri, sketchDir) && (isArduinoSourceURI(uri) || folderGone) {
 			return true
 		}
 	}
@@ -1162,13 +1169,22 @@ func (h *LSPHandler) triggerSketchRestart(lspId LspId) {
 		return
 	}
 	h.restarting[lspId] = true
+	// Read once for the whole loop: a pending restart that runs after StopAll
+	// would otherwise read the new gen and start the LSP for the closed app.
+	gen := h.stopGen
 	h.stateMu.Unlock()
 
 	go func() {
 		for {
-			h.restartLSP(lspId)
+			h.restartLSP(lspId, gen)
 
 			h.stateMu.Lock()
+			if h.stopGen != gen {
+				h.restartPending[lspId] = false
+				h.restarting[lspId] = false
+				h.stateMu.Unlock()
+				return
+			}
 			if h.restartPending[lspId] {
 				h.restartPending[lspId] = false
 				h.stateMu.Unlock()
@@ -1186,12 +1202,16 @@ func (h *LSPHandler) triggerSketchRestart(lspId LspId) {
 // auto-restart path it doesn't consume the retry budget, and because the
 // recorded state already reflects any pending file move the reinit is
 // equivalent to reopening the app.
-func (h *LSPHandler) restartLSP(lspId LspId) {
+func (h *LSPHandler) restartLSP(lspId LspId, gen uint64) {
 	slog.Info("restartLSP: reinitializing after sketch structure change", "lspId", lspId)
 
 	h.stateMu.RLock()
 	dir := h.appDir
+	stale := h.stopGen != gen
 	h.stateMu.RUnlock()
+	if stale {
+		return
+	}
 
 	h.stop(lspId)
 
@@ -1211,12 +1231,15 @@ func (h *LSPHandler) restartLSP(lspId LspId) {
 	for attempt := 1; attempt <= maxRestartRetries; attempt++ {
 		sendMu := h.sendMuFor(lspId)
 		sendMu.Lock()
-		if err = h.Start(lspId, dir); err == nil {
+		if err = h.startIfCurrent(lspId, dir, gen); err == nil {
 			h.replayStateAfterRestart(lspId)
 			sendMu.Unlock()
 			return
 		}
 		sendMu.Unlock()
+		if errors.Is(err, errStoppedMeanwhile) {
+			return
+		}
 		slog.Warn("restartLSP: start failed, retrying", "lspId", lspId, "attempt", attempt, "error", err)
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -1225,14 +1248,25 @@ func (h *LSPHandler) restartLSP(lspId LspId) {
 
 // wait up to 10 seconds for the LSP to be successfully started and ready
 func (h *LSPHandler) waitForLSPReady(lspId LspId) (mainProc *lspProcess, formatterProc *lspProcess, err error) {
+	h.stateMu.RLock()
+	gen := h.stopGen
+	h.stateMu.RUnlock()
+
 	for i := 0; i < 100; i++ {
 		h.stateMu.RLock()
-		isActive := h.activeLSPs[lspId]
+		// A sketch restart marks the LSP inactive between its stop and its
+		// start. A message sent in that gap must wait for the new process:
+		// failing it here drops it from the recovery state too, and a lost
+		// didOpen leaves a sketch file closed until the app is reopened.
+		isActive := h.activeLSPs[lspId] || h.restarting[lspId]
+		stopped := h.stopGen != gen
 		mainProc = h.processes[ProcessId(lspId)]
 		formatterProc = h.processes[getFormatterProcessId(lspId)]
 		h.stateMu.RUnlock()
 
-		if !isActive {
+		// After StopAll the next app may start the same LSP on the same
+		// workspace uris, so a message from before must not wait into it.
+		if !isActive || stopped {
 			return nil, nil, fmt.Errorf("LSP %s is not active", lspId)
 		}
 
@@ -1288,13 +1322,37 @@ func (h *LSPHandler) stop(lspId LspId) {
 	h.stopLocked(getFormatterProcessId(lspId))
 }
 
+// deactivateIfDead marks an LSP inactive once no restart will bring its main
+// process back, so a send fails at once in waitForLSPReady. The client keeps
+// sending to a failed LSP and sends one message at a time, so each send that
+// waited the full timeout would delay every send after it.
+//
+// It does nothing when the main process runs, which a concurrent Start may
+// have spawned, or when StopAll has run since gen, because the LSP then
+// belongs to the next app.
+func (h *LSPHandler) deactivateIfDead(lspId LspId, gen uint64) {
+	h.stateMu.Lock()
+	defer h.stateMu.Unlock()
+	if h.stopGen != gen || h.processes[ProcessId(lspId)] != nil {
+		return
+	}
+	h.activeLSPs[lspId] = false
+}
+
 func (h *LSPHandler) StopAll() {
 	slog.Info("StopAll")
 
 	h.stateMu.Lock()
 	defer h.stateMu.Unlock()
 
+	h.stopGen++
 	h.activeLSPs = make(map[LspId]bool)
+	h.restartPending = make(map[LspId]bool)
+	// The recovery snapshot belongs to the app that is closing. Every app
+	// shares one temp workspace dir, so a snapshot kept past here would replay
+	// this app's documents into the next one at the same uris.
+	h.initializeRequests = make(map[LspId]any)
+	h.openFiles = make(map[LspId]map[string]any)
 
 	for _, proc := range h.processes {
 		proc.intentionalExit = true
@@ -1363,9 +1421,13 @@ func (h *LSPHandler) handleProcessExit(proc *lspProcess) {
 	}
 	h.restartCounts[processId]++
 	count := h.restartCounts[processId]
+	gen := h.stopGen
 	h.stateMu.Unlock()
 
 	if count > maxRestartRetries {
+		if !isFormatter(processId) {
+			h.deactivateIfDead(eventLspId, gen)
+		}
 		slog.Error("LSP crashed too many times, giving up auto-restart", "lspId", processId, "count", count)
 		h.emitLogToFrontend("error", "lifecycle", processId, fmt.Sprintf("crashed too many times (%d), giving up auto-restart", count))
 		// A dead formatter is a degraded main LSP, not a failed one — the editor
@@ -1407,7 +1469,10 @@ func (h *LSPHandler) handleProcessExit(proc *lspProcess) {
 		h.stateMu.RLock()
 		dir := h.appDir
 		h.stateMu.RUnlock()
-		if err := h.Start(eventLspId, dir); err != nil {
+		if err := h.startIfCurrent(eventLspId, dir, gen); err != nil {
+			if errors.Is(err, errStoppedMeanwhile) {
+				return
+			}
 			slog.Error("Failed to restart LSP", "lspId", eventLspId, "error", err)
 			// Start refuses for reasons a retry won't fix (no board selected, a
 			// toolchain it cannot run), and the frontend's own start promise
@@ -1773,28 +1838,44 @@ func (h *LSPHandler) queueForFormatter(proc *lspProcess, message any) bool {
 	return true
 }
 
-// markFormatterReady records that a formatter answered `initialize` and flushes
-// everything held for it, in order.
+// markFormatterReady completes a formatter's handshake and flushes everything
+// held for it, in order.
+//
+// We send the formatter its `initialized` here, and sendToProcesses never
+// forwards the client's: ruff exits unless `initialized` is the very next
+// message after its initialize answer, and the client's copy can reach us after
+// its own didOpen (each Wails binding call runs on its own goroutine).
+//
+// The formatter stays not-ready until the queue is empty, so a message sent
+// while we write keeps queueing behind the flush and cannot overtake it.
 func (h *LSPHandler) markFormatterReady(proc *lspProcess) {
-	h.stateMu.Lock()
-	if h.formatterReady[proc.processId] {
-		h.stateMu.Unlock()
+	h.stateMu.RLock()
+	ready := h.formatterReady[proc.processId]
+	h.stateMu.RUnlock()
+	if ready {
 		return
 	}
-	h.formatterReady[proc.processId] = true
-	queued := h.formatterQueue[proc.processId]
-	delete(h.formatterQueue, proc.processId)
-	h.stateMu.Unlock()
 
-	if len(queued) == 0 {
-		return
-	}
-	slog.Info("formatter initialized, flushing held state sync", "processId", proc.processId, "count", len(queued))
-	for _, message := range queued {
-		if err := sendToProc(proc, message); err != nil {
-			slog.Warn("failed to flush held state sync to formatter", "processId", proc.processId, "error", err)
+	batch := []any{map[string]any{"jsonrpc": "2.0", "method": methodInitialized, "params": map[string]any{}}}
+	for {
+		h.stateMu.Lock()
+		batch = append(batch, h.formatterQueue[proc.processId]...)
+		delete(h.formatterQueue, proc.processId)
+		if len(batch) == 0 {
+			h.formatterReady[proc.processId] = true
+			h.stateMu.Unlock()
 			return
 		}
+		h.stateMu.Unlock()
+
+		slog.Info("formatter initialized, flushing held state sync", "processId", proc.processId, "count", len(batch))
+		for _, message := range batch {
+			if err := sendToProc(proc, message); err != nil {
+				slog.Warn("failed to flush held state sync to formatter", "processId", proc.processId, "error", err)
+				return
+			}
+		}
+		batch = nil
 	}
 }
 
@@ -1826,7 +1907,8 @@ func (h *LSPHandler) sendToProcesses(lspId LspId, mainProc *lspProcess, formatte
 		}
 
 		// send notifications and initialize request (failing silently if it fails, cause requests are also sent to main process)
-		if isNotification || isInitializeRequest {
+		// The formatter's `initialized` comes from markFormatterReady.
+		if (isNotification || isInitializeRequest) && method != methodInitialized {
 			// `initialize` itself must go straight through — it is what makes the
 			// formatter ready. Everything else waits for its answer.
 			if !isInitializeRequest && formatterProc != nil && h.queueForFormatter(formatterProc, message) {

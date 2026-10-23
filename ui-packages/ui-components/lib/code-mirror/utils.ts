@@ -36,7 +36,7 @@ export function onUpdate(onChange: CodeEditorOnChangeType): Extension {
       if (annotation) return codeMirrorEventAnnotationSideEffects[annotation]();
 
       // Skip updates originating from the split-view peer sync mechanism:
-      // the source pane's own onChange already wrote the shared code
+      // the source panel's own onChange already wrote the shared code
       // subject, so running it again here would double-call setCode for
       // every mirrored keystroke. A mirrored dispatch is always its own
       // update cycle on the peer view, so bailing out of the whole

@@ -16,6 +16,14 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   loading?: boolean;
   bold?: boolean;
   uppercase?: boolean;
+  disableInteractive?: boolean;
+};
+
+const TEXT_SIZE_BY_BUTTON_SIZE: Record<ButtonSize, TextSize> = {
+  [ButtonSize.XXSmall]: TextSize.XXXSmall,
+  [ButtonSize.XSmall]: TextSize.XXSmall,
+  [ButtonSize.Small]: TextSize.XSmall,
+  [ButtonSize.Large]: TextSize.Small,
 };
 
 export const Button = forwardRef(
@@ -31,6 +39,7 @@ export const Button = forwardRef(
       loading = false,
       bold = false,
       uppercase = false,
+      disableInteractive = false,
       ...buttonProps
     } = props;
 
@@ -67,9 +76,6 @@ export const Button = forwardRef(
             [styles['action']]: appearance === ButtonAppearance.Action,
             [styles['low-contrast']]:
               appearance === ButtonAppearance.LowContrast,
-            //Icon Position
-            [styles['button-icon-left']]: iconPosition === 'left',
-            [styles['button-icon-right']]: iconPosition === 'right',
             //Sizes
             [styles['xx-small']]: size === ButtonSize.XXSmall,
             [styles['x-small']]: size === ButtonSize.XSmall,
@@ -77,6 +83,7 @@ export const Button = forwardRef(
             [styles['large']]: size === ButtonSize.Large,
 
             [styles['disabled']]: buttonProps.disabled,
+            [styles['disable-interactive']]: disableInteractive,
           },
           classes?.button,
         )}
@@ -85,13 +92,7 @@ export const Button = forwardRef(
         {iconPosition === 'left' ? WrappedIcon : null}
         {children && (
           <Text
-            size={
-              size === ButtonSize.XXSmall
-                ? TextSize.XXSmall
-                : size === ButtonSize.XSmall
-                ? TextSize.XSmall
-                : TextSize.Small
-            }
+            size={TEXT_SIZE_BY_BUTTON_SIZE[size]}
             className={clsx(
               styles['text-button-text'],
               classes?.textButtonText,

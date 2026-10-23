@@ -3,7 +3,7 @@ import { defineMessages } from 'react-intl';
 export const messages = defineMessages({
   networkPanelTitle: {
     id: 'appLabFooterBar.networkPanelTitle',
-    defaultMessage: 'Network Info',
+    defaultMessage: 'Network info',
     description: 'Title for the network info panel',
   },
   networkPanelChangeButton: {
@@ -28,7 +28,7 @@ export const messages = defineMessages({
   },
   networkPanelNotConnectedStatus: {
     id: 'appLabFooterBar.networkPanelNotConnectedStatus',
-    defaultMessage: 'Not Connected',
+    defaultMessage: 'Not connected',
     description: 'Status label indicating that the network is not connected',
   },
   notificationPanelTitle: {
@@ -74,20 +74,14 @@ export const messages = defineMessages({
     description:
       'Tooltip shown when the language server failed to start and reported no specific reason',
   },
-  aiAssistant: {
-    id: 'appLabFooterBar.aiAssistant',
-    defaultMessage: 'AI Assistant',
-    description:
-      'Tooltip/label for the AI Assistant footer entry point when closed',
-  },
   aiAssistantEntryAgent: {
     id: 'appLabFooterBar.aiAssistantEntryAgent',
-    defaultMessage: 'Agent Mode',
+    defaultMessage: 'Agent mode',
     description: 'Label for the AI Assistant footer entry point in editor mode',
   },
   aiAssistantEntryEditor: {
     id: 'appLabFooterBar.aiAssistantEntryEditor',
-    defaultMessage: 'Editor Mode',
+    defaultMessage: 'Editor mode',
     description:
       'Label for the AI Assistant footer entry point in AI Assistant mode',
   },
@@ -106,14 +100,14 @@ export const messages = defineMessages({
   },
   agentIsHereTooltipTitle: {
     id: 'appLabFooterBar.agentIsHereTooltipTitle',
-    defaultMessage: 'AppLab Agent is here',
+    defaultMessage: 'App Lab Agent is here',
     description:
       'Title of the one-time tooltip shown on the first return to editor mode',
   },
   agentIsHereTooltipDescription: {
     id: 'appLabFooterBar.agentIsHereTooltipDescription',
     defaultMessage:
-      'The AppLab Agent lives here. Give it a prompt and watch it build.',
+      'The App Lab Agent lives here. Give it a prompt and watch it build.',
     description:
       'Description of the one-time tooltip shown on the first return to editor mode',
   },
@@ -121,5 +115,15 @@ export const messages = defineMessages({
     id: 'appLabFooterBar.dismissTooltip',
     defaultMessage: 'Dismiss',
     description: 'Label of the close button of the agent-mode tooltips',
+  },
+  notifications: {
+    id: 'appLabFooterBar.notifications',
+    defaultMessage: 'Notifications',
+    description: 'Label for the notifications button',
+  },
+  network: {
+    id: 'appLabFooterBar.network',
+    defaultMessage: 'Network',
+    description: 'Label for the network button',
   },
 });

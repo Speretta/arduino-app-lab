@@ -1,9 +1,9 @@
 import {
+  AppBrickListItem,
   BrickCreateUpdateRequest,
-  BrickInstance,
 } from '@cloud-editor-mono/infrastructure';
 import {
-  FileNode,
+  CodeEditorLogic,
   LspId,
   LspState,
   SelectableFileData,
@@ -18,7 +18,7 @@ import { UseLSP } from '../../hooks/useLSP';
 export type EditorPanelLogicParams = {
   appId?: string;
   appPath?: string;
-  appBricks?: BrickInstance[];
+  appBricks?: AppBrickListItem[];
   selectedFile?: SelectableFileData;
   selectFile: (params: {
     fileId?: string;
@@ -27,7 +27,6 @@ export type EditorPanelLogicParams = {
   }) => void;
   selectableMainFile?: SelectableFileData;
   previewFileId?: string;
-  unsavedFileIds?: Set<string>;
   closeFile: (fileId: string) => void;
   updateOpenFilesOrder: (fileIds: string[], draggedFileId?: string) => void;
   deleteAppFile: (path: string, nodeType?: 'file' | 'folder') => Promise<void>;
@@ -50,41 +49,42 @@ export type EditorPanelLogicParams = {
   /**
    * Full catalogue of files that can be opened in the editor (project
    * files + sketch secrets + bricks). Used as a fallback resolver when
-   * routing a file-tree drop into pane B for a file that isn't yet open
-   * in either pane. Optional for backwards compatibility — when omitted,
-   * pane-B opens only work for files already present in one of the panes'
+   * routing a file-tree drop into panel B for a file that isn't yet open
+   * in either panel. Optional for backwards compatibility — when omitted,
+   * panel-B opens only work for files already present in one of the panels'
    * tab lists.
    */
   allFiles?: SelectableFileData[];
   readOnly: boolean;
   /**
    * Ensures a file's content is loaded into the editor's content store.
-   * Called when a tab is opened or dragged into a pane before its content
+   * Called when a tab is opened or dragged into a panel before its content
    * has been fetched. No-op if the content is already cached.
    */
   fetchFile?: (fileId: string) => Promise<unknown>;
   /**
    * Persisted per-app open-files record. Used (alongside
    * `filesContentLoaded`) by the split-view hydration effect to restore
-   * pane B tabs/selection, both panes' per-file markdown render modes,
+   * panel B tabs/selection, both panels' per-file markdown render modes,
    * `isSplit`, and the split width on app load.
    */
   openFilesStore?: OpenFilesStoreItem | null;
   /**
    * True once the file tree (catalogue) is known. Gates split-view
-   * hydration so persisted pane references can be pruned against the
+   * hydration so persisted panel references can be pruned against the
    * current `allFiles` catalogue.
    */
   filesContentLoaded?: boolean;
   /**
    * Patches split-related fields onto the per-app store record. Shallow
-   * merges so callers can update one pane (or one field) without
+   * merges so callers can update one panel (or one field) without
    * clobbering the rest. Called from the split-view mirror effect and
    * the panel-resize handler.
    */
   storeSplitState?: (patch: OpenFilesStorePatch) => Promise<void>;
-  filesList?: FileNode[];
   onLspStateChange?: (lspId: LspId, state: LspState) => void;
+  onToggleAgentPanel?: VoidFunction;
+  agentPanelOpen?: boolean;
 } & Pick<
   UseLSP,
   | 'isLspEnabled'
@@ -94,4 +94,5 @@ export type EditorPanelLogicParams = {
   | 'sendLspMessage'
   | 'subscribeLspMessages'
   | 'getLspWorkspaceFile'
->;
+> &
+  Pick<ReturnType<CodeEditorLogic>, 'showLspReferences' | 'closeLspReferences'>;

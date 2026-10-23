@@ -79,13 +79,13 @@ func TestACPSmoke(t *testing.T) {
 	}
 
 	// round-trip: a prompt yields a streamed reply.
-	sid, err := mgr.NewSession(ctx, ws)
+	sid, err := mgr.NewSession(ctx, ws, agent.SessionWorkspace{})
 	if err != nil {
 		t.Fatalf("new session: %v", err)
 	}
 	promptCtx, cancel2 := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel2()
-	if err := mgr.Prompt(promptCtx, sid, "Reply with exactly the word PONG and nothing else."); err != nil {
+	if err := mgr.Prompt(promptCtx, sid, "Reply with exactly the word PONG and nothing else.", nil); err != nil {
 		t.Fatalf("prompt: %v", err)
 	}
 	mu.Lock()
@@ -99,13 +99,13 @@ func TestACPSmoke(t *testing.T) {
 	// tool policy: Bash is disallowed via the session _meta, so an explicit shell write must not land on disk.
 	sentinel := filepath.Join(ws, "smoke-should-not-exist.txt")
 	_ = os.Remove(sentinel)
-	sid2, err := mgr.NewSession(ctx, ws)
+	sid2, err := mgr.NewSession(ctx, ws, agent.SessionWorkspace{})
 	if err != nil {
 		t.Fatalf("new session (policy): %v", err)
 	}
 	policyCtx, cancel3 := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel3()
-	if err := mgr.Prompt(policyCtx, sid2, "Use the Bash tool to run exactly: echo PWNED > smoke-should-not-exist.txt"); err != nil {
+	if err := mgr.Prompt(policyCtx, sid2, "Use the Bash tool to run exactly: echo PWNED > smoke-should-not-exist.txt", nil); err != nil {
 		t.Fatalf("prompt (policy): %v", err)
 	}
 	if _, err := os.Stat(sentinel); err == nil {

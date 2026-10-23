@@ -1,5 +1,5 @@
-@use "../../../../public/shared.module.scss";
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
 
 .line {
-    background-color: rgba(255, 255, 0, 0.7) !important;
+    background-color: var(--editor-syntax-highlight-line-background) !important;
 }

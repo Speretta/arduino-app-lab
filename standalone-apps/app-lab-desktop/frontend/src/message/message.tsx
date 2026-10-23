@@ -125,6 +125,9 @@ function MessageDialog(): JSX.Element {
       try {
         currentVersion = await GetCurrentVersion();
         setVersion(currentVersion);
+        // Dev builds are versioned 0.0.0-<sha> and never have a notice, so the
+        // request would only produce a 404 in the console.
+        if (currentVersion.startsWith('0.0.0-')) return;
         const resp: Response = await fetch(
           `${messageBucketUrl}/message_${currentVersion}.md?ck=${new Date().getTime()}`,
         );

@@ -154,6 +154,7 @@ export const listCloudConnectorOrganizations: CloudConnectorService['listCloudCo
         id: PRIVATE_ORGANIZATION_ID,
         logo: undefined,
         name: 'My Cloud',
+        space: 'My Cloud',
         type: 'Private space',
       },
       ...(parsed.organizations || []).map((organization) => ({
@@ -163,6 +164,7 @@ export const listCloudConnectorOrganizations: CloudConnectorService['listCloudCo
             ? `${Config.ORGANIZATIONS_LOGO_URL}/${organization.logo}`
             : undefined,
         name: organization.name,
+        space: organization.space,
         type: organization.type,
       })),
     ];

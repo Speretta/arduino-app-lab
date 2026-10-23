@@ -1,9 +1,9 @@
-@use "../../../../public/shared.module.scss";
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
 
 .title {
   display: block;
   margin-block: 16px;
-  color: shared.theme-var(--associate-dialog-title);
+  color: var(--text-default);
 }
 
 .relative {
@@ -14,7 +14,7 @@
 .invalid-format {
   position: absolute;
   bottom: -10px;
-  color: #7f8c8d;
+  color: var(--text-subtle);
 
   &.overlap {
     bottom: -20px;

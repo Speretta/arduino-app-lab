@@ -1,30 +1,10 @@
 import { defineMessages } from 'react-intl';
 
 export const messages = defineMessages({
-  copyAndEditButton: {
-    id: 'app-detail.copy-and-edit-button',
-    defaultMessage: 'Copy and edit app',
-    description: 'Button text to copy and edit an example app',
-  },
-  successfullyDuplicatedApp: {
-    id: 'app-detail.successfully-duplicated-app',
-    defaultMessage: 'App duplicated successfully',
-    description: 'Notification message shown when an app is duplicated',
-  },
-  failedDuplicateApp: {
-    id: 'app-detail.failed-duplicate-app',
-    defaultMessage: 'Failed to duplicate app',
-    description: 'Notification message shown when app duplication fails',
-  },
   successfullyDeletedApp: {
     id: 'app-detail.successfully-deleted-app',
     defaultMessage: 'App deleted successfully',
     description: 'Notification message shown when an app is deleted',
-  },
-  failedDeleteApp: {
-    id: 'app-detail.failed-delete-app',
-    defaultMessage: 'Failed to delete app',
-    description: 'Notification message shown when app deletion fails',
   },
   successfullyAddedBrick: {
     id: 'app-detail.successfully-added-brick',
@@ -33,7 +13,7 @@ export const messages = defineMessages({
   },
   failedAddBrick: {
     id: 'app-detail.failed-add-brick',
-    defaultMessage: 'Failed to add brick',
+    defaultMessage: 'Failed to add Brick',
     description: 'Notification message shown when brick addition fails',
   },
   successfullyDeletedBrick: {
@@ -43,7 +23,7 @@ export const messages = defineMessages({
   },
   failedDeleteBrick: {
     id: 'app-detail.failed-delete-brick',
-    defaultMessage: 'Failed to delete brick',
+    defaultMessage: 'Failed to delete Brick',
     description: 'Notification message shown when brick deletion fails',
   },
   successfullyAddedCustomBrick: {
@@ -53,7 +33,7 @@ export const messages = defineMessages({
   },
   failedAddCustomBrick: {
     id: 'app-detail.failed-add-custom-brick',
-    defaultMessage: 'Failed to create brick',
+    defaultMessage: 'Failed to create Brick',
     description: 'Notification message shown when brick creation fails',
   },
   updateAppLab: {
@@ -68,7 +48,7 @@ export const messages = defineMessages({
   },
   failedRenameBrick: {
     id: 'app-detail.failed-rename-brick',
-    defaultMessage: 'Failed to rename brick',
+    defaultMessage: 'Failed to rename Brick',
     description: 'Notification message shown when brick rename fails',
   },
   successfullyAddedLibrary: {
@@ -95,6 +75,12 @@ export const messages = defineMessages({
     id: 'app-detail.successfully-created-file',
     defaultMessage: 'File created successfully',
     description: 'Notification message shown when a file is created',
+  },
+  failedAddSketch: {
+    id: 'app-detail.failed-add-sketch',
+    defaultMessage: 'Could not add a sketch to this app',
+    description:
+      'Notification message shown when creating the sketch folder and its files fails',
   },
   failedCreateFile: {
     id: 'app-detail.failed-create-file',
@@ -169,6 +155,19 @@ export const messages = defineMessages({
     defaultMessage: 'Failed to rename folder',
     description: 'Notification message shown when folder rename fails',
   },
+  failedCheckPathConflict: {
+    id: 'app-detail.failed-check-path-conflict',
+    defaultMessage:
+      'Could not check whether that name is already taken. Nothing was changed.',
+    description:
+      'Notification message shown when the check for an existing file or folder fails, so the operation was not performed',
+  },
+  failedListFolder: {
+    id: 'app-detail.failed-list-folder',
+    defaultMessage: 'Could not open the folder {folder}',
+    description:
+      'Notification message shown when the contents of a folder could not be listed',
+  },
   fileAlreadyExistsRename: {
     id: 'app-detail.file-already-exists-rename',
     defaultMessage: 'A file with this name already exists',
@@ -201,16 +200,6 @@ export const messages = defineMessages({
     defaultMessage: 'Failed to delete folder',
     description: 'Notification message shown when folder deletion fails',
   },
-  appIsRunning: {
-    id: 'app-detail.app-is-running',
-    defaultMessage: 'App is now running',
-    description: 'Notification message shown when the app starts running',
-  },
-  appIsStopped: {
-    id: 'app-detail.app-is-stopped',
-    defaultMessage: 'App is now stopped',
-    description: 'Notification message shown when the app stops running',
-  },
   codeCopied: {
     id: 'app-detail.code-copied',
     defaultMessage: 'Code copied to clipboard',
@@ -236,18 +225,17 @@ export const messages = defineMessages({
     description:
       'Notification message shown when a file cannot be opened in the editor',
   },
-  invalidCharactersInFileName: {
-    id: 'app-detail.invalid-characters-in-file-name',
-    defaultMessage:
-      'Invalid name. Can\'t contain $ ` / \\ < > : " | ? *, end with a dot or space.',
-    description:
-      'Notification message shown when creating or renaming a file or folder with a name that is not allowed',
-  },
   lspError: {
     id: 'app-detail.lsp-error',
     defaultMessage:
-      'Language support failed to install. Reopen the app to retry.',
+      'Language support failed to install. Reopen the App to retry.',
     description:
       'Notification message shown when the LSP (Language Server Protocol) service fails to initialize',
+  },
+  lspReferenceNotOpened: {
+    id: 'app-detail.lsp-reference-not-opened',
+    defaultMessage: 'Could not open {fileName}',
+    description:
+      'Notification shown when a row in the references panel is clicked but its file never opened in a panel',
   },
 });

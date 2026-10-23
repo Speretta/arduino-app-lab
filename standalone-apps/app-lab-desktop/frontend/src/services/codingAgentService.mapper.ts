@@ -24,6 +24,7 @@ export interface WireToolCall {
   status?: string;
   input?: unknown;
   output?: string;
+  outsideWorkspace?: boolean;
 }
 
 export interface WireUpdate {
@@ -34,6 +35,7 @@ export interface WireUpdate {
   status?: string;
   input?: unknown;
   output?: string;
+  outsideWorkspace?: boolean;
   checklist?: WireChecklist;
   choices?: WireChoiceRequest;
   modelId?: string;
@@ -102,6 +104,8 @@ export interface WireSessionSummary {
   updatedAt?: string;
   status?: string;
   pinned?: boolean;
+  workspaceAppId?: string;
+  workspaceName?: string;
 }
 
 // agent.RestartInfo, whose json tags pin these names. Its crash cause stays host-side (an error
@@ -143,6 +147,7 @@ const toToolCall = (tc: WireToolCall): ToolCall => ({
   status: toToolStatus(tc.status),
   ...(tc.input !== undefined ? { input: tc.input } : {}),
   ...(tc.output !== undefined ? { output: tc.output } : {}),
+  ...(tc.outsideWorkspace ? { outsideWorkspace: true } : {}),
 });
 
 // Returns null for update kinds the FE contract doesn't model (skipped upstream).
@@ -163,6 +168,7 @@ export const mapUpdate = (u: WireUpdate): AgentUpdate | null => {
         status: toToolStatus(u.status),
         ...(u.input !== undefined ? { input: u.input } : {}),
         ...(u.output !== undefined ? { output: u.output } : {}),
+        ...(u.outsideWorkspace ? { outsideWorkspace: true } : {}),
       };
     case 'checklist':
       return u.checklist
@@ -240,6 +246,8 @@ export const mapSessionSummary = (s: WireSessionSummary): SessionSummary => ({
     ? { status: s.status }
     : {}),
   ...(s.pinned ? { pinned: true } : {}),
+  ...(s.workspaceAppId ? { workspaceAppId: s.workspaceAppId } : {}),
+  ...(s.workspaceName ? { workspaceName: s.workspaceName } : {}),
 });
 
 const CHECKLIST_STATUSES: ChecklistItemStatus[] = [

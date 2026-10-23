@@ -60,7 +60,7 @@
   &-right {
     margin-left: 8px;
     flex: 1;
-    background-color: shared.theme-var(--editor-background);
+    background-color: var(--editor-background);
     border-radius: 16px;
     padding: 16px;
   }

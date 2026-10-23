@@ -7,7 +7,7 @@
 
 .container {
     // Anchored to the floated `.cm-find-replace-host` (which itself pins to
-    // `.cm-editor`) so each editor pane gets its own top-right overlay panel.
+    // `.cm-editor`) so each editor panel gets its own top-right overlay panel.
     position: absolute;
     top: 8px;
     right: 16px;
@@ -16,8 +16,8 @@
     z-index: shared.$zIndex1;
     padding: 6px 8px;
     border-radius: 3px;
-    border: 1px solid shared.theme-var(--editor-border-color);
-    background: shared.theme-var(--console-bar-background);
+    border: 1px solid var(--editor-border-color);
+    background: var(--console-bar-background);
     box-shadow: 0px 0px 20px 0px rgba(0, 0, 0, 0.13);
     font-size: 12px;
 }
@@ -34,12 +34,12 @@
     box-sizing: border-box;
     width: 250px;
     position: relative;
-    border: 1px solid shared.theme-var(--input-field-border);
+    border: 1px solid var(--border-default);
     border-radius: 2px;
-    background: shared.theme-var(--input-field-background);
+    background: var(--component-bg-baseline);
 
     &:focus-within {
-        border: 1px solid shared.theme-var(--border-selected);
+        border: 1px solid var(--tealscale-pastel-turquoise);
     }
 
     &-filters {
@@ -49,11 +49,11 @@
         position: absolute;
         top: 0;
         right: 5px;
-        color: shared.theme-var(--texts-icons-titles);
+        color: var(--text-default);
 
         &-count {
             opacity: 0.75;
-            color: shared.theme-var(--text-color-default);
+            color: var(--text-default);
             min-width: 60px;
         }
     }
@@ -69,19 +69,19 @@
 
         svg {
             path {
-                fill: shared.theme-var(--texts-icons-titles);
+                fill: var(--text-default);
             }
         }
 
         &:hover {
             opacity: 1;
-            background: shared.theme-var(--icon-button-tertiary-background-hover);
+            background: var(--component-bg-above);
         }
 
         &-active {
             opacity: 1;
-            border: 1px solid shared.theme-var(--toolbar-button-primary-background-hover);
-            background: shared.theme-var(--bg-baseline);
+            border: 1px solid var(--toolbar-button-primary-background-hover);
+            background: var(--bg-baseline);
         }
     }
 
@@ -95,8 +95,8 @@
 .input {
     box-sizing: border-box;
     height: 32px;
-    background: shared.theme-var(--input-field-background);
-    color: shared.theme-var(--input-field-foreground);
+    background: var(--component-bg-baseline);
+    color: var(--text-default);
     padding: 1px 5px;
 }
 
@@ -105,12 +105,12 @@
 
     .input {
         width: 100%;
-        border: 1px solid shared.theme-var(--input-field-border);
+        border: 1px solid var(--border-default);
         border-radius: 2px;
         outline: none;
 
         &:focus {
-            border: 1px solid shared.theme-var(--border-selected);
+            border: 1px solid var(--tealscale-pastel-turquoise);
         }
     }
 }
@@ -128,11 +128,15 @@
     width: 24px;
     padding: 0px;
     cursor: pointer;
-    color: shared.theme-var(--icon-button-tertiary-label);
+    color: var(--text-subtle);
 
     &:hover {
-        background: shared.theme-var(--icon-button-tertiary-background-hover);
+        background: var(--component-bg-above);
     }
+}
+
+.prev {
+    transform: rotate(180deg);
 }
 
 .toggle-replace,
@@ -146,13 +150,20 @@
         height: 16px;
 
         path {
-            fill: shared.theme-var(--editor-tab-foreground);
+            fill: var(--editor-tab-foreground);
         }
     }
 }
 
-.active {
-    rotate: 90deg;
+// The toggle now reuses the `ChevronDown` glyph (same SVG as the prev/next
+// navigation on the right) so the sizes match. Point it right while collapsed
+// and rotate back to down when the replace panel is open.
+.toggle-replace {
+    rotate: -90deg;
+}
+
+.toggle-replace.active {
+    rotate: 0deg;
 }
 
 .actions {
@@ -169,7 +180,7 @@
         width: 78px;
         padding: 5px 0px;
         border-radius: 2px;
-        border: 1px solid shared.theme-var(--editor-border-color);
+        border: 1px solid var(--editor-border-color);
         text-align: center;
         width: 78px;
     }
@@ -178,9 +189,9 @@
 .button {
     padding: 5px 2px;
     border-radius: 2px;
-    border: 1px solid shared.theme-var(--editor-border-color);
-    color: shared.theme-var(--icon-button-tertiary-label-active);
-    background: shared.theme-var(--icon-button-tertiary-background-active);
+    border: 1px solid var(--editor-border-color);
+    color: var(--text-default);
+    background: var(--component-bg-below-1);
     text-align: center;
     box-sizing: border-box;
     font-size: 12px;
@@ -188,7 +199,7 @@
     white-space: nowrap;
 
     &:hover {
-        background: shared.theme-var(--icon-button-tertiary-background-hover);
+        background: var(--component-bg-above);
     }
 }
 

@@ -13,7 +13,7 @@ export const messages = defineMessages({
   },
   subtitle: {
     id: 'appLab.passwordDialog.subtitle',
-    defaultMessage: 'Linux Password',
+    defaultMessage: 'Linux password',
     description: 'Subtitle for the password dialog',
   },
   description: {

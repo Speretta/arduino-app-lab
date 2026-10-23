@@ -2,7 +2,7 @@ import { OpenInNewTab } from '@cloud-editor-mono/images/assets/icons';
 import clsx from 'clsx';
 import { ReactElement, ReactNode } from 'react';
 
-import { openInSystemBrowser } from '../openInSystemBrowser';
+import { openInSystemBrowser } from '../../utils';
 import { useFileOpen } from './FileOpenContext';
 import styles from './link.module.scss';
 import { linkTarget } from './linkTarget';

@@ -18,47 +18,44 @@ var (
 	DisconnectedStatus Status = "disconnected"
 )
 
-func (m *Manager) GetStatusByType(ctx context.Context, netType string) (Status, error) {
-	// -t = terse, -f = columns  TYPE,STATE
-	out, err := m.Run(ctx, "-t", "-f", "TYPE,STATE", "device")
-	if err != nil {
-		return DisconnectedStatus, fmt.Errorf("failed to query devices: %w", err)
-	}
-
-	for _, line := range strings.Split(out, "\n") {
-		parts := strings.Split(line, ":")
-		if len(parts) != 2 {
-			continue
-		}
-		if parts[0] == netType && strings.TrimSpace(parts[1]) == "connected" {
-			return ConnectedStatus, nil
-		}
-
-		if parts[0] == netType && strings.TrimSpace(parts[1]) == "connecting" {
-			return ConnectingStatus, nil
-		}
-	}
-	return DisconnectedStatus, nil
+// NetworkStatus is every answer the status poll needs.
+type NetworkStatus struct {
+	WiFi     Status `json:"wifi"`
+	Ethernet Status `json:"ethernet"`
+	Internet bool   `json:"internet"`
 }
 
-func (nm *Manager) getInternetStatus(ctx context.Context) (bool, error) {
-	out, err := nm.Run(ctx, "networking", "connectivity", "check")
-	if err != nil {
-		return false, fmt.Errorf("failed to query internet connectivity: %w", err)
-	}
-
-	return strings.TrimSpace(out) == "full", nil
-}
-
-func GetInternetStatus(ctx context.Context, conn remote.RemoteConn) (bool, error) {
+// GetNetworkStatus answers the whole poll over one SSH session: the frontend
+// asks every 3 seconds and the board's sshd allows 10 sessions in total.
+func GetNetworkStatus(ctx context.Context, conn remote.RemoteConn) (NetworkStatus, error) {
 	if conn == nil {
-		return false, fmt.Errorf("missing connection")
+		return NetworkStatus{}, fmt.Errorf("missing connection")
 	}
-	nm := &Manager{
-		Timeout: 5 * time.Second,
-		Conn:    conn,
+
+	// Only the device query sets the exit status, so a failed connectivity check
+	// reads as offline and keeps the device states. The check asks
+	// NetworkManager for a new probe, so it runs only when a device is
+	// connected. Its verdict is prefixed because nmcli prints it bare.
+	const script = `devices=$(nmcli -t -f TYPE,STATE device) || exit
+printf '%s\n' "$devices"
+if printf '%s\n' "$devices" | grep -qx -e wifi:connected -e ethernet:connected; then
+	printf 'connectivity:'
+	nmcli networking connectivity check || true
+fi`
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	out, err := conn.GetCmd("sh", "-c", script).Output(ctx)
+	if err != nil {
+		return NetworkStatus{}, fmt.Errorf("failed to query network status: %w", err)
 	}
-	return nm.getInternetStatus(ctx)
+
+	return NetworkStatus{
+		WiFi:     deviceStatus(string(out), "wifi"),
+		Ethernet: deviceStatus(string(out), "ethernet"),
+		Internet: strings.Contains(string(out), "connectivity:full"),
+	}, nil
 }
 
 func GetConnectionName(ctx context.Context, conn remote.RemoteConn) (*string, error) {
@@ -137,4 +134,21 @@ func GetIPAddress(ctx context.Context, conn remote.RemoteConn) (*string, error) 
 		Conn:    conn,
 	}
 	return nm.getIPAddress(ctx)
+}
+
+func deviceStatus(out string, netType string) Status {
+	for _, line := range strings.Split(out, "\n") {
+		parts := strings.Split(line, ":")
+		if len(parts) != 2 {
+			continue
+		}
+		if parts[0] == netType && strings.TrimSpace(parts[1]) == "connected" {
+			return ConnectedStatus
+		}
+
+		if parts[0] == netType && strings.TrimSpace(parts[1]) == "connecting" {
+			return ConnectingStatus
+		}
+	}
+	return DisconnectedStatus
 }

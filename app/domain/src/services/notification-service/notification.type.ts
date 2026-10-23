@@ -5,7 +5,7 @@ import {
   ToastOnCloseHandler,
   ToastSize,
   ToastType,
-} from '@cloud-editor-mono/ui-components';
+} from '@cloud-editor-mono/ui-components/lib/essential/notifications/notifications.type';
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
 
 export enum NotificationType {

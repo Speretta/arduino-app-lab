@@ -1,12 +1,12 @@
 @use "../../public/shared.module.scss";
 @use "./sidenav-variables.module.scss";
 
-$sidenav-background: #008184;
-$sidenav-item-color: #ffffff;
-$sidenav-item-active-background: rgba(255, 255, 255, 0.2);
-$sidenav-content-title-color: #374146;
-$sidenav-content-background: #f7f9f9;
-$sidenav-content-border: #c9d2d2;
+$sidenav-background: var(--sidebar-background);
+$sidenav-item-color: var(--sidebar-panel-callout);
+$sidenav-item-active-background: var(--sidebar-item-background-hover);
+$sidenav-content-title-color: var(--text-default);
+$sidenav-content-background: var(--sidebar-panel-background);
+$sidenav-content-border: var(--border-default);
 
 .sidenav-container {
   display: grid;
@@ -27,7 +27,7 @@ $sidenav-content-border: #c9d2d2;
   align-items: center;
   justify-content: space-between;
   box-sizing: border-box;
-  background-color: #008184;
+  background-color: var(--sidebar-background);
 
   ul {
     list-style: none;
@@ -129,7 +129,7 @@ $sidenav-content-border: #c9d2d2;
     &:active,
     &:hover {
       &::after {
-        background-color: shared.theme-var(--editor-background-selection);
+        background-color: var(--editor-background-selection);
         height: 100%;
         width: 4px;
         display: block;
@@ -148,7 +148,7 @@ $sidenav-content-border: #c9d2d2;
   align-items: center;
   margin: 0 15px;
   flex: 0 0 60px;
-  color: shared.theme-var(--sidebar-panel-foreground);
+  color: var(--text-default);
 
   &.gen-ai-legal-disclaimer-visible {
     flex-direction: row-reverse;
@@ -156,7 +156,7 @@ $sidenav-content-border: #c9d2d2;
 
   & svg {
     & > path {
-      fill: shared.theme-var(--sidebar-panel-foreground);
+      fill: var(--text-default);
     }
   }
 }
@@ -175,7 +175,7 @@ $sidenav-content-border: #c9d2d2;
 
   &:hover {
     border-radius: 32px;
-    background-color: #dae3e3;
+    background-color: var(--component-bg-above);
   }
 
   & svg {
@@ -205,8 +205,8 @@ $sidenav-content-border: #c9d2d2;
     width: fit-content;
     gap: 6px;
     padding: 2px 4px;
-    background-color: #ecf1f1;
-    border: 1px solid #c9d2d2;
+    background-color: var(--component-bg-below-1);
+    border: 1px solid var(--border-default);
     border-radius: 2px;
     line-height: 14px;
   }
@@ -217,7 +217,7 @@ $sidenav-content-border: #c9d2d2;
   height: 21px;
 
   & > path {
-    fill: #b660eb !important;
+    fill: #b660eb !important; // TODO: Create suitable variable
   }
 }
 
@@ -231,8 +231,8 @@ $sidenav-content-border: #c9d2d2;
   text-align: left;
   left: 16px;
   bottom: 13px;
-  background-color: #c9d2d2;
-  color: #374146;
+  background-color: var(--border-default);
+  color: var(--text-default);
   border-radius: 4px;
   padding: 3px 4px;
 }

@@ -18,7 +18,7 @@ import {
 } from '@codemirror/view';
 
 export const codeBlockSetup: Extension = [
-  EditorView.baseTheme({
+  EditorView.theme({
     '.cm-selectionBackground': {
       backgroundColor: '#FFCC00',
       opacity: '0.4',

@@ -87,14 +87,20 @@ type brickDetail struct {
 	RequireModel     bool             `json:"requireModel,omitempty"`
 	Readme           string           `json:"readme,omitempty"`
 	ConfigVariables  []brickConfigVar `json:"configVariables,omitempty"`
-	CompatibleModels []string         `json:"compatibleModels,omitempty"`
+	CompatibleModels []brickModelRef  `json:"compatibleModels,omitempty"`
+}
+
+// brickModelRef names a model the brick accepts. The id is what app_bricks_add/update take; the name is for the user.
+type brickModelRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
 }
 
 // registerBricksGet adds bricks_get (read-only) and returns its name for the auto-approve allowlist.
 func registerBricksGet(srv *mcp.Server, access BoardAccess) string {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "bricks_get",
-		Description: "Get one Brick's full details on the connected board: its README (Python class, methods, examples), config variables, and compatible AI models — read this before using a brick in code. Read-only; pass the brick id from bricks_list.",
+		Description: "Get one Brick's full details on the connected board: its README (Python class, methods, examples), config variables, and compatible AI models — read this before using a brick in code. Read-only; pass the brick id from bricks_list. A compatible model still has to be installed on the board (models_list) before the app can run.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in brickGetInput) (*mcp.CallToolResult, any, error) {
 		id := strings.TrimSpace(in.ID)
@@ -156,12 +162,8 @@ func shapeBrickDetail(raw string) (string, error) {
 	}
 	if resp.CompatibleModels != nil {
 		for _, m := range *resp.CompatibleModels {
-			name := strv(m.Name)
-			if name == "" {
-				name = strv(m.ID)
-			}
-			if name != "" {
-				out.CompatibleModels = append(out.CompatibleModels, name)
+			if id := strv(m.ID); id != "" {
+				out.CompatibleModels = append(out.CompatibleModels, brickModelRef{ID: id, Name: strv(m.Name)})
 			}
 		}
 	}

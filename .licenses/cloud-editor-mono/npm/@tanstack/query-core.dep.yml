@@ -1,6 +1,6 @@
 ---
 name: "@tanstack/query-core"
-version: 4.12.0
+version: 5.101.4
 type: npm
 summary: The framework agnostic core that powers TanStack Query
 homepage: https://tanstack.com/query

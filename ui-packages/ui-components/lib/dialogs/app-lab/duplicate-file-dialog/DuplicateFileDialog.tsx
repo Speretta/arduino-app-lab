@@ -101,12 +101,13 @@ export const DuplicateFileDialog: React.FC<DuplicateFileDialogProps> = ({
           {!disableKeepBoth && (
             <Button
               variant={
-                disableOverwrite ? ButtonVariant.Primary : ButtonVariant.Secondary
+                disableOverwrite
+                  ? ButtonVariant.Primary
+                  : ButtonVariant.Secondary
               }
               onClick={handleKeepBoth}
               loading={loading && selectedAction === 'keepBoth'}
               type="submit"
-              /* eslint-disable-next-line jsx-a11y/no-autofocus */
               autoFocus={disableOverwrite}
               classes={{
                 button: styles['action-button'],
@@ -122,7 +123,6 @@ export const DuplicateFileDialog: React.FC<DuplicateFileDialogProps> = ({
               variant={ButtonVariant.Primary}
               onClick={() => onOpenChange(false)}
               type="submit"
-              /* eslint-disable-next-line jsx-a11y/no-autofocus */
               autoFocus
               classes={{
                 button: styles['action-button'],
@@ -139,7 +139,6 @@ export const DuplicateFileDialog: React.FC<DuplicateFileDialogProps> = ({
               onClick={handleOverwrite}
               loading={loading && selectedAction === 'overwrite'}
               type="submit"
-              /* eslint-disable-next-line jsx-a11y/no-autofocus */
               autoFocus
             >
               {formatMessage(messages.overwriteButton)}

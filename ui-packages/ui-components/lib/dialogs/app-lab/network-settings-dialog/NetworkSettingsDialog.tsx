@@ -10,7 +10,7 @@ import {
 import { AppLabDialog } from '../app-lab-dialog/AppLabDialog';
 import { networkSettingsDialogMessages as messages } from '../messages';
 
-export type NetworkSettingsDialogLogic = ReturnType<UseNetworkLogic> & {
+export type NetworkSettingsDialogLogic = () => ReturnType<UseNetworkLogic> & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
@@ -24,7 +24,7 @@ export const NetworkSettingsDialog: React.FC<NetworkSettingsDialogProps> = ({
 }: NetworkSettingsDialogProps) => {
   const { formatMessage } = useI18n();
 
-  const { open, onOpenChange, ...networkLogic } = logic;
+  const { open, onOpenChange, ...networkLogic } = logic();
   const { isScanning, isConnecting, selectedNetwork, manualNetworkSetup } =
     networkLogic;
 

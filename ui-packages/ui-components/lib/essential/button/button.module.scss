@@ -17,22 +17,22 @@
     &.secondary,
     &.warning {
         border-radius: 32px;
-        background: #fff;
+        background: var(--text-on-accent);
     }
 
     &.primary {
-        $color: shared.theme-var(--button-primary-label);
-        $bg: shared.theme-var(--button-primary-background);
+        $color: var(--text-on-accent);
+        $bg: var(--accent-default);
 
         color: $color;
         background-color: $bg;
 
         &:hover {
-            background-color: shared.theme-var(--button-primary-background-hover);
+            background-color: var(--accent-default-strong);
         }
 
         &:focus {
-            outline: 2px solid shared.theme-var(--button-primary-border-active);
+            outline: 2px solid var(--border-accent-strong);
         }
 
         .loader-spinner {
@@ -41,22 +41,21 @@
     }
 
     &.secondary {
-        color: shared.theme-var(--button-secondary-label);
-        // TODO: change with --button-secondary-background
-        background-color: shared.theme-var(--dropdown-background);
-        border: 2px solid shared.theme-var(--button-secondary-border);
+        color: var(--text-accent);
+        background-color: var(--surface-bg-above);
+        border: 2px solid var(--border-accent);
 
         &:hover {
-            background-color: shared.theme-var(--button-secondary-background-hover);
+            background-color: var(--component-bg-hover);
         }
 
         &:focus {
-            outline: 2px solid shared.theme-var(--button-secondary-outline-active);
+            outline: 2px solid var(--accent-default-strong);
         }
     }
 
     &.tertiary {
-        color: shared.theme-var(--button-tertiary-label);
+        color: var(--text-accent);
         padding: 0;
         background-color: transparent;
 
@@ -66,15 +65,15 @@
     }
 
     &.warning {
-        color: #ffffff; // TODO: change with shared.theme-var(--button-warning-label);
-        background-color: #aa4335; // TODO: change with shared.theme-var(--button-warning-background);
+        color: var(--text-on-accent);
+        background-color: var(--feedback-error-default);
 
         &:hover {
-            background-color: #611005; // TODO: change with shared.theme-var(--button-warning-background-hover);
+            background-color: var(--feedback-error-strong);
         }
 
         &:focus {
-            outline: #ffbdb4 2px solid; // TODO: change with shared.theme-var(--button-warning-outline);
+            outline: var(--feedback-error-default) 2px solid;
         }
     }
 

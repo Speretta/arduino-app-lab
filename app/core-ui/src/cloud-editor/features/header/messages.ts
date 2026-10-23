@@ -25,7 +25,7 @@ export const headerTitleMessages = defineMessages<
 export const headerMessages = defineMessages({
   signIn: {
     id: 'header.signIn',
-    defaultMessage: 'Sign In',
+    defaultMessage: 'Sign in',
     description: 'Sign In',
   },
 });

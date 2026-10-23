@@ -3,10 +3,13 @@ import {
   AppLabWelcomeDialogLogic,
   BoardUpdateDialogLogic,
   CreateAppDialogLogic,
+  CreateReleaseDialogLogic,
+  CreateReleaseIntroDialogLogic,
   FlashBoardDialogLogic,
   ImportResourceLogic,
   NetworkSettingsDialogLogic,
   OfflineWarningDialogLogic,
+  PreparationRequiredDialogLogic,
   SidePanelLogic,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 
@@ -14,8 +17,14 @@ import { UseBoards } from '../../hooks/useBoards';
 
 export type UseMainLogic = () => {
   sidePanelLogic: SidePanelLogic;
-  agentSidePanelLogic: AgentSidePanelProps;
+  // AgentSidePanel takes plain data props and resolves its own behaviour through
+  // its own hook, so nothing is injected into its render flow — these are props,
+  // not a logic contract.
+  agentSidePanelProps: AgentSidePanelProps;
   createAppDialogLogic: CreateAppDialogLogic;
+  createReleaseIntroDialogLogic: CreateReleaseIntroDialogLogic;
+  createReleaseDialogLogic: CreateReleaseDialogLogic;
+  preparationRequiredDialogLogic: PreparationRequiredDialogLogic;
   importAppDialogLogic: ImportResourceLogic;
   boardUpdateDialogLogic: BoardUpdateDialogLogic;
   flashBoardDialogLogic: FlashBoardDialogLogic;

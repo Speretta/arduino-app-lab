@@ -1,4 +1,4 @@
-import { Config } from '@bcmi-labs/cloud-editor-common';
+import { Config } from '@cloud-editor-mono/common';
 
 export const readText = async (): Promise<string | null> => {
   try {

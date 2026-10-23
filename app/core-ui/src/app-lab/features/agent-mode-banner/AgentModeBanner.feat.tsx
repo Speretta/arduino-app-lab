@@ -23,19 +23,21 @@ const AgentModeBanner: React.FC = () => {
 
   return (
     <div className={styles['banner']}>
-      <div className={styles['header']}>
-        <Sparkle className={styles['icon']} aria-hidden="true" />
-        <Text size={TextSize.XXSmall} className={styles['title']}>
-          {formatMessage(messages.title)}
+      <div className={styles['text']}>
+        <div className={styles['header']}>
+          <Sparkle className={styles['icon']} aria-hidden="true" />
+          <Text size={TextSize.XXSmall} className={styles['title']}>
+            {formatMessage(messages.title)}
+          </Text>
+        </div>
+        <Text size={TextSize.XXXSmall} className={styles['description']}>
+          {formatMessage(messages.description)}
         </Text>
       </div>
-      <Text size={TextSize.XXXSmall} className={styles['description']}>
-        {formatMessage(messages.description)}
-      </Text>
       <Button
         variant={ButtonVariant.Primary}
         appearance={ButtonAppearance.LowContrast}
-        size={ButtonSize.XXSmall}
+        size={ButtonSize.XSmall}
         classes={{
           button: styles['action'],
           textButtonText: styles['action-text'],

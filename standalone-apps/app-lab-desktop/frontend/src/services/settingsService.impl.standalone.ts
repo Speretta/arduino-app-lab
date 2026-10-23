@@ -10,10 +10,8 @@ import {
   ConnectToWiFi,
   DisconnectWiFi,
   GetConnectionName,
-  GetEthStatus,
-  GetInternetStatus,
   GetIPAddress,
-  GetWiFiStatus,
+  GetNetworkStatus,
   ListSSIDs,
 } from '../../wailsjs/go/app/App';
 
@@ -26,36 +24,22 @@ export const getNetworkList: SettingsService['getNetworkList'] =
     return [];
   };
 
-export const getWiFiStatus: SettingsService['getWiFiStatus'] =
+export const getNetworkStatus: SettingsService['getNetworkStatus'] =
   async function () {
     try {
-      const result = await GetWiFiStatus();
-      return result as WiFiConnectionStatus;
+      const result = await GetNetworkStatus();
+      return {
+        wifi: result.wifi as WiFiConnectionStatus,
+        ethernet: result.ethernet as EthernetConnectionStatus,
+        internet: result.internet,
+      };
     } catch (e) {
-      console.error(`Failed to get WiFi status: ${e}`);
-      return 'disconnected';
-    }
-  };
-
-export const getEthernetStatus: SettingsService['getEthernetStatus'] =
-  async function () {
-    try {
-      const result = await GetEthStatus();
-      return result as EthernetConnectionStatus;
-    } catch (e) {
-      console.error(`Failed to get ethernet status: ${e}`);
-      return 'disconnected';
-    }
-  };
-
-export const getInternetStatus: SettingsService['getInternetStatus'] =
-  async function () {
-    try {
-      const result = await GetInternetStatus();
-      return result as boolean;
-    } catch (e) {
-      console.error(`Failed to get internet status: ${e}`);
-      return false;
+      console.error(`Failed to get network status: ${e}`);
+      return {
+        wifi: 'disconnected',
+        ethernet: 'disconnected',
+        internet: false,
+      };
     }
   };
 

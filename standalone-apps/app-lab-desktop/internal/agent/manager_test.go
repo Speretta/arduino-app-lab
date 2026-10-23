@@ -33,7 +33,9 @@ type fakeConn struct {
 	authedWith    string
 	lastOutcome   PermissionOutcome
 	loaded        []SessionID
-	permInput     any // tool-call arguments carried on the permission request (nil → none)
+	permInput     any          // tool-call arguments carried on the permission request (nil → none)
+	models        []AgentModel // advertised on session/new only, as the adapter does
+	modes         []AgentMode
 }
 
 func (f *fakeConn) Initialize(context.Context) ([]AuthMethod, error) { return f.methods, f.initErr }
@@ -41,10 +43,10 @@ func (f *fakeConn) Authenticate(_ context.Context, methodID string) error {
 	f.authedWith = methodID
 	return nil
 }
-func (f *fakeConn) NewSession(context.Context, string) (NewSessionResult, error) {
-	return NewSessionResult{SessionID: "s1"}, nil
+func (f *fakeConn) NewSession(context.Context, string, SessionWorkspace) (NewSessionResult, error) {
+	return NewSessionResult{SessionID: "s1", Models: f.models, Modes: f.modes}, nil
 }
-func (f *fakeConn) LoadSession(_ context.Context, sid SessionID, _ string) (NewSessionResult, error) {
+func (f *fakeConn) LoadSession(_ context.Context, sid SessionID, _ string, _ SessionWorkspace) (NewSessionResult, error) {
 	f.loaded = append(f.loaded, sid)
 	return NewSessionResult{SessionID: sid}, nil
 }
@@ -60,7 +62,7 @@ func (f *fakeConn) ListSessions(context.Context, string) ([]SessionSummary, erro
 }
 func (f *fakeConn) Close() error { return nil }
 
-func (f *fakeConn) Prompt(ctx context.Context, sid SessionID, _ string) error {
+func (f *fakeConn) Prompt(ctx context.Context, sid SessionID, _ string, _ []string) error {
 	f.handler.HandleUpdate(sid, Update{Type: "message_chunk", Delta: "Hello "})
 	f.handler.HandleUpdate(sid, Update{Type: "message_chunk", Delta: "world"})
 	tc := &ToolCall{ID: "t1", Title: "List boards", Status: "pending", Input: f.permInput}
@@ -101,11 +103,11 @@ func TestManagerPromptFlowAllow(t *testing.T) {
 	}
 	defer m.Stop()
 
-	sid, err := m.NewSession(ctx, "/tmp")
+	sid, err := m.NewSession(ctx, "/tmp", SessionWorkspace{})
 	if err != nil {
 		t.Fatalf("new session: %v", err)
 	}
-	if err := m.Prompt(ctx, sid, "hi"); err != nil {
+	if err := m.Prompt(ctx, sid, "hi", nil); err != nil {
 		t.Fatalf("prompt: %v", err)
 	}
 
@@ -137,8 +139,8 @@ func TestManagerPermissionTimeoutDenies(t *testing.T) {
 	}
 	defer m.Stop()
 
-	sid, _ := m.NewSession(ctx, "/tmp")
-	if err := m.Prompt(ctx, sid, "hi"); err != nil {
+	sid, _ := m.NewSession(ctx, "/tmp", SessionWorkspace{})
+	if err := m.Prompt(ctx, sid, "hi", nil); err != nil {
 		t.Fatalf("prompt: %v", err)
 	}
 	if !fc.lastOutcome.Cancelled {
@@ -271,13 +273,43 @@ func TestManagerResumeSessions(t *testing.T) {
 		t.Fatalf("start: %v", err)
 	}
 	defer m.Stop()
-	sid, err := m.NewSession(ctx, "/tmp")
+	sid, err := m.NewSession(ctx, "/tmp", SessionWorkspace{})
 	if err != nil {
 		t.Fatalf("new session: %v", err)
 	}
 	m.resumeSessions()
 	if len(fc.loaded) != 1 || fc.loaded[0] != sid {
 		t.Fatalf("expected resumeSessions to LoadSession %q, got %v", sid, fc.loaded)
+	}
+}
+
+// A session/load answers without the model selector; keeping what the session opened with is what stops
+// GetSessionState from coming back empty, which is how the UI decides to hide the model and mode pickers.
+func TestManagerLoadSessionKeepsAdvertisedModels(t *testing.T) {
+	m := NewManager(stayAlive(),
+		func(_ io.Writer, _ io.Reader, h ClientHandler) (AgentConn, error) {
+			return &fakeConn{
+				handler: h,
+				models:  []AgentModel{{ID: "opus", Name: "Opus"}},
+				modes:   []AgentMode{{ID: "default", Name: "Default"}},
+			}, nil
+		},
+		ManagerConfig{})
+	ctx := context.Background()
+	if err := m.Start(ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer m.Stop()
+	sid, err := m.NewSession(ctx, "/tmp", SessionWorkspace{})
+	if err != nil {
+		t.Fatalf("new session: %v", err)
+	}
+	if err := m.LoadSession(ctx, sid, "/tmp", SessionWorkspace{}); err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	st := m.GetSessionState(sid)
+	if len(st.Models) != 1 || len(st.Modes) != 1 {
+		t.Fatalf("expected the session to keep its models and modes, got %d models, %d modes", len(st.Models), len(st.Modes))
 	}
 }
 
@@ -337,7 +369,7 @@ func TestManagerPendingPermissionIsNotSharedWithTheHost(t *testing.T) {
 		t.Fatalf("start: %v", err)
 	}
 	defer m.Stop()
-	sid, err := m.NewSession(ctx, "/tmp")
+	sid, err := m.NewSession(ctx, "/tmp", SessionWorkspace{})
 	if err != nil {
 		t.Fatalf("new session: %v", err)
 	}
@@ -387,7 +419,7 @@ func TestManagerPendingPermissionIsNotSharedWithTheHost(t *testing.T) {
 		m.ReplyPermission(published.ID, PermissionOutcome{OptionID: "allow"})
 	}()
 
-	if err := m.Prompt(ctx, sid, "hi"); err != nil {
+	if err := m.Prompt(ctx, sid, "hi", nil); err != nil {
 		t.Fatalf("prompt: %v", err)
 	}
 	<-done

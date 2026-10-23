@@ -87,32 +87,32 @@ export type TabsBarLogic = () => {
   isRenderedMarkdownFile?: boolean;
   showFileSearch?: boolean;
   /**
-   * Opens the given file in the split (right) pane, or pushes it to the
-   * existing split pane if one is already open. When undefined, the
+   * Opens the given file in the split (right) panel, or pushes it to the
+   * existing split panel if one is already open. When undefined, the
    * "Split Right" entry is hidden from the tab context menu (used by the
-   * right pane to suppress the action on its own tabs).
+   * right panel to suppress the action on its own tabs).
    */
   onSplitRight?: (fileId: string) => void;
   /**
-   * Re-selects the given file in the left pane. When undefined, the
+   * Re-selects the given file in the left panel. When undefined, the
    * "Split Left" entry is hidden from the tab context menu (used by the
-   * left pane to suppress the action on its own tabs).
+   * left panel to suppress the action on its own tabs).
    */
   onSplitLeft?: (fileId: string) => void;
   /**
    * Optional override for the "Close All" menu action. When provided it
    * replaces the default behaviour (iterating `closeTab` over `tabs`),
    * so consumers can perform atomic batch operations such as folding the
-   * right pane back into the left when collapsing the split.
+   * right panel back into the left when collapsing the split.
    */
   onCloseAll?: () => void;
   /**
-   * Commits a tab dropped onto this bar from the OTHER pane's bar: moves
-   * `fileId` out of its origin pane and inserts it at `insertIndex` in
-   * this pane's tab list. When undefined the bar does not accept
-   * cross-pane tab drops.
+   * Commits a tab dropped onto this bar from the OTHER panel's bar: moves
+   * `fileId` out of its origin panel and inserts it at `insertIndex` in
+   * this panel's tab list. When undefined the bar does not accept
+   * cross-panel tab drops.
    */
-  onCrossPaneDrop?: (fileId: string, insertIndex: number) => void;
+  onCrossPanelDrop?: (fileId: string, insertIndex: number) => void;
 };
 
 export enum FileExtension {

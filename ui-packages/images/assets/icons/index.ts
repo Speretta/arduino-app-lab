@@ -26,6 +26,7 @@ import AppLabBrickVision from '../app-lab-brick-vision.svg?react';
 import AppLabInfo from '../app-lab-info.svg?react';
 import AppLabToggleOff from '../app-lab-toggle-off.svg?react';
 import AppLabToggleOn from '../app-lab-toggle-on.svg?react';
+import AppRelease from '../app-release.svg?react';
 import AppSettings from '../app-settings.svg?react';
 import Appearance from '../appearance.svg?react';
 import Apply from '../apply.svg?react';
@@ -55,6 +56,7 @@ import BrickSettings from '../brick-settings.svg?react';
 import Bricks from '../bricks.svg?react';
 import CaretDown from '../caret-down.svg?react';
 import CaseSensitive from '../case-sensitive.svg?react';
+import ChatAgent from '../chat-agent.svg?react';
 import ChatEnter from '../chat-enter.svg?react';
 import ChatSend from '../chat-send.svg?react';
 import ChatStop from '../chat-stop.svg?react';
@@ -65,6 +67,7 @@ import ChevronDown from '../chevron-down.svg?react';
 import ChevronRight from '../chevron-right.svg?react';
 import ChevronRightNoPad from '../chevron-right-no-pad.svg?react';
 import ChevronUp from '../chevron-up.svg?react';
+import CircleSlash from '../circle-slash.svg?react';
 import Claude from '../claude.svg?react';
 import Clear from '../clear.svg?react';
 import Close from '../close.svg?react';
@@ -76,6 +79,7 @@ import CodeIcon from '../code-icon.svg?react';
 import Codex from '../codex.svg?react';
 import ConnectionLostIcon from '../connection-lost-icon.svg?react';
 import Copy from '../copy.svg?react';
+import CopySelection from '../copy-selection.svg?react';
 import CreateNewModel from '../create-new-model.svg?react';
 import DarkTheme from '../dark-theme.svg?react';
 import Decrement from '../decrement.svg?react';
@@ -127,6 +131,7 @@ import Learn from '../learn.svg?react';
 import Library from '../library.svg?react';
 import LightIcon from '../light-icon.svg?react';
 import LightTheme from '../light-theme.svg?react';
+import Link from '../link.svg?react';
 import Loader from '../loader.svg?react';
 import Login from '../login.svg?react';
 import LoginIllustration from '../login-illustration.svg?react';
@@ -146,7 +151,10 @@ import NavigationGroup from '../navigation-group.svg?react';
 import NavigationGroupOutline from '../navigation-group-outline.svg?react';
 import NavigationTable from '../navigation-table.svg?react';
 import NoResults from '../no-results.svg?react';
+import NoResultsDark from '../no-results-dark.svg?react';
+import NotFoundIconX from '../not-found-icon-x.svg?react';
 import NotFoundPageImage from '../not-found-page-image.svg?react';
+import NotFoundPageImageDark from '../not-found-page-image-dark.svg?react';
 import NotificationSuccessCheck from '../notification-success-check.svg?react';
 import OnboardingBack from '../onboarding-back.svg?react';
 import OnboardingNext from '../onboarding-next.svg?react';
@@ -154,6 +162,7 @@ import OpenCode from '../open-code.svg?react';
 import OpenInNewTab from '../open-in-new-tab.svg?react';
 import OperationListOutline from '../operation-list-outline.svg?react';
 import OperationSort from '../operation-sort.svg?react';
+import Padlock from '../padlock.svg?react';
 import Pause from '../pause.svg?react';
 import Pencil from '../pencil.svg?react';
 import Pin from '../pin.svg?react';
@@ -163,6 +172,7 @@ import Plus from '../plus.svg?react';
 import PlusSmall from '../plus-small.svg?react';
 import Power from '../power.svg?react';
 import PrivateDataIcon from '../private-data-icon.svg?react';
+import PublishOnProjectHub from '../publish-on-project-hub.svg?react';
 import Puzzle from '../puzzle.svg?react';
 import Python from '../python.svg?react';
 import Redo from '../redo-icon.svg?react';
@@ -267,6 +277,7 @@ export {
   AppLabToggleOn,
   Apply,
   ApplyFix,
+  AppRelease,
   AppSettings,
   Arduino,
   ArduinoLoader,
@@ -294,6 +305,7 @@ export {
   BrickSettings,
   CaretDown,
   CaseSensitive,
+  ChatAgent,
   ChatEnter,
   ChatSend,
   ChatStop,
@@ -304,6 +316,7 @@ export {
   ChevronRight,
   ChevronRightNoPad,
   ChevronUp,
+  CircleSlash,
   Claude,
   Clear,
   Close,
@@ -315,6 +328,7 @@ export {
   Codex,
   ConnectionLostIcon,
   Copy,
+  CopySelection,
   CreateNewModel,
   DarkTheme,
   Decrement,
@@ -366,6 +380,7 @@ export {
   Library,
   LightIcon,
   LightTheme,
+  Link,
   Loader,
   Login,
   LoginIllustration,
@@ -385,7 +400,10 @@ export {
   NavigationGroupOutline,
   NavigationTable,
   NoResults,
+  NoResultsDark,
+  NotFoundIconX,
   NotFoundPageImage,
+  NotFoundPageImageDark,
   NotificationSuccessCheck,
   OnboardingBack,
   OnboardingNext,
@@ -393,6 +411,7 @@ export {
   OpenInNewTab,
   OperationListOutline,
   OperationSort,
+  Padlock,
   Pause,
   Pencil,
   Pin,
@@ -402,6 +421,7 @@ export {
   PlusSmall,
   Power,
   PrivateDataIcon,
+  PublishOnProjectHub,
   Puzzle,
   Python,
   Redo,

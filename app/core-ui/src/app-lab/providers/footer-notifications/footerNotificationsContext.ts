@@ -5,6 +5,7 @@ export type FooterNotificationsContextValue = {
   notifications: Notification[];
   newNotifications: number;
   setNotification: (notification: Notification) => void;
+  removeNotification: (id: string) => void;
   resetNewNotifications: () => void;
 };
 
@@ -12,6 +13,7 @@ const FooterNotificationsContextValue: FooterNotificationsContextValue = {
   notifications: [],
   newNotifications: 0,
   setNotification: () => undefined,
+  removeNotification: () => undefined,
   resetNewNotifications: () => undefined,
 };
 

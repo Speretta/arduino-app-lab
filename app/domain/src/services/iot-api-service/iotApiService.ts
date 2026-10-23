@@ -8,7 +8,7 @@ import {
   showThingDeviceRequest,
   ShowThingV1Device_Response,
 } from '@cloud-editor-mono/infrastructure';
-import { DetectedDevicesGroup } from '@cloud-editor-mono/ui-components';
+import { DetectedDevicesGroup } from '@cloud-editor-mono/ui-components/lib/device-association-dialog/content/sub-components/devices-tabs/devicesTabs.type';
 
 import { getAccessToken, noTokenReject } from '../arduino-auth';
 import { getSpace } from '../space-storage';

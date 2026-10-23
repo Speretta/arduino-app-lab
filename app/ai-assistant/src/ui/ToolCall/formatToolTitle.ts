@@ -36,9 +36,8 @@ const MCP_TOOL_LABELS: Record<string, string> = {
 // The local mirror stores each app under `<checkout-key>/…` (the agent's cwd is the mirror root), so a
 // native file tool's path carries an opaque key prefix. Return the path without it — handles absolute
 // (`…/ai-mirror/<key>/…`) and relative (`<key>/…`) forms; leaves ordinary paths (e.g. `src/index.ts`) alone.
-// Exported for callers holding a whole path: formatToolTitle only sees whitespace-delimited tokens.
 const MIRROR_MARKER = '/ai-mirror/';
-export const stripKeyFromPath = (path: string): string => {
+const stripKeyFromPath = (path: string): string => {
   const marker = path.indexOf(MIRROR_MARKER);
   if (marker >= 0) {
     const after = path.slice(marker + MIRROR_MARKER.length); // <key>/rest
@@ -58,16 +57,38 @@ export const stripKeyFromPath = (path: string): string => {
   return path;
 };
 
+// Strip the mirror root and checkout key from a title or a whole tool output: the absolute form whole, because the mirror root has spaces on macOS and a token-wise pass would leave its first half behind, then the relative `<key>/…` form per token via stripKeyFromPath. The span stops at a space followed by '/', so an earlier absolute path on the same line survives.
+const MIRROR_PATH = /(^|\s)\/(?:[^\s\n]|\s(?!\/))*?\/ai-mirror\/[^/\s\n]+\/?/g;
+export const stripKeysFromText = (text: string): string =>
+  text
+    .replace(MIRROR_PATH, '$1')
+    .replace(/\S+/g, (token) =>
+      token.includes('/') ? stripKeyFromPath(token) : token,
+    );
+
+// A timeline row links the file, so its label only has to name it — a path outside the mirror is long enough to swallow the row. Expects forward slashes; a trailing one would otherwise leave an empty name.
+export const fileNameFromPath = (path: string): string => {
+  const trimmed = path.replace(/\/+$/, '');
+  const name = trimmed.slice(trimmed.lastIndexOf('/') + 1);
+  return name || path;
+};
+
 // Turn an MCP tool's wire name (mcp__<server>__<tool>) into a readable label; native tool titles keep
 // their text but get the opaque local-mirror key stripped from any path token (so the permission popup
 // and timeline show `assets/style.css`, not `<checkout-key>/assets/style.css`).
+// The bare tool name behind an MCP wire title (mcp__<server>__<tool>); null for a native tool.
+export const mcpToolName = (title: string): string | null => {
+  if (!title.startsWith('mcp__')) {
+    return null;
+  }
+  return title.split('__').slice(2).join('__') || null;
+};
+
 export const formatToolTitle = (title: string): string => {
   if (!title.startsWith('mcp__')) {
-    return title.replace(/\S+/g, (tok) =>
-      tok.includes('/') ? stripKeyFromPath(tok) : tok,
-    );
+    return stripKeysFromText(title);
   }
-  const tool = title.split('__').slice(2).join('__');
+  const tool = mcpToolName(title);
   if (!tool) {
     return title;
   }

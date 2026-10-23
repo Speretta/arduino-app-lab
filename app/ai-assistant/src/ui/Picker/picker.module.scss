@@ -1,0 +1,136 @@
+.picker {
+  position: relative;
+}
+
+.picker-trigger-border {
+  border: 2px solid transparent;
+
+  &[aria-expanded='true'] {
+    border-color: var(--border-strong, #7f8c8d);
+  }
+}
+
+.picker-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 100;
+  min-width: 180px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface-bg-above, #374146);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+
+  li {
+    display: flex;
+  }
+}
+
+.picker-menu--up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.picker-menu--left {
+  right: auto;
+  left: 0;
+}
+
+.picker-option-wrapper {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.picker-tooltip {
+  pointer-events: none !important;
+}
+
+// Header above the options, e.g. "Sessions history". Not an option: no role, no hover.
+.picker-title {
+  align-items: center;
+  min-height: 33px;
+  padding: 0 12px;
+  color: var(--text-subtle, #c9d2d2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.picker-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-default, #ffffff);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  line-height: 1.6;
+  cursor: pointer;
+
+  &:hover,
+  &[data-selected='true'] {
+    background: linear-gradient(
+        0deg,
+        var(--component-bg-selected, rgba(37, 194, 199, 0.2)) 0%,
+        var(--component-bg-selected, rgba(37, 194, 199, 0.2)) 100%
+      ),
+      var(--component-bg-flexible, rgba(174, 184, 184, 0.15));
+  }
+}
+
+// The design system's small row, 28px. Must come after .picker-option to win on padding.
+.picker-option--small {
+  min-height: 28px;
+  padding: 0 12px;
+}
+
+.picker-option-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--icon-inverted-subtle);
+}
+
+.picker-option-glyph {
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.picker-option-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.picker-check {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-default, #ffffff);
+}
+
+.picker-divider {
+  height: 1px;
+  flex-shrink: 0;
+  margin: 4px 8px;
+  background: var(--border-default, #434F54);
+}
+
+.picker-empty {
+  padding: 8px 12px;
+  color: var(--text-inverted-subtle);
+  font-size: 12px;
+}

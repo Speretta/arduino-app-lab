@@ -1,10 +1,13 @@
 import {
+  AppRelease,
   Bin,
   CaretDown,
   Download,
   Duplicate,
+  InfoIconOutline,
   Pencil,
   Power,
+  ShareSketchIcon,
 } from '@cloud-editor-mono/images/assets/icons';
 import { canRenameApp } from '@cloud-editor-mono/infrastructure';
 import clsx from 'clsx';
@@ -16,15 +19,23 @@ import {
   useState,
 } from 'react';
 
+import { useIsTruncated } from '../../../common/hooks/useIsTruncated';
 import {
   CreateAppDialog,
   DeleteAppDialog,
   ExportAppDialog,
+  PublishAppDialog,
+  ReleaseInfoDialog,
 } from '../../../dialogs';
 import { DropdownMenuButton } from '../../../essential/dropdown-menu/DropdownMenuButton';
 import { Input, InputStyle } from '../../../essential/input';
 import { useI18n } from '../../../i18n/useI18n';
 import { XSmall, XXSmall, XXXSmall } from '../../../typography';
+import {
+  appReleaseMessages,
+  CreateReleaseDisabledItem,
+  ReleaseBadge,
+} from '../app-release';
 import { EmojiPicker } from '../emoji-picker';
 import { Badge, BadgeStyle, BadgeVariant } from '../essential/badge';
 import { Toggle } from '../essential/toggle';
@@ -42,14 +53,16 @@ const AppTitle: React.FC<AppTitleProps> = (props: AppTitleProps) => {
 
   const inputRef = useRef<HTMLDivElement>(null);
   const [inputWidth, setInputWidth] = useState(0);
-  const nameRef = useRef<HTMLDivElement>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const {
     app,
     appStatus,
+    createReleaseDisabledReason,
     deleteAppDialogLogic,
     exportAppDialogLogic,
+    publishAppDialogLogic,
+    releaseInfoDialogLogic,
     createAppDialogLogic,
     name,
     editing,
@@ -63,9 +76,12 @@ const AppTitle: React.FC<AppTitleProps> = (props: AppTitleProps) => {
     onRenameApp,
     onUpdateAppIcon,
   } = appTitleLogic();
+  const { ref: truncatedRef, isTruncated } =
+    useIsTruncated<HTMLDivElement>(name);
   const { formatMessage } = useI18n();
 
-  const canRenameAppTitle = canRenameApp(app, appStatus);
+  const isRelease = app?.release === true;
+  const canRenameAppTitle = !isRelease && canRenameApp(app, appStatus);
 
   const { props: tooltipProps, renderTooltip } = useTooltip({
     content: name,
@@ -75,11 +91,11 @@ const AppTitle: React.FC<AppTitleProps> = (props: AppTitleProps) => {
   });
 
   const measureWidth = useCallback((): void => {
-    const width = nameRef.current?.getBoundingClientRect().width ?? 0;
+    const width = truncatedRef.current?.getBoundingClientRect().width ?? 0;
     setInputWidth(
       Math.min(Math.ceil(width) + 4, window.innerWidth < 1024 ? 100 : 200),
     );
-  }, []);
+  }, [truncatedRef]);
 
   useLayoutEffect(() => {
     measureWidth();
@@ -89,7 +105,7 @@ const AppTitle: React.FC<AppTitleProps> = (props: AppTitleProps) => {
   }, [measureWidth, name]);
 
   useEffect(() => {
-    const el = nameRef.current;
+    const el = truncatedRef.current;
     if (!el) return;
 
     let ro: ResizeObserver | undefined;
@@ -118,9 +134,11 @@ const AppTitle: React.FC<AppTitleProps> = (props: AppTitleProps) => {
     >
       <DeleteAppDialog logic={deleteAppDialogLogic} />
       <ExportAppDialog logic={exportAppDialogLogic} />
+      <PublishAppDialog logic={publishAppDialogLogic} />
+      <ReleaseInfoDialog logic={releaseInfoDialogLogic} />
       <CreateAppDialog logic={createAppDialogLogic} />
       <div className={styles['app-icon']}>
-        {app?.example ? (
+        {app?.example || isRelease ? (
           app?.icon
         ) : (
           <EmojiPicker
@@ -142,17 +160,16 @@ const AppTitle: React.FC<AppTitleProps> = (props: AppTitleProps) => {
           })}
         >
           <div {...tooltipProps}>
-            <XSmall ref={nameRef} className={styles['app-name-text']}>
+            <XSmall ref={truncatedRef} className={styles['app-name-text']}>
               {name}
             </XSmall>
-            {renderTooltip(styles['tooltip-content'])}
+            {isTruncated && renderTooltip(styles['tooltip-content'])}
           </div>
         </div>
         {editing && (
           <Input
             ref={inputRef}
             inputStyle={InputStyle.AppLab}
-            // eslint-disable-next-line jsx-a11y/no-autofocus
             autoFocus
             type="text"
             value={name}
@@ -186,12 +203,31 @@ const AppTitle: React.FC<AppTitleProps> = (props: AppTitleProps) => {
           />
         )}
       </div>
+      {isRelease ? (
+        <div className={styles['app-release']}>
+          <ReleaseBadge label={app?.release_label} />
+        </div>
+      ) : null}
       {!app?.example && (
         <DropdownMenuButton
+          disabledKeys={
+            createReleaseDisabledReason ? [AppAction.CreateRelease] : undefined
+          }
           sections={[
             {
               name: 'Actions',
               items: [
+                ...(isRelease
+                  ? [
+                      {
+                        id: AppAction.ReleaseInfo,
+                        label: formatMessage(
+                          appReleaseMessages.actionReleaseInfo,
+                        ),
+                        labelPrefix: <InfoIconOutline />,
+                      },
+                    ]
+                  : []),
                 ...(canRenameAppTitle
                   ? [
                       {
@@ -206,21 +242,41 @@ const AppTitle: React.FC<AppTitleProps> = (props: AppTitleProps) => {
                   label: formatMessage(appTitleMessages.actionDuplicate),
                   labelPrefix: <Duplicate />,
                 },
-                {
-                  id: AppAction.Export,
-                  label: formatMessage(appTitleMessages.actionExport),
-                  labelPrefix: <Download />,
-                },
-                ...(!app?.example
+                ...(!isRelease
                   ? [
                       {
-                        id: AppAction.Delete,
-                        itemClassName: styles['danger'],
-                        label: formatMessage(appTitleMessages.actionDelete),
-                        labelPrefix: <Bin />,
+                        id: AppAction.Publish,
+                        label: formatMessage(appTitleMessages.actionPublish),
+                        labelPrefix: <ShareSketchIcon />,
+                      },
+                      {
+                        id: AppAction.CreateRelease,
+                        label: formatMessage(
+                          appReleaseMessages.actionCreateRelease,
+                        ),
+                        ...(createReleaseDisabledReason
+                          ? {
+                              node: (
+                                <CreateReleaseDisabledItem
+                                  reason={createReleaseDisabledReason}
+                                />
+                              ),
+                            }
+                          : { labelPrefix: <AppRelease /> }),
+                      },
+                      {
+                        id: AppAction.Export,
+                        label: formatMessage(appTitleMessages.actionExport),
+                        labelPrefix: <Download />,
                       },
                     ]
                   : []),
+                {
+                  id: AppAction.Delete,
+                  itemClassName: styles['danger'],
+                  label: formatMessage(appTitleMessages.actionDelete),
+                  labelPrefix: <Bin />,
+                },
               ],
             },
             {
@@ -236,6 +292,7 @@ const AppTitle: React.FC<AppTitleProps> = (props: AppTitleProps) => {
                           {formatMessage(appTitleMessages.runAtStartup)}
                         </XXSmall>
                         <Toggle
+                          elementType="span"
                           className={styles['default-app-menu-item-toggle']}
                           isSelected={defaultApp?.id === app?.id}
                           onChange={setAsDefaultApp}

@@ -3,8 +3,13 @@ import {
   ArduinoBuilderBoardv3Full_BuilderApi,
   SketchData,
 } from '@cloud-editor-mono/infrastructure';
-import { Preferences, PreferenceValue } from '@cloud-editor-mono/ui-components';
-import { renderHook, waitFor } from '@testing-library/react';
+import {
+  defaultPreferences,
+  IotDevicesGroups,
+  Preferences,
+  PreferenceValue,
+} from '@cloud-editor-mono/ui-components';
+import { renderHook, RenderHookResult, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { act } from 'react-dom/test-utils';
 import { BehaviorSubject } from 'rxjs';
@@ -18,17 +23,26 @@ import { portSelectionReset } from '../portSelection.reactive';
 import { useBoardsConfig } from './boards';
 import {
   addMkr1010MappedPort,
+  addUnknownESP32MappedPort,
   addUnoMappedPort,
   addUnoTwoMappedPort,
   fqbnQueryData,
   iotDevicesGroupsEmpty,
+  iotDevicesGroupsWithESP32OfflineNoSerial,
   iotDevicesGroupsWithESP32Online,
+  iotDevicesGroupsWithESP32OnlineNoSerial,
+  iotDevicesGroupsWithMkr1010OfflineNoSerial,
+  iotDevicesGroupsWithMkr1010OnlineNoSerial,
   iotDevicesGroupsWithOneOnline,
   mockESP32,
+  mockIotESP32OfflineNoSerial,
   mockIotESP32Online,
+  mockIotESP32OnlineNoSerial,
+  mockIotMkr1010OnlineNoSerial,
   mockIotUnoOnline,
   mockMkrWifi1010,
   mockPromptBoardConfigSelection,
+  mockUnknownESP32Port,
   mockUno,
   mockUnoTwo,
   promptedSelection,
@@ -74,7 +88,7 @@ vi.mock('@cloud-editor-mono/domain', async () => {
 
 describe('call useBoardsConfig: sketch route', () => {
   const boardAutoSelectionOutputSubject = new BehaviorSubject<PreferenceValue>(
-    Preferences.BoardAutoSelection,
+    defaultPreferences[Preferences.BoardAutoSelection],
   );
 
   beforeAll(() => {
@@ -283,16 +297,8 @@ describe('call useBoardsConfig: sketch route', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.selectedFqbn).toEqual(
-          `${mockESP32.fqbn}${result.current.selectedFlavourString}`,
-        );
-
-        expect(result.current.selectedBoardFlavourOptions).toBeTruthy();
-        if (result.current.selectedBoardFlavourOptions) {
-          expect(
-            result.current.selectedBoardFlavourOptions[0].variants[0].selected,
-          ).toBeTruthy();
-        }
+        expect(result.current.selectedFqbn).toEqual(mockESP32.fqbn);
+        expect(result.current.selectedFlavourString).toBeNull();
       });
 
       act(() => {
@@ -300,9 +306,7 @@ describe('call useBoardsConfig: sketch route', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.selectedFqbn).toEqual(
-          `${mockESP32.fqbn}${result.current.selectedFlavourString}`,
-        );
+        expect(result.current.selectedFqbn).toEqual(mockESP32.fqbn);
         expect(result.current.selectedPort).toBeUndefined();
       });
 
@@ -315,17 +319,8 @@ describe('call useBoardsConfig: sketch route', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.selectedFqbn).toEqual(
-          `${mockESP32.fqbn}${result.current.selectedFlavourString}`,
-        );
-
-        expect(result.current.selectedBoardFlavourOptions).toBeTruthy();
-        if (result.current.selectedBoardFlavourOptions) {
-          expect(
-            result.current.selectedBoardFlavourOptions[0].variants[1].selected,
-          ).toBeTruthy();
-        }
-
+        expect(result.current.selectedFqbn).toEqual(mockESP32.fqbn);
+        expect(result.current.selectedFlavourString).toBeNull();
         expect(result.current.selectedPort).toBeUndefined();
       });
     });
@@ -882,10 +877,7 @@ describe('call useBoardsConfig: sketch route', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.selectedBoardFlavourOptions).toBeTruthy();
-        expect(result.current.selectedFqbn).toEqual(
-          `${mockIotESP32Online.fqbn}${result.current.selectedFlavourString}`,
-        );
+        expect(result.current.selectedFqbn).toEqual(mockIotESP32Online.fqbn);
         expect(result.current.selectedPort).toEqual(
           mockIotESP32Online.portName,
         );
@@ -984,6 +976,159 @@ describe('call useBoardsConfig: sketch route', () => {
           mockIotUnoOnline.portBoardId,
         );
       });
+    });
+
+    it('a stable-serial board whose iot metadata has no serial number (e.g. migrated via BLE) should fall back to fqbn matching and select its usb port', async () => {
+      const { result } = renderHook(
+        () =>
+          useBoardsConfig(
+            false,
+            false,
+            (_: Partial<SketchData>) => {
+              return;
+            },
+            mockPromptBoardConfigSelection,
+            sketchId,
+            iotDevicesGroupsWithMkr1010OnlineNoSerial.online[0].fqbn || null,
+            iotDevicesGroupsWithMkr1010OnlineNoSerial.online[0].name || null,
+            iotDevicesGroupsWithMkr1010OnlineNoSerial.online[0].architecture ||
+              null,
+            'cloud',
+            true,
+            iotDevicesGroupsWithMkr1010OnlineNoSerial.online[0].id || null,
+            iotDevicesGroupsWithMkr1010OnlineNoSerial,
+          ),
+        {
+          wrapper: TestProviderWrapper,
+        },
+      );
+
+      await waitFor(() => {
+        expect(result.current.selectedFqbn).toEqual(
+          mockIotMkr1010OnlineNoSerial.fqbn,
+        );
+        expect(result.current.selectedPort).toEqual(
+          mockIotMkr1010OnlineNoSerial.portName,
+        );
+      });
+
+      // The detected USB port has a serial number, but the iot device does not.
+      // Without the fallback the board would not be matched and usb upload would
+      // stay disabled; with the fallback it should match by fqbn.
+      act(() => {
+        addMkr1010MappedPort();
+      });
+
+      await waitFor(() => {
+        expect(
+          result.current.detectedDevices.find(
+            (d) => d.portBoardId === mockMkrWifi1010.portBoardId,
+          ),
+        ).toBeTruthy();
+        expect(result.current.selectedPortBoardId).toEqual(
+          mockMkrWifi1010.portBoardId,
+        );
+      });
+    });
+
+    const renderIotSketch = (
+      groups: IotDevicesGroups,
+    ): RenderHookResult<ReturnType<typeof useBoardsConfig>, unknown> => {
+      const device = groups.online[0] ?? groups.offline[0];
+      return renderHook(
+        () =>
+          useBoardsConfig(
+            false,
+            false,
+            (_: Partial<SketchData>) => {
+              return;
+            },
+            mockPromptBoardConfigSelection,
+            sketchId,
+            device.fqbn || null,
+            device.name || null,
+            device.architecture || null,
+            'cloud',
+            true,
+            device.id || null,
+            groups,
+          ),
+        {
+          wrapper: TestProviderWrapper,
+        },
+      );
+    };
+
+    it('an online ESP32 with no serial number in iot-api should offer its unknown usb port next to OTA', async () => {
+      const { result } = renderIotSketch(
+        iotDevicesGroupsWithESP32OnlineNoSerial,
+      );
+
+      await waitFor(() => {
+        expect(result.current.selectedPortBoardId).toEqual(
+          mockIotESP32OnlineNoSerial.portBoardId,
+        );
+      });
+
+      act(() => {
+        addUnknownESP32MappedPort();
+      });
+
+      // "Prefer USB over OTA" selects the usb port and keeps OTA as the alt port
+      await waitFor(() => {
+        expect(result.current.selectedPortBoardId).toEqual(
+          mockUnknownESP32Port.portBoardId,
+        );
+        expect(result.current.selectedDeviceAltPortBoardId?.id).toEqual(
+          mockIotESP32OnlineNoSerial.portBoardId,
+        );
+      });
+    });
+
+    it('an offline ESP32 with no serial number in iot-api should select its unknown usb port', async () => {
+      const { result } = renderIotSketch(
+        iotDevicesGroupsWithESP32OfflineNoSerial,
+      );
+
+      await waitFor(() => {
+        expect(result.current.selectedPortBoardId).toEqual(
+          mockIotESP32OfflineNoSerial.portBoardId,
+        );
+      });
+
+      act(() => {
+        addUnknownESP32MappedPort();
+      });
+
+      await waitFor(() => {
+        expect(result.current.selectedPortBoardId).toEqual(
+          mockUnknownESP32Port.portBoardId,
+        );
+      });
+    });
+
+    it('a stable-serial board with no serial number in iot-api should not claim an unknown usb port', async () => {
+      const { result } = renderIotSketch(
+        iotDevicesGroupsWithMkr1010OfflineNoSerial,
+      );
+      const device = iotDevicesGroupsWithMkr1010OfflineNoSerial.offline[0];
+
+      await waitFor(() => {
+        expect(result.current.selectedPortBoardId).toEqual(device.portBoardId);
+      });
+
+      act(() => {
+        addUnknownESP32MappedPort();
+      });
+
+      await waitFor(() => {
+        expect(
+          result.current.detectedDevices.find(
+            (d) => d.portBoardId === mockUnknownESP32Port.portBoardId,
+          ),
+        ).toBeTruthy();
+      });
+      expect(result.current.selectedPortBoardId).toEqual(device.portBoardId);
     });
   });
 

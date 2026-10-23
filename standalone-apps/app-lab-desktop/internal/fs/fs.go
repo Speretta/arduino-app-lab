@@ -157,6 +157,10 @@ func RenameFolder(conn remote.RemoteConn, oldPath string, newPath string) error 
 		}
 	}
 
+	if lsp.SyncsRemoteWorkspace() {
+		lsp.RenameWorkspacePath(oldPath, newPath)
+	}
+
 	fmt.Printf("DEBUG: RenameFolder completed successfully\n")
 	return nil
 }
@@ -238,12 +242,28 @@ func RenameFile(conn remote.RemoteConn, prevPath string, newPath string) error {
 		return err
 	}
 
-	// lsp
-	if lsp.ShouldSyncRemoteFileToLspWorkspace(prevPath) {
-		lsp.RenameWorkspaceFile(prevPath, newPath)
+	// lsp: the temp workspace holds only LSP files, so a rename that changes
+	// the extension adds or drops the copy instead of moving it.
+	switch prevIsLsp, newIsLsp := lsp.ShouldSyncRemoteFileToLspWorkspace(prevPath), lsp.ShouldSyncRemoteFileToLspWorkspace(newPath); {
+	case prevIsLsp && newIsLsp:
+		lsp.RenameWorkspacePath(prevPath, newPath)
+	case prevIsLsp:
+		lsp.RemoveWorkspacePath(prevPath)
+	case newIsLsp:
+		syncRemoteFileToLspWorkspace(conn, newPath)
 	}
 
 	return nil
+}
+
+func syncRemoteFileToLspWorkspace(conn remote.RemoteConn, p string) {
+	reader, err := conn.ReadFile(p)
+	if err != nil {
+		slog.Error("lsp workspace mirror: read failed", "path", p, "err", err)
+		return
+	}
+	defer reader.Close()
+	lsp.SyncRemoteFileToLspWorkspace(p, reader)
 }
 
 func RemoveFile(conn remote.RemoteConn, path string) error {
@@ -251,9 +271,9 @@ func RemoveFile(conn remote.RemoteConn, path string) error {
 		return err
 	}
 
-	// lsp
-	if lsp.ShouldSyncRemoteFileToLspWorkspace(path) {
-		lsp.RemoveWorkspaceFile(path)
+	// lsp: the path may be a folder, whose copy goes with it
+	if lsp.SyncsRemoteWorkspace() {
+		lsp.RemoveWorkspacePath(path)
 	}
 
 	return nil
@@ -270,12 +290,24 @@ func CreateFolder(conn remote.RemoteConn, path string) error {
 	return nil
 }
 
-func IsDirectory(conn remote.RemoteConn, path string) (bool, error) {
-	info, err := conn.Stats(path)
+func StatPath(conn remote.RemoteConn, p string) (*FSNode, error) {
+	// A stat spends a session like a listing does, so it goes through the same
+	// limiter and retry: outside them it competes with the listings for the
+	// board's MaxSessions and dies on the first refusal.
+	var info remote.FileInfo
+	err := retryBoardRead(p, func() error {
+		var err error
+		info, err = conn.Stats(p)
+		return err
+	})
 	if err != nil {
-		return false, err
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return info.IsDir, nil
+
+	return &FSNode{Name: info.Name, Path: p, IsDir: info.IsDir}, nil
 }
 
 func IsLocalDirectory(path string) (bool, error) {
@@ -348,6 +380,9 @@ func ImportFileToAppFromPath(ctx context.Context, conn remote.RemoteConn, remote
 		}
 		return "", fmt.Errorf("failed to import file: %w", err)
 	}
+	if lsp.SyncsRemoteWorkspace() {
+		lsp.SyncLocalPathToLspWorkspace(localPath, remotePath)
+	}
 	return remotePath, nil
 }
 
@@ -401,6 +436,9 @@ func ImportFolderToAppFromPath(ctx context.Context, conn remote.RemoteConn, remo
 			return "", fmt.Errorf("BOARD_STORAGE_FULL")
 		}
 		return "", fmt.Errorf("failed to import folder: %w", err)
+	}
+	if lsp.SyncsRemoteWorkspace() {
+		lsp.SyncLocalPathToLspWorkspace(localPath, targetBaseDir)
 	}
 	return targetBaseDir, nil
 }

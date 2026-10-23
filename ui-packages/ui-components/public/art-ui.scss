@@ -1,0 +1,10 @@
+// Sass module — must precede the plain-CSS imports below (@use ordering rule).
+// Emits the Cloud-Editor-owned design tokens (additive, no design-system
+// equivalent), so relative order vs. the vendored CSS below doesn't matter.
+@use "./ce-tokens.scss";
+
+// Plain CSS from vendored packages. The .css extension keeps these as CSS
+// @import rules (not Sass @import), so they're unaffected by the Dart Sass 3.0
+// removal of @import.
+@import "@bcmi-labs/art-ui/dist/style.css";
+@import "@bcmi-labs/cloud-sidebar/dist/style.css";

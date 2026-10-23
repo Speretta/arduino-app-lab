@@ -18,31 +18,31 @@ $consolePanelStatusBarHeight: var(--console-panel-status-bar-height);
   &.error {
     .status-bar {
       .status-message {
-        color: shared.theme-var(--console-bar-foreground-error);
+        color: var(--console-bar-foreground-error);
       }
     }
 
     .console-output-content * {
-      color: white !important;
+      color: var(--console-content-foreground) !important;
     }
   }
 
   &.success {
     .status-bar {
       .status-message {
-        color: shared.theme-var(--console-bar-foreground-success);
+        color: var(--console-bar-foreground-success);
       }
     }
 
     .console-output-content * {
-      color: shared.theme-var(--console-content-foreground-success) !important;
+      color: var(--console-content-foreground-success) !important;
     }
   }
 
   &.progress {
     .status-bar {
       .status-message {
-        color: shared.theme-var(--editor-syntax-highlight-comments); //Color not present on variables
+        color: var(--editor-syntax-highlight-comments); //Color not present on variables
       }
     }
   }
@@ -54,11 +54,11 @@ $consolePanelStatusBarHeight: var(--console-panel-status-bar-height);
   padding: 0 28px;
   display: flex;
   align-items: center;
-  background-color: shared.theme-var(--console-bar-background);
-  color: shared.theme-var(--console-bar-foreground);
+  background-color: var(--console-bar-background);
+  color: var(--console-bar-foreground);
   box-sizing: border-box;
   justify-content: space-between;
-  border-top: 1px solid shared.theme-var(--console-divider);
+  border-top: 1px solid var(--border-default);
 
   .status-bar-content {
     display: flex;
@@ -70,16 +70,10 @@ $consolePanelStatusBarHeight: var(--console-panel-status-bar-height);
       width: 22px;
     }
   }
-
-  .collapse-button {
-    z-index: shared.$zIndex1;
-    position: relative;
-    fill: shared.theme-var(--console-bar-foreground);
-  }
 }
 
 .console-output {
-  background-color: shared.theme-var(--console-content-background);
+  background-color: var(--console-content-background);
   height: 100%;
 
   .console-output-wrapper {
@@ -107,25 +101,22 @@ $consolePanelStatusBarHeight: var(--console-panel-status-bar-height);
         height: 12px;
         width: calc(100% - 16px);
         left: 0;
-        background: linear-gradient(
-          0deg,
-          shared.theme-var(--console-content-background) 23%,
-          rgba(247, 249, 249, 0) 100%
-        );
+        background: linear-gradient(0deg, var(--console-content-background) 23%, #dae3e300 100%);
       }
     }
 
-    &::-webkit-scrollbar-thumb {
-      border: 4px solid shared.theme-var(--console-content-background);
+    // Overrides the global white track from index.scss so it matches the dark console
+    &::-webkit-scrollbar-track {
+      background: var(--console-content-background);
     }
 
-    &::-webkit-scrollbar-track {
-      background-color: transparent;
+    &::-webkit-scrollbar-thumb {
+      border: 4px solid var(--console-content-background);
     }
   }
 
   .console-output-content * {
-    color: shared.theme-var(--console-content-foreground);
+    color: var(--console-content-foreground);
   }
 
   .copy-output {
@@ -140,15 +131,16 @@ $consolePanelStatusBarHeight: var(--console-panel-status-bar-height);
     }
 
     [role="tooltip"] {
-      background-color: shared.theme-var(--tooltip-background);
+      background-color: var(--tooltip-background);
       border-radius: 3px;
-      border: 1px solid shared.theme-var(--tooltip-border);
-      color: shared.theme-var(--tooltip-foreground);
+      border: 1px solid var(--grayscale-smoke);
+      color: var(--tooltip-foreground);
       cursor: default;
       flex: 1;
       padding: 3px 7px;
       position: absolute;
       right: 0;
+      top: 36px;
       white-space: nowrap;
       display: none;
 
@@ -158,11 +150,11 @@ $consolePanelStatusBarHeight: var(--console-panel-status-bar-height);
       }
 
       &.copied-success {
-        background-color: shared.theme-var(--tooltip-background-success);
+        background-color: var(--feedback-success-default);
       }
 
       § &.copied-error {
-        background-color: shared.theme-var(--tooltip-background-error);
+        background-color: var(--tooltip-background-error);
       }
     }
   }
@@ -171,7 +163,7 @@ $consolePanelStatusBarHeight: var(--console-panel-status-bar-height);
 .typography {
   font-size: calc(code-editor-variables.$editorFontSizeVar * 1px);
   font-family: typography.$roboto-mono-font-family;
-  color: shared.theme-var(--console-content-foreground);
+  color: var(--console-content-foreground);
 }
 
 .loader-dots {
@@ -187,10 +179,10 @@ $consolePanelStatusBarHeight: var(--console-panel-status-bar-height);
 .helper-section {
   &--error {
     @extend .typography;
-    color: shared.theme-var(--console-content-foreground-error);
+    color: var(--console-content-foreground-error);
 
     a {
-      color: shared.theme-var(--console-content-foreground-error);
+      color: var(--console-content-foreground-error);
     }
   }
 }
@@ -234,22 +226,7 @@ $consolePanelStatusBarHeight: var(--console-panel-status-bar-height);
       width: 18px;
 
       & > path {
-        fill: #008184;
-      }
-    }
-  }
-
-  .fix-error-button {
-    * {
-      text-transform: none;
-    }
-
-    & > svg {
-      height: 18px;
-      width: 18px;
-
-      & > path {
-        fill: #ffffff;
+        fill: var(--accent-default);
       }
     }
   }

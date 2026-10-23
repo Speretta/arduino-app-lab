@@ -162,7 +162,6 @@ export type ToolbarLogic = () => {
   switchToAltPort: () => void;
   notificationElement: React.ReactNode;
   useChromeOsDeviceAssociation: boolean;
-  deviceSetupLink?: string;
   shareSketchLogic: () => ReturnType<ShareSketchLogic>;
   shareToClassroomLogic: () => ReturnType<ShareToClassroomLogic>;
 };

@@ -15,6 +15,7 @@ export * from '../../lsp-service';
 export * from '../../names-generator-service';
 export * from '../../orchestrator-service';
 export * from '../../preferences-service';
+export * from '../../project-hub-service';
 export * from '../../settings-service';
 export * from '../../updater-service';
 export * from '../../utils';

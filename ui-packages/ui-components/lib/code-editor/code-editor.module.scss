@@ -62,7 +62,7 @@
   width: 232px;
   background: var(--component-bg-above, #374146);
   border-radius: 4px;
-  padding: 4px;
+  padding: code-editor-variables.$contextMenuPadding;
   box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.25);
 }
 

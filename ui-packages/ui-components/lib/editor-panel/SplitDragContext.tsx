@@ -12,11 +12,11 @@ import {
 export interface SplitDragPayload {
   fileId: string;
   /**
-   * Pane the drag originated from. Drop zones use this to decide direction
+   * Panel the drag originated from. Drop zones use this to decide direction
    * (eg. an A-origin tab dropped on the right edge moves into B; a B-origin
-   * tab dropped on the left pane moves into A).
+   * tab dropped on the left panel moves into A).
    */
-  originPane: 'A' | 'B';
+  originPanel: 'A' | 'B';
 }
 
 export interface TabsBarDropTarget {
@@ -25,7 +25,7 @@ export interface TabsBarDropTarget {
    * given pointer position, or null when the pointer is not over this bar.
    */
   getInsertionIndex: (pointer: { x: number; y: number }) => number | null;
-  /** Commits the cross-pane move at the given insertion index. */
+  /** Commits the cross-panel move at the given insertion index. */
   commit: (payload: SplitDragPayload, insertIndex: number) => void;
 }
 
@@ -46,12 +46,12 @@ interface SplitDragContextValue {
   ) => void;
   /**
    * Register a tabs bar as a positional drop target for tabs dragged from
-   * the OTHER pane's bar. Foreign-bar drops take precedence over the
-   * pane-body trigger so the tab lands at the hovered position. Pass null
+   * the OTHER panel's bar. Foreign-bar drops take precedence over the
+   * panel-body trigger so the tab lands at the hovered position. Pass null
    * to unregister.
    */
   registerTabsBarDropTarget: (
-    paneId: 'A' | 'B',
+    panelId: 'A' | 'B',
     target: TabsBarDropTarget | null,
   ) => void;
   /**
@@ -128,11 +128,11 @@ export const SplitDragProvider = ({
   );
 
   const registerTabsBarDropTarget = useCallback(
-    (paneId: 'A' | 'B', target: TabsBarDropTarget | null) => {
+    (panelId: 'A' | 'B', target: TabsBarDropTarget | null) => {
       if (target) {
-        tabsBarTargetsRef.current.set(paneId, target);
+        tabsBarTargetsRef.current.set(panelId, target);
       } else {
-        tabsBarTargetsRef.current.delete(paneId);
+        tabsBarTargetsRef.current.delete(panelId);
       }
     },
     [],
@@ -144,10 +144,10 @@ export const SplitDragProvider = ({
     if (!currentPayload || !currentPointer) {
       return false;
     }
-    // Foreign tabs bars take precedence over the pane-body trigger so a
+    // Foreign tabs bars take precedence over the panel-body trigger so a
     // drop on the other bar inserts at the hovered tab position.
-    for (const [paneId, target] of tabsBarTargetsRef.current) {
-      if (paneId === currentPayload.originPane) continue;
+    for (const [panelId, target] of tabsBarTargetsRef.current) {
+      if (panelId === currentPayload.originPanel) continue;
       const insertIndex = target.getInsertionIndex(currentPointer);
       if (insertIndex === null) continue;
       target.commit(currentPayload, insertIndex);

@@ -2,6 +2,7 @@ import {
   boardNeedsImageUpdate,
   boardNeedsOSUpdate,
   getApps,
+  onAgentModelImport,
   openLinkExternal,
   reloadApp,
 } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
@@ -9,13 +10,12 @@ import {
   AppLabWelcomeDialogLogic,
   BoardUpdateDialogLogic,
   FlashBoardDialogLogic,
-  OfflineWarningDialogLogic,
   snackbar,
-  Themes,
   UpdaterStatus,
+  useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useQuery } from '@tanstack/react-query';
-import { useParams } from '@tanstack/react-router';
+import { useNavigate, useParams } from '@tanstack/react-router';
 import {
   useCallback,
   useContext,
@@ -25,25 +25,39 @@ import {
 } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { ThemeContext } from '../../../common/providers/theme/themeContext';
 import { BoardScopedQuery } from '../../boardScopedQuery';
 import { useBoards } from '../../hooks/useBoards';
-import { useCurrentSection } from '../../hooks/useCurrentSection';
+import {
+  useCurrentBreadcrumbId,
+  useCurrentSection,
+} from '../../hooks/useCurrentSection';
 import { useIsBoard } from '../../hooks/useIsBoard';
 import { useReloadApp } from '../../hooks/useReloadApp';
+import { isModelImportSubscribed, stashModelImport } from '../../openAppFile';
 import { AuthContext } from '../../providers/auth/authContext';
 import { NetworkContext } from '../../providers/network/networkContext';
 import { SetupContext } from '../../providers/setup/setupContext';
 import { UpdaterContext } from '../../providers/updater/updaterContext';
+import { onStorageUnavailable } from '../../services/persistentStore';
 import { useBoardLifecycleStore } from '../../store/boardLifecycle';
 import { useCreateAppDialogStore } from '../../store/createAppDialog';
 import { useImportAppDialogStore } from '../../store/importAppDialog';
 import { useSystemPropsStore } from '../../store/systemProps';
 import { useCreateAppDialogLogic } from '../app/app-list/useCreateAppDialogLogic';
 import { useImportAppDialogLogic } from '../app/app-list/useImportAppDialogLogic';
-import { useAgentSidePanelLogic } from '../side-panel/agentSidePanel.logic';
+import { sendAppLabNotification } from '../notifications';
+import { usePreparationRequiredDialogLogic } from '../release/preparationDialog.logic';
+import { MY_APPS_FILTER } from '../release/releaseApp';
+import {
+  useCreateReleaseDialogLogic,
+  useCreateReleaseIntroDialogLogic,
+} from '../release/releaseDialogs.logic';
+import { useAgentSidePanelProps } from '../side-panel/agentSidePanel.logic';
 import { createUseSidePanelLogic } from '../side-panel/sidePanel.logic';
 import { UseMainLogic } from './main.type';
+import { mainMessages as messages } from './messages';
+import { useNetworkSettingsDialogLogic } from './networkSettingsDialog';
+import { useOfflineWarningDialogLogic } from './offlineWarningDialog';
 
 const FLASHER_TOOL_URL = 'https://www.arduino.cc/en/software/#flasher-tool';
 const ARDUINO_SUPPORT_URL = 'https://www.arduino.cc/en/contact-us/';
@@ -52,6 +66,34 @@ const FLASHER_TUTORIAL_URL =
 
 export const useMainLogic: UseMainLogic =
   function (): ReturnType<UseMainLogic> {
+    const navigate = useNavigate();
+    const { formatMessage } = useI18n();
+
+    useEffect(
+      () =>
+        onStorageUnavailable(() =>
+          sendAppLabNotification({
+            message: formatMessage(messages.storageUnavailable),
+            variant: 'warning',
+            duration: 10000,
+          }),
+        ),
+      [formatMessage],
+    );
+
+    // The agent named a brick needing one of the user's own models: bring the user to that app, unless its screen is already listening — on a deep link that subscription waits for the app query, so the route alone would drop the event.
+    useEffect(
+      () =>
+        onAgentModelImport((appId, brickId) => {
+          if (isModelImportSubscribed(appId)) {
+            return;
+          }
+          stashModelImport(appId, brickId);
+          void navigate({ to: '/my-apps/$appId', params: { appId } });
+        }),
+      [navigate],
+    );
+
     const useBoardUpdateDialogLogic =
       (): ReturnType<BoardUpdateDialogLogic> => {
         const [open, setOpen] = useState(false);
@@ -64,6 +106,7 @@ export const useMainLogic: UseMainLogic =
           canStartUpdate,
           boardUpdates,
           boardLogs,
+          boardUpdateProgress,
           newAppVersion,
           releaseNotes,
           checkForUpdates,
@@ -181,6 +224,7 @@ export const useMainLogic: UseMainLogic =
           status,
           boardUpdates,
           boardLogs,
+          boardUpdateProgress,
           newAppVersion,
           releaseNotes,
           startUpdate,
@@ -297,141 +341,6 @@ export const useMainLogic: UseMainLogic =
       [],
     );
 
-    const useNetworkSettingsDialogLogic = () => {
-      const [open, setOpen] = useState(false);
-      const networkContext = useContext(NetworkContext);
-
-      useEffect(() => {
-        networkContext.setManualNetworkSetup(false);
-        networkContext.setSelectedNetwork(undefined);
-        networkContext.setScanningIsEnabled(open);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [open]);
-
-      useEffect(() => {
-        if (networkContext.connectRequestIsSuccess) {
-          setOpen(false);
-        }
-      }, [networkContext.connectRequestIsSuccess]);
-
-      return {
-        ...networkContext,
-        open,
-        onOpenChange: setOpen,
-      };
-    };
-
-    const useOfflineWarningDialogLogic = (
-      openNetworkSettings: () => void,
-    ): OfflineWarningDialogLogic => {
-      const [open, setOpen] = useState(false);
-      const [wasClosedByUser, setWasClosedByUser] = useState(false);
-      const { networkStatusChecked, isConnected, isScanning, isConnecting } =
-        useContext(NetworkContext);
-      const {
-        setupCompleted,
-        networkStepSkipped,
-        setOfflineWarningOpen,
-        offlineWarningOpen,
-      } = useContext(SetupContext);
-      const { boardIsReachable } = useBoardLifecycleStore(
-        useShallow((state) => ({
-          boardIsReachable: state.boardIsReachable,
-        })),
-      );
-
-      // Check if user has already made a choice about offline warning (reset on app restart if not connected)
-      const [offlineWarningChoiceMade, setOfflineWarningChoiceMade] =
-        useState(offlineWarningOpen);
-
-      // Show dialog when there's a connected board, network is determined to be offline, and no scanning/connection operations
-      useEffect(() => {
-        const isNetworkOperationInProgress = isScanning || isConnecting;
-
-        // Don't show modal if any blocking condition is met
-        if (!setupCompleted || networkStepSkipped || offlineWarningChoiceMade) {
-          setOpen(false);
-          return;
-        }
-
-        if (
-          boardIsReachable &&
-          networkStatusChecked &&
-          !isConnected &&
-          !isNetworkOperationInProgress &&
-          !wasClosedByUser
-        ) {
-          const timeoutId = setTimeout(() => {
-            setOpen(true);
-            setOfflineWarningOpen(true);
-          }, 10000); // Wait 10 seconds for WiFi automatic connection
-
-          return () => clearTimeout(timeoutId);
-        } else if (isConnected) {
-          setOpen(false);
-          setWasClosedByUser(false);
-          setOfflineWarningOpen(false);
-        } else if (!boardIsReachable || isNetworkOperationInProgress) {
-          setOpen(false);
-          setWasClosedByUser(false);
-          setOfflineWarningOpen(false);
-          setOfflineWarningChoiceMade(false);
-        }
-      }, [
-        boardIsReachable,
-        networkStatusChecked,
-        isConnected,
-        isScanning,
-        isConnecting,
-        wasClosedByUser,
-        setOfflineWarningOpen,
-        setupCompleted,
-        networkStepSkipped,
-        offlineWarningChoiceMade,
-      ]);
-
-      const onContinue = useCallback(() => {
-        setOpen(false);
-        setWasClosedByUser(true);
-        setOfflineWarningOpen(false);
-        setOfflineWarningChoiceMade(true);
-      }, [setOfflineWarningOpen]);
-
-      const onNetworkSettings = useCallback(() => {
-        setOpen(false);
-        setWasClosedByUser(true);
-        setOfflineWarningOpen(false);
-        setOfflineWarningChoiceMade(true);
-        openNetworkSettings();
-      }, [setOfflineWarningOpen, openNetworkSettings]);
-
-      const handleOnOpenChange = useCallback(
-        (isOpen: boolean) => {
-          // If user is closing the modal (not opening it), save their choice
-          if (!isOpen && open) {
-            setOfflineWarningChoiceMade(true);
-            setWasClosedByUser(true);
-            setOfflineWarningOpen(false);
-          }
-          setOpen(isOpen);
-        },
-        [open, setOfflineWarningOpen],
-      );
-
-      return {
-        open,
-        onOpenChange: handleOnOpenChange,
-        onContinue,
-        onNetworkSettings,
-      };
-    };
-
-    const networkSettingsDialogLogic = useNetworkSettingsDialogLogic();
-
-    const offlineWarningDialogLogic = useOfflineWarningDialogLogic(() =>
-      networkSettingsDialogLogic.onOpenChange(true),
-    );
-
     const boardsProps = useBoards();
 
     const createAppDialogOpen = useCreateAppDialogStore((state) => state.open);
@@ -442,6 +351,10 @@ export const useMainLogic: UseMainLogic =
       createAppDialogOpen,
       setCreateAppDialogOpen,
     );
+
+    const createReleaseIntroDialogLogic = useCreateReleaseIntroDialogLogic();
+    const createReleaseDialogLogic = useCreateReleaseDialogLogic();
+    const preparationRequiredDialogLogic = usePreparationRequiredDialogLogic();
 
     const importAppDialogOpen = useImportAppDialogStore((state) => state.open);
     const setImportAppDialogOpen = useImportAppDialogStore(
@@ -461,7 +374,7 @@ export const useMainLogic: UseMainLogic =
       [boardsProps],
     );
 
-    const agentSidePanelLogic = useAgentSidePanelLogic(boardsProps);
+    const agentSidePanelProps = useAgentSidePanelProps(boardsProps);
 
     // get app params to undestand if we are in details or not
     const params = useParams({ strict: false });
@@ -469,6 +382,7 @@ export const useMainLogic: UseMainLogic =
 
     // determine section using dedicated hook
     const currentSection = useCurrentSection();
+    const currentBreadcrumbId = useCurrentBreadcrumbId();
 
     const { boardIsFlashing, boardIsReachable } = useBoardLifecycleStore(
       useShallow((state) => ({
@@ -477,17 +391,17 @@ export const useMainLogic: UseMainLogic =
       })),
     );
 
-    const { data: apps } = useQuery(
-      [BoardScopedQuery.CHECK_APPS_TO_REDIRECT],
-      () => {
+    const { data: apps } = useQuery({
+      queryKey: [BoardScopedQuery.CHECK_APPS_TO_REDIRECT],
+
+      queryFn: () => {
         return getApps({
-          query: { filter: 'apps' },
+          query: { filter: MY_APPS_FILTER },
         });
       },
-      {
-        enabled: boardIsReachable,
-      },
-    );
+
+      enabled: boardIsReachable,
+    });
 
     const { setupCompleted } = useContext(SetupContext);
 
@@ -501,23 +415,22 @@ export const useMainLogic: UseMainLogic =
       apps,
       currentSection,
       lastAppInfoLoaded: boardsProps.lastAppInfoLoaded,
+      breadcrumbId: currentBreadcrumbId,
     });
-
-    const { setTheme } = useContext(ThemeContext);
-    useEffect(() => {
-      setTheme(Themes.DarkTheme);
-    }, [setTheme]);
 
     return {
       sidePanelLogic,
-      agentSidePanelLogic,
+      agentSidePanelProps,
       createAppDialogLogic,
+      createReleaseIntroDialogLogic,
+      createReleaseDialogLogic,
+      preparationRequiredDialogLogic,
       importAppDialogLogic,
       boardUpdateDialogLogic,
       flashBoardDialogLogic,
       appLabWelcomeDialogLogic,
-      offlineWarningDialogLogic,
-      networkSettingsDialogLogic,
+      offlineWarningDialogLogic: useOfflineWarningDialogLogic,
+      networkSettingsDialogLogic: useNetworkSettingsDialogLogic,
       boardsProps,
       boardIsFlashing,
       showRoutes,

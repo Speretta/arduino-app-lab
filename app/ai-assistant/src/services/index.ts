@@ -1,4 +1,4 @@
-export { isAuthError, parseAgentError } from './agentErrors';
+export { isAuthError, isNetworkError, parseAgentError } from './agentErrors';
 export {
   cancelInstall,
   checkForUpdate,
@@ -36,6 +36,7 @@ export {
   onPermission,
   onRestart,
   onUpdate,
+  onWorkspaceAppForgotten,
   openAgentFile,
   permissionReply,
   pinSession,
@@ -57,6 +58,7 @@ export type {
   AgentModel,
   AgentRestart,
   AgentUpdate,
+  AgentWorkspace,
   AuthMethod,
   AuthResult,
   AuthStatus,

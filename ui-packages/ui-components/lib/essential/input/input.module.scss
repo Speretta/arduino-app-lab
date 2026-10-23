@@ -1,15 +1,13 @@
 @use "sass:color";
 @use "@cloud-editor-mono/arduino-sass";
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
 
 .text-area::-webkit-scrollbar {
   background-color: transparent;
   width: 6px;
 }
 
-.text-area::-webkit-scrollbar-track {
-  background: transparent;
-}
-
+// TODO: replace #7f8c8d with a design-system token once one exists.
 .text-area::-webkit-scrollbar-thumb {
   border: 0;
   background-color: rgba(127, 140, 141, 0.5);
@@ -107,14 +105,14 @@
   .input-error {
     position: absolute;
     top: 68px;
-    color: arduino-sass.$darknotifyerror;
+    color: #c11f09;
   }
 
   .input-container {
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    border: 1px solid arduino-sass.$smoke;
+    border: 1px solid var(--border-default);
     border-radius: 2px;
     font-size: 16px;
     height: 60px;
@@ -159,6 +157,7 @@
 
   .input-content {
     width: inherit;
+    color: var(--text-default);
 
     &.monospace {
       font-family:
@@ -178,7 +177,7 @@
     transform: translateY(-50%);
     top: 50%;
     left: 20px;
-    color: arduino-sass.$asbestos;
+    color: var(--text-subtle);
 
     span {
       transition: var(--transition);
@@ -199,7 +198,7 @@
     .input-label {
       top: 6px;
       transform: translateY(20%);
-      color: arduino-sass.$jet;
+      color: var(--text-subtle);
 
       span {
         font-size: 12px;
@@ -216,8 +215,8 @@
   &.disabled {
     &.small {
       .input-container {
-        background-color: arduino-sass.$white;
-        border: 1px solid arduino-sass.$smoke;
+        background-color: var(--component-bg-above);
+        border: 1px solid #c9d2d2;
         z-index: 0;
       }
 
@@ -227,7 +226,7 @@
     }
 
     .input-container {
-      background-color: arduino-sass.$clouds;
+      background-color: var(--component-bg-above);
       z-index: 0;
     }
 
@@ -262,7 +261,7 @@
     svg {
       width: 24px;
       height: 24px;
-      color: arduino-sass.$asbestos;
+      color: var(--text-default);
     }
   }
 }

@@ -1,15 +1,9 @@
-
-$associate-dialog-title: #374146;
-$button-primary-label: #ffffff;
-$button-primary-background-hover: #005c5f;
-$button-primary-background: #008184;
-
 .confirm-dialog {
   font-size: 16px;
   border: unset;
 
   .title {
-    color: $associate-dialog-title;
+    color: var(--text-default);
     font-size: 18px;
   }
 
@@ -26,11 +20,11 @@ $button-primary-background: #008184;
       margin-left: 8px;
       text-transform: uppercase;
       border-radius: 30px;
-      background-color: $button-primary-background;
-      color: $button-primary-label;
+      background-color: var(--accent-default);
+      color: var(--text-on-accent);
 
       &:hover {
-        background-color: $button-primary-background-hover;
+        background-color: var(--accent-default-strong);
       }
     }
   }

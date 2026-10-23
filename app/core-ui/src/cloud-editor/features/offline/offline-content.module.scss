@@ -1,8 +1,11 @@
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
+
 .container {
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100%;
+    background-color: var(--surface-bg-below-2);
 }
 
 .content {
@@ -15,10 +18,11 @@
 }
 
 .title {
-    color: #374146;
+    color: var(--text-default);
     margin: 20px 10px 10px 10px;
 }
 
 .message {
     margin: 10px;
+    color: var(--text-subtle);
 }

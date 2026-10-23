@@ -2,8 +2,8 @@ import {
   ArduinoLoop,
   InfoIconOutline,
 } from '@cloud-editor-mono/images/assets/icons';
-import { EditorBannerKind } from '@cloud-editor-mono/ui-components/lib/code-editor';
 import {
+  EditorBannerKind,
   EditorPanel,
   useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';

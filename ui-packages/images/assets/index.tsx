@@ -57,6 +57,7 @@ import ChevronDown from './chevron-down.svg?react';
 import ChevronRight from './chevron-right.svg?react';
 import ChevronRightNoPad from './chevron-right-no-pad.svg?react';
 import ChevronUp from './chevron-up.svg?react';
+import CircleSlash from './circle-slash.svg?react';
 import Claude from './claude.svg?react';
 import Clear from './clear.svg?react';
 import Close from './close.svg?react';
@@ -141,6 +142,7 @@ import PluginCables from './plugin-cables.svg?react';
 import Plus from './plus.svg?react';
 import Power from './power.svg?react';
 import PrivateDataIcon from './private-data-icon.svg?react';
+import PublishOnProjectHub from './publish-on-project-hub.svg?react';
 import Puzzle from './puzzle.svg?react';
 import Redo from './redo-icon.svg?react';
 import RegularExpression from './regular-expression.svg?react';
@@ -256,6 +258,7 @@ const Icons = {
   ChevronRightNoPad,
   ChevronUp,
   Claude,
+  CircleSlash,
   Clear,
   Close,
   CloseX,
@@ -335,6 +338,7 @@ const Icons = {
   Plus,
   Power,
   PrivateDataIcon,
+  PublishOnProjectHub,
   Puzzle,
   Redo,
   RegularExpression,

@@ -9,28 +9,33 @@ import { useToggleState } from 'react-stately';
 
 import styles from './toggle.module.scss';
 
-interface ToggleProps extends AriaToggleButtonProps {
+interface ToggleProps extends AriaToggleButtonProps<'button' | 'span'> {
   className?: string;
 }
 
 export const Toggle: React.FC<ToggleProps> = (props: ToggleProps) => {
-  const { className, isDisabled } = props;
-  const ref = useRef<HTMLButtonElement>(null);
+  const { className, isDisabled, elementType = 'button' } = props;
+  const ref = useRef<HTMLButtonElement & HTMLSpanElement>(null);
   const state = useToggleState(props);
   const { buttonProps } = useToggleButton(props, state, ref);
+  // A menu item already renders a <button>, and a <button> inside it is invalid HTML.
+  const Element = elementType;
 
   return (
-    <button
+    <Element
       {...buttonProps}
       className={clsx(
         styles['button'],
-        { [styles['disabled']]: isDisabled },
+        {
+          [styles['disabled']]: isDisabled,
+          [styles['span']]: elementType === 'span',
+        },
         className,
       )}
       ref={ref}
     >
       {state.isSelected ? <AppLabToggleOn /> : <AppLabToggleOff />}
-    </button>
+    </Element>
   );
 };
 

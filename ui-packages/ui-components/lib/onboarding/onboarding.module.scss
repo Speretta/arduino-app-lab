@@ -26,8 +26,9 @@
   align-self: stretch;
 
   border-radius: 4px;
-  border: 1px solid #c9d2d2;
-  background: #fff;
+  border: 1px solid var(--border-default);
+  color: var(--text-default);
+  background: var(--surface-bg-above);
 }
 
 .onboarding-text {
@@ -52,7 +53,7 @@
   gap: 10px;
 
   &.onboarding-button-hide {
-    color: #7F8C8D;
+    color: var(--text-subtle);
   }
 }
 
@@ -63,8 +64,9 @@
   align-items: center;
 
   border-radius: 5px;
-  background: var(--Grayscale-Jet, #374146);
-  color: var(--Grayscale-White, #fff);
+  // Palette tokens (not semantic ones): the coach-mark bubble stays dark in both themes.
+  background: var(--grayscale-jet);
+  color: var(--grayscale-white);
 }
 
 .tooltip-content {
@@ -93,7 +95,6 @@
 
 .tooltip-skip {
   display: flex;
-  padding: 2px 0px;
   align-items: center;
   gap: 10px;
 }

@@ -1,8 +1,8 @@
 ---
 name: "@types/react-dom"
-version: 18.0.6
+version: 18.3.7
 type: npm
-summary: TypeScript definitions for React (react-dom)
+summary: TypeScript definitions for react-dom
 homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom
 license: mit
 licenses:

@@ -65,11 +65,13 @@ import {
   WebSerialStateKeys,
 } from '@cloud-editor-mono/web-board-communication';
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useMutation,
   useQueries,
   useQuery,
   useQueryClient,
+  UseQueryResult,
 } from '@tanstack/react-query';
 import {
   Dispatch,
@@ -120,11 +122,12 @@ function concatErrors(
 ): string[] | undefined {
   if (!builderError) {
     return compilationErrors;
-  } else {
-    if (compilationErrors) {
-      return [...compilationErrors, builderError];
-    }
   }
+
+  if (compilationErrors) {
+    return [...compilationErrors, builderError];
+  }
+
   return compilationErrors;
 }
 
@@ -132,16 +135,14 @@ export const useGetBoardByFqbn: UseGetBoardByFqbn = function (
   enabled: boolean,
   fqbn?: string,
 ): ReturnType<UseGetBoardByFqbn> {
-  const { data, isLoading } = useQuery(
-    ['get-board-by-fqbn', fqbn],
-    () =>
+  const { data, isLoading } = useQuery({
+    queryKey: ['get-board-by-fqbn', fqbn],
+    queryFn: () =>
       fqbn !== undefined
         ? getBoardByFqbn({ fqbn })
         : Promise.reject('FQBN is not defined'),
-    {
-      enabled,
-    },
-  );
+    enabled,
+  });
 
   return {
     board: data,
@@ -168,12 +169,10 @@ export const useVerifySketch: UseVerifySketch =
       errorFiles,
     } = useCompilationStream();
 
-    //Cancel and reset for the verification process for both old and new builder
     const cancelAndReset = useCallback(
       async (notify?: boolean, sketchId?: string) => {
         deleteCachedCompileData();
 
-        //If compiling with the new builder, we need to cancel the stream
         if (isCompilingWithStream) {
           try {
             await cancelStream();
@@ -189,6 +188,7 @@ export const useVerifySketch: UseVerifySketch =
                 toastSize: ToastSize.Small,
               },
             });
+
             return;
           }
         } else {
@@ -276,6 +276,7 @@ const createStreamHandlers = (
       setStdErr((prev) => {
         return prev ? `${prev}${line}` : line;
       });
+
       return;
     }
 
@@ -296,6 +297,7 @@ const createStreamHandlers = (
   const onResult: OnStreamResult = (diagnostics, builderError) => {
     setResult(!diagnostics ? 'success' : 'failure');
     setBuilderError(builderError);
+
     const { compileResultMessages = undefined, errorFiles = undefined } =
       diagnostics
         ? diagnostics.reduce<{
@@ -305,14 +307,22 @@ const createStreamHandlers = (
             (acc, diagnostic) => {
               acc.compileResultMessages.push(diagnostic.message);
               acc.errorFiles.push(diagnostic.file);
+
               return acc;
             },
-            { compileResultMessages: [], errorFiles: [] },
+            {
+              compileResultMessages: [],
+              errorFiles: [],
+            },
           )
         : {};
 
     const cumulativeErrors = concatErrors(compileResultMessages, builderError);
-    setCompileResultMessages(cumulativeErrors && cumulativeErrors.join('\n'));
+
+    setCompileResultMessages(
+      cumulativeErrors ? cumulativeErrors.join('\n') : undefined,
+    );
+
     setErrorFiles(errorFiles);
   };
 
@@ -342,10 +352,14 @@ type UseCreateCompilation = () => {
   isPending: boolean;
   setIsPending: Dispatch<SetStateAction<boolean>>;
 };
+
 const useCreateCompilation: UseCreateCompilation = function () {
   const [createdSketchCompilation, setCreatedSketchCompilation] = useState<
-    ArduinoBuilderV2CompilationsResponse_BuilderApi & { sketchName?: string }
+    ArduinoBuilderV2CompilationsResponse_BuilderApi & {
+      sketchName?: string;
+    }
   >();
+
   const [isPending, setIsPending] = useState(false);
 
   const abortControllerCreate = useRef<AbortController>();
@@ -355,7 +369,7 @@ const useCreateCompilation: UseCreateCompilation = function () {
   const { setCompilationData } = useCacheCompile();
 
   const {
-    isLoading: isCreatingCompilation,
+    isPending: isCreatingCompilation,
     mutate: createCompilation,
     reset: resetCreateCompilation,
   } = useMutation({
@@ -365,9 +379,11 @@ const useCreateCompilation: UseCreateCompilation = function () {
       ...rest
     }: CompilePayload) =>
       createSketchCompilation(rest, abortControllerCreate.current),
+
     onMutate: () => {
       abortControllerCreate.current = new AbortController();
     },
+
     onSuccess: (data, variables) => {
       setCreatedSketchCompilation({
         ...data,
@@ -379,10 +395,13 @@ const useCreateCompilation: UseCreateCompilation = function () {
       }
 
       setIsPending(true);
-      queryClient.invalidateQueries(['user-restrictions-recap'], {
+
+      queryClient.invalidateQueries({
+        queryKey: ['user-restrictions-recap'],
         exact: false,
       });
     },
+
     onSettled: () => {
       abortControllerCreate.current = undefined;
     },
@@ -393,7 +412,9 @@ const useCreateCompilation: UseCreateCompilation = function () {
       setCreatedSketchCompilation(data);
 
       setIsPending(true);
-      queryClient.invalidateQueries(['user-restrictions-recap'], {
+
+      queryClient.invalidateQueries({
+        queryKey: ['user-restrictions-recap'],
         exact: false,
       });
     },
@@ -402,8 +423,10 @@ const useCreateCompilation: UseCreateCompilation = function () {
 
   const { mutateAsync: cancelCompilation } = useMutation({
     mutationFn: (id: string) => cancelSketchCompilation(id),
+
     onSuccess: () => {
-      queryClient.invalidateQueries(['user-restrictions-recap'], {
+      queryClient.invalidateQueries({
+        queryKey: ['user-restrictions-recap'],
         exact: false,
       });
     },
@@ -413,7 +436,9 @@ const useCreateCompilation: UseCreateCompilation = function () {
     abortControllerCreate.current?.abort(
       'User interrupted compilation creation',
     );
+
     abortControllerCreate.current = undefined;
+
     resetCreateCompilation();
     setCreatedSketchCompilation(undefined);
     setIsPending(false);
@@ -466,9 +491,12 @@ export const useCompilationStream: UseCompilationStream =
     const [progress, setProgress] = useState<Progression>();
 
     const [result, setResult] = useState<'success' | 'failure'>();
+
     const [compileResultMessages, setCompileResultMessages] =
       useState<string>();
+
     const [errorFiles, setErrorFiles] = useState<string[]>();
+
     const [builderError, setBuilderError] = useState<string>();
 
     const abortControllerStream = useRef<AbortController>();
@@ -486,6 +514,7 @@ export const useCompilationStream: UseCompilationStream =
 
     const cancelAndReset = useCallback(async () => {
       abortControllerStream.current?.abort('User interrupted compilation');
+
       abortControllerStream.current = undefined;
 
       setStdOut(undefined);
@@ -501,49 +530,53 @@ export const useCompilationStream: UseCompilationStream =
     }, [cancelAndResetCreation]);
 
     useEffect(() => {
-      if (createdSketchCompilation) {
-        abortControllerStream.current = new AbortController();
-        const {
-          onStreamClose,
-          onStreamErrored,
-          onStreamStdMsg,
-          onStreamStatus,
-          onStreamProgress,
-          onResult,
-        } = createStreamHandlers(
-          setIsPending,
-          setStreamErrored,
-          setStdOut,
-          setStdErr,
-          setStatus,
-          setProgress,
-          setResult,
-          setCompileResultMessages,
-          setErrorFiles,
-          setBuilderError,
-        );
-
-        startSketchCompilationStream(
-          createdSketchCompilation.id,
-          onStreamStdMsg,
-          onStreamStdMsg,
-          onStreamStatus,
-          onStreamProgress,
-          onResult,
-          {
-            onopen: undefined,
-            onerror: onStreamErrored,
-            onmessage: undefined,
-            onclose: () => {
-              resetCreateCompilation();
-              onStreamClose();
-
-              deleteCachedCompileData();
-            },
-          },
-          abortControllerStream.current,
-        );
+      if (!createdSketchCompilation) {
+        return;
       }
+
+      abortControllerStream.current = new AbortController();
+
+      const {
+        onStreamClose,
+        onStreamErrored,
+        onStreamStdMsg,
+        onStreamStatus,
+        onStreamProgress,
+        onResult,
+      } = createStreamHandlers(
+        setIsPending,
+        setStreamErrored,
+        setStdOut,
+        setStdErr,
+        setStatus,
+        setProgress,
+        setResult,
+        setCompileResultMessages,
+        setErrorFiles,
+        setBuilderError,
+      );
+
+      startSketchCompilationStream(
+        createdSketchCompilation.id,
+        onStreamStdMsg,
+        onStreamStdMsg,
+        onStreamStatus,
+        onStreamProgress,
+        onResult,
+        {
+          onopen: undefined,
+          onerror: onStreamErrored,
+          onmessage: undefined,
+          onclose: () => {
+            resetCreateCompilation();
+
+            onStreamClose();
+
+            deleteCachedCompileData();
+          },
+        },
+        abortControllerStream.current,
+      );
     }, [
       createdSketchCompilation,
       deleteCachedCompileData,
@@ -572,7 +605,9 @@ export const useCompilationStream: UseCompilationStream =
       const getOutput = (): string => {
         const hasOutput = Boolean(stdOut || stdErr);
 
-        if (!hasOutput) return '';
+        if (!hasOutput) {
+          return '';
+        }
 
         return [stdOut, stdErr].filter(Boolean).join('\n\n');
       };
@@ -584,7 +619,6 @@ export const useCompilationStream: UseCompilationStream =
         outputLineEnd: 0,
         failed: false,
         settled: false,
-        // Properties are overridden by derivatives
         ...derivatives,
       };
     }, [
@@ -638,57 +672,56 @@ export const useCompileComputeAndUploadQueries: UseCompileComputeAndUploadQuerie
     compileSketchResponseData?: CompileSketch_Result,
     createdSketchCompilation?: ArduinoBuilderV2CompilationsResponse_BuilderApi,
   ): ReturnType<UseCompileComputeAndUploadQueries> {
-    // On getCompilationOutput, BE responds with extra_files on builderV2 instead of files like builderV1. On the function we modify the response
+    const compilationOutputIsReady =
+      !!createdSketchCompilation?.id &&
+      !isVerifying &&
+      !!computeAndUploadPayload &&
+      !!compileSketchResponseData?.settled &&
+      !compileSketchResponseData?.failed;
+
     const {
+      data: compilationOutput,
       isFetching: isFetchingCompilationOutput,
       isError: getCompilationOutputFailed,
-    } = useQuery(
-      [
+    } = useQuery({
+      queryKey: [
         'get-compilation-output',
         createdSketchCompilation?.id,
         computeAndUploadPayload,
       ],
-      () =>
-        createdSketchCompilation?.id
-          ? getCompilationOutput(createdSketchCompilation?.id)
-          : Promise.reject(new Error('No sketch ID provided')),
-      {
-        onSuccess(data) {
-          if (computeAndUploadPayload) {
-            compute({
-              computePayload: computeAndUploadPayload.computePayload,
-              partialUploadPayload: {
-                ...computeAndUploadPayload.partialUploadPayload,
-                compileData: data,
-              },
-            });
-          }
-        },
-        enabled:
-          !!createdSketchCompilation?.id &&
-          !isVerifying &&
-          !!computeAndUploadPayload &&
-          compileSketchResponseData?.settled &&
-          !compileSketchResponseData?.failed,
-      },
-    );
 
-    const { isLoading: isComputing, mutate: compute } = useMutation({
+      queryFn: () =>
+        createdSketchCompilation?.id
+          ? getCompilationOutput(createdSketchCompilation.id)
+          : Promise.reject(new Error('No sketch ID provided')),
+
+      enabled: compilationOutputIsReady,
+    });
+
+    const { isPending: isComputing, mutate: compute } = useMutation({
       mutationFn: (payload: ComputeAndUploadPayload) =>
         getUploadInfo(payload.computePayload),
+
       onSuccess: (
         data: Compute_Response,
         variables: ComputeAndUploadPayload,
       ) => {
         const uploadPayload = variables.partialUploadPayload;
+
         if (agentEnabled) {
-          if (!uploadAgentPayloadIsComplete(uploadPayload)) return;
+          if (!uploadAgentPayloadIsComplete(uploadPayload)) {
+            return;
+          }
+
           agentUpload({
             ...uploadPayload,
             computeUploadInfo: data,
           });
         } else {
-          if (!uploadWebSerialPayloadIsComplete(uploadPayload)) return;
+          if (!uploadWebSerialPayloadIsComplete(uploadPayload)) {
+            return;
+          }
+
           webSerialUpload({
             ...uploadPayload,
             computeUploadInfo: data,
@@ -699,11 +732,13 @@ export const useCompileComputeAndUploadQueries: UseCompileComputeAndUploadQuerie
 
     const {
       data: agentUploadOutput,
-      isLoading: agentIsUploading,
+      isPending: agentIsUploading,
       mutate: agentUpload,
     } = useMutation({
       mutationFn: uploadToAgentPort,
+
       onMutate: onUploadStart,
+
       onSuccess: (
         result: UploadStatus,
         variables: UploadToAgentPortPayload,
@@ -725,16 +760,19 @@ export const useCompileComputeAndUploadQueries: UseCompileComputeAndUploadQuerie
 
     const {
       data: webSerialUploadOutput,
-      isLoading: webSerialIsUploading,
+      isPending: webSerialIsUploading,
       mutate: webSerialUpload,
     } = useMutation({
       mutationFn: uploadToWebSerialPort,
+
       onMutate: () => {
         setWebSerialState({
           [WebSerialStateKeys.UploadStatus]: UploadStatus.IN_PROG,
         });
+
         onUploadStart?.();
       },
+
       onSuccess: (
         result: UploadStatus,
         variables: UploadToWebSerialPortPayload,
@@ -753,6 +791,40 @@ export const useCompileComputeAndUploadQueries: UseCompileComputeAndUploadQuerie
         });
       },
     });
+
+    // One compute + upload per `compileComputeAndUpload` call. The query's
+    // `data` is stable across renders and refetches, so the payload object
+    // it was started for is the marker, not the data.
+    const uploadStartedForPayload = useRef<CompileComputeAndUploadPayload>();
+
+    useEffect(() => {
+      if (
+        !compilationOutputIsReady ||
+        !compilationOutput ||
+        !computeAndUploadPayload
+      ) {
+        return;
+      }
+
+      if (uploadStartedForPayload.current === computeAndUploadPayload) {
+        return;
+      }
+
+      uploadStartedForPayload.current = computeAndUploadPayload;
+
+      compute({
+        computePayload: computeAndUploadPayload.computePayload,
+        partialUploadPayload: {
+          ...computeAndUploadPayload.partialUploadPayload,
+          compileData: compilationOutput,
+        },
+      });
+    }, [
+      compilationOutput,
+      compilationOutputIsReady,
+      compute,
+      computeAndUploadPayload,
+    ]);
 
     return {
       webSerialUploadOutput,
@@ -810,6 +882,7 @@ export const useCompileComputeAndUpload: UseCompileComputeUpload = function (
 
   const [computeAndUploadPayload, setComputeAndUploadPayload] =
     useState<CompileComputeAndUploadPayload>();
+
   const compileComputeAndUpload = useCallback(
     (payload: CompileComputeAndUploadPayload): void => {
       setComputeAndUploadPayload(payload);
@@ -818,7 +891,6 @@ export const useCompileComputeAndUpload: UseCompileComputeUpload = function (
     [createCompilation],
   );
 
-  // On getCompilationOutput, BE responds with extra_files on builderV2 instead of files like builderV1. On the function we modify the response
   const {
     isComputing,
     isFetchingCompilationOutput,
@@ -861,11 +933,11 @@ export const useCompileComputeAndUpload: UseCompileComputeUpload = function (
 export const useGetBoardsList: UseGetBoardsList = function (
   enabled = true,
 ): ReturnType<UseGetBoardsList> {
-  const { data, isLoading } = useQuery(
-    ['boards'],
-    () => getAllSupportedBoards(),
-    { enabled },
-  );
+  const { data, isLoading } = useQuery({
+    queryKey: ['boards'],
+    queryFn: () => getAllSupportedBoards(),
+    enabled,
+  });
 
   return {
     data,
@@ -874,6 +946,7 @@ export const useGetBoardsList: UseGetBoardsList = function (
 };
 
 const FAVORITE_LIBRARIES_QUERY_KEY = ['favorite-libraries'];
+
 export const useFavoriteLibraries: UseGetFavoriteLibraries = function (
   enabled = true,
 ): ReturnType<UseGetFavoriteLibraries> {
@@ -882,15 +955,14 @@ export const useFavoriteLibraries: UseGetFavoriteLibraries = function (
 
   const { sketchID } = useSketchParams();
 
-  const { data, isLoading, isError } = useQuery(
-    FAVORITE_LIBRARIES_QUERY_KEY,
-    getFavoriteLibraries,
-    {
-      enabled: enabled && userWasAuthenticated,
-    },
-  );
+  const { data, isLoading, isError } = useQuery<GetFavoriteLibraries_Response>({
+    queryKey: FAVORITE_LIBRARIES_QUERY_KEY,
+    queryFn: getFavoriteLibraries,
+    enabled: enabled && userWasAuthenticated,
+  });
 
   const queryClient = useQueryClient();
+
   const { mutate } = useMutation<
     unknown,
     unknown,
@@ -899,7 +971,8 @@ export const useFavoriteLibraries: UseGetFavoriteLibraries = function (
   >({
     mutationFn: ({ library, asFavorite }: SetFavouriteLibraryPayload) =>
       setFavoriteLibrary(library, asFavorite),
-    onMutate: async ({ library, asFavorite }) => {
+
+    onMutate: async ({ library, asFavorite }: SetFavouriteLibraryPayload) => {
       await queryClient.cancelQueries({
         queryKey: FAVORITE_LIBRARIES_QUERY_KEY,
       });
@@ -920,7 +993,7 @@ export const useFavoriteLibraries: UseGetFavoriteLibraries = function (
 
       return { previousLibraries };
     },
-    // If the mutation fails, use the context returned from onMutate to roll back
+
     onError: (_, __, context) => {
       if (context?.previousLibraries) {
         queryClient.setQueryData<GetFavoriteLibraries_Response>(
@@ -929,15 +1002,18 @@ export const useFavoriteLibraries: UseGetFavoriteLibraries = function (
         );
       }
     },
+
     onSettled: async () => {
-      // wait a bit to make sure the query is invalidated before refetching
-      queryClient.invalidateQueries({ queryKey: FAVORITE_LIBRARIES_QUERY_KEY });
+      queryClient.invalidateQueries({
+        queryKey: FAVORITE_LIBRARIES_QUERY_KEY,
+      });
     },
   });
 
   const setFavorite = useCallback(
     (library: LibrariesItem_Response, asFavorite: boolean) => {
       mutate({ library, asFavorite });
+
       ga4Emitter({
         type: 'LIBRARY_FAVORITE',
         payload: {
@@ -949,7 +1025,12 @@ export const useFavoriteLibraries: UseGetFavoriteLibraries = function (
     [mutate, sketchID],
   );
 
-  return { data, isLoading, isError, setFavorite };
+  return {
+    data,
+    isLoading,
+    isError,
+    setFavorite,
+  };
 };
 
 export const useGetLibraries: UseGetLibraries = function (
@@ -960,38 +1041,56 @@ export const useGetLibraries: UseGetLibraries = function (
     fromParams?: string;
     libs: LibrariesItem_Response[];
   }>();
+
   const {
     data: currentPagesData,
-    isInitialLoading: isLoading,
+    isLoading,
     isFetchingNextPage,
     fetchNextPage,
     hasNextPage,
-  } = useInfiniteQuery(
-    ['libraries', params],
-    (ctx) => {
-      const page = ctx.pageParam || params.page;
-      return getLibraries(page ? { ...params, page } : params);
-    },
-    {
-      enabled,
-      getNextPageParam: (lastGroup) => {
-        const totalPages = lastGroup.pages;
-        const nextPage = lastGroup.nextPage;
+    isError,
+  } = useInfiniteQuery({
+    queryKey: ['libraries', params],
 
-        if (!!nextPage && nextPage > totalPages) {
-          return undefined; // signals to react-query that all pages have been loaded
-        }
+    queryFn: ({ pageParam }) => {
+      const page = pageParam ?? params.page;
 
-        return nextPage;
-      },
-      onError: () => {
-        setMappedLibraries({
-          fromParams: JSON.stringify(params),
-          libs: [],
-        });
-      },
+      return page
+        ? getLibraries({
+            ...params,
+            page,
+          })
+        : getLibraries(params);
     },
-  );
+
+    initialPageParam: params.page,
+
+    enabled,
+
+    getNextPageParam: (lastGroup) => {
+      const totalPages = lastGroup.pages;
+      const nextPage = lastGroup.nextPage;
+
+      if (!!nextPage && nextPage > totalPages) {
+        return undefined;
+      }
+
+      return nextPage;
+    },
+  });
+
+  /*
+   * React Query v5 removed query-level onError callbacks.
+   * The previous v4 onError behavior is reproduced here.
+   */
+  useEffect(() => {
+    if (isError) {
+      setMappedLibraries({
+        fromParams: JSON.stringify(params),
+        libs: [],
+      });
+    }
+  }, [isError, params]);
 
   const {
     data: favoriteLibrariesList,
@@ -1001,9 +1100,11 @@ export const useGetLibraries: UseGetLibraries = function (
   } = useFavoriteLibraries(enabled);
 
   useEffect(() => {
-    if (!currentPagesData) return;
+    if (!currentPagesData) {
+      return;
+    }
 
-    const data = currentPagesData.pages.flatMap((d) => d.libraries);
+    const data = currentPagesData.pages.flatMap((page) => page.libraries);
 
     const fromParams =
       currentPagesData.pages.length > 0
@@ -1018,6 +1119,7 @@ export const useGetLibraries: UseGetLibraries = function (
           isFavorite: IsFavoriteLibrary.Unknown,
         })),
       });
+
       return;
     }
 
@@ -1025,6 +1127,7 @@ export const useGetLibraries: UseGetLibraries = function (
       const isFavorite = favoriteLibrariesList.some(
         (favoriteLibrary) => favoriteLibrary.id === library.id,
       );
+
       return {
         ...library,
         isFavorite: isFavorite ? IsFavoriteLibrary.Yes : IsFavoriteLibrary.No,
@@ -1063,13 +1166,21 @@ const toLegacyId = (name: string, version: string): string =>
 const mapExampleFilesToLegacy = (
   legacyId: string,
   examplePath: string,
-  files: { name: string; path: string; mimetype: string; data?: string }[],
+  files: {
+    name: string;
+    path: string;
+    mimetype: string;
+    data?: string;
+  }[],
 ) => {
   const segs = examplePath.split('/').filter(Boolean);
+
   const exampleName = segs[segs.length - 1] || examplePath;
+
   const folder = segs[0] || '';
 
   const ino = pickMainIno(files);
+
   const inoFile = files.find((f) => f.name === ino?.name);
 
   const inoLegacy = ino &&
@@ -1089,6 +1200,7 @@ const mapExampleFilesToLegacy = (
     name: exampleName,
     path: `${legacyId}/${examplePath}`,
     types: ['library'],
+
     files: files
       .filter((f) => f.name !== ino?.name)
       .map((f) => ({
@@ -1107,11 +1219,16 @@ export const useGetLibrary: UseGetLibrary = function (
   { id },
   enabled,
 ): ReturnType<UseGetLibrary> {
-  const { data, isLoading, refetch, isError } = useQuery(
-    ['library', id],
-    async () => {
-      if (!id) throw new Error('no library id provided'); // reject promise
+  const { data, isLoading, refetch, isError } = useQuery({
+    queryKey: ['library', id],
+
+    queryFn: async () => {
+      if (!id) {
+        throw new Error('no library id provided');
+      }
+
       const base = await getLibrary({ id });
+
       if (
         !base?.id ||
         !base?.version ||
@@ -1134,7 +1251,9 @@ export const useGetLibrary: UseGetLibrary = function (
                   id: releaseId,
                   path: ex.path!,
                 });
+
                 const files = res?.files ?? [];
+
                 return mapExampleFilesToLegacy(legacyId, ex.path!, files);
               } catch {
                 return null;
@@ -1148,13 +1267,15 @@ export const useGetLibrary: UseGetLibrary = function (
           ino: NonNullable<ReturnType<typeof mapExampleFilesToLegacy>['ino']>;
         } => ex !== null && ex.ino !== undefined,
       );
+
       return {
         ...base,
         examples: legacyExamples,
       };
     },
-    { enabled },
-  );
+
+    enabled,
+  });
 
   return {
     library: data,
@@ -1167,15 +1288,15 @@ export const useGetLibrary: UseGetLibrary = function (
 export const useGetExamples: UseGetExamples = function (
   enableGetExamples = true,
 ): ReturnType<UseGetExamples> {
-  const { isLoading, data, isError } = useQuery(
-    BUILTIN_EXAMPLES_QUERY_KEY,
-    () => getExamples({}),
-    {
-      enabled: enableGetExamples,
-      refetchOnMount: false,
-      keepPreviousData: true,
-    },
-  );
+  const { isLoading, data, isError } = useQuery({
+    queryKey: BUILTIN_EXAMPLES_QUERY_KEY,
+    queryFn: () => getExamples({}),
+    enabled: enableGetExamples,
+    refetchOnMount: false,
+
+    // React Query v5 replacement for keepPreviousData: true
+    placeholderData: keepPreviousData,
+  });
 
   return {
     examples: data || [],
@@ -1192,9 +1313,10 @@ export const useRetrieveExampleInoContents: UseRetrieveExampleInoContents =
   ): ReturnType<UseRetrieveExampleInoContents> {
     const queryClient = useQueryClient();
 
-    const { data: exampleInoContents, isLoading } = useQuery(
-      ['get-main-example-content', exampleIno?.path, scope],
-      () => {
+    const { data: exampleInoContents, isPending: isLoading } = useQuery({
+      queryKey: ['get-main-example-content', exampleIno?.path, scope],
+
+      queryFn: () => {
         return exampleIno
           ? retrieveExampleFileContents(
               exampleIno.path,
@@ -1205,19 +1327,41 @@ export const useRetrieveExampleInoContents: UseRetrieveExampleInoContents =
             )
           : Promise.reject('no example ino provided');
       },
-      {
-        onSuccess: (data: RetrieveExampleFileContentsResult) => {
-          setCodeSubjects(data);
-        },
-        enabled,
-      },
-    );
+
+      enabled,
+    });
+
+    useEffect(() => {
+      if (exampleInoContents) {
+        setCodeSubjects(exampleInoContents);
+      }
+    }, [exampleInoContents]);
 
     return {
       isLoading,
       exampleInoContents,
     };
   };
+
+type CombinedExampleFileContents = {
+  contents: (RetrieveExampleFileContentsResult | undefined)[];
+  updatedAt: number[];
+  refetch: (() => Promise<unknown>)[];
+};
+
+function combineExampleFileContents(
+  results: UseQueryResult<RetrieveExampleFileContentsResult>[],
+): CombinedExampleFileContents {
+  return {
+    contents: results.map((result) =>
+      result.data && !result.error ? result.data : undefined,
+    ),
+    updatedAt: results.map((result) => result.dataUpdatedAt),
+    // Bound once per observer, so the reference is stable. It also fetches a
+    // disabled query, which `queryClient.refetchQueries` skips.
+    refetch: results.map((result) => result.refetch),
+  };
+}
 
 export const useRetrieveExampleFileContents: UseRetrieveExampleFileContents =
   function (
@@ -1231,23 +1375,42 @@ export const useRetrieveExampleFileContents: UseRetrieveExampleFileContents =
     const [exampleFileContents, setExampleFileContents] = useState<{
       contents: RetrieveExampleFileContentsResult[];
       isComplete: boolean;
-    }>({ contents: [], isComplete: false });
+    }>({
+      contents: [],
+      isComplete: false,
+    });
+
+    // `onSuccess` replaces the file's code subject, so it runs once per fetch
+    // of each file, not each time another file arrives. The fetch time is the
+    // marker: a refetch that returns equal content keeps the `data` reference.
+    const deliveredFetches = useRef(new Map<string, number>());
 
     useEffect(() => {
       if (exampleFiles === undefined) {
-        setExampleFileContents({ contents: [], isComplete: false });
+        setExampleFileContents({
+          contents: [],
+          isComplete: false,
+        });
       }
 
       if (exampleFiles?.length === 0) {
-        setExampleFileContents({ contents: [], isComplete: true });
+        setExampleFileContents({
+          contents: [],
+          isComplete: true,
+        });
       }
     }, [exampleFiles]);
 
-    const results = useQueries({
+    const {
+      contents: fileContents,
+      updatedAt: fileContentsUpdatedAt,
+      refetch: refetchFileContents,
+    } = useQueries({
       queries: (exampleFiles ?? [])
         .filter((exampleFile) => exampleFile && exampleFile.path)
         .map((exampleFile) => ({
           queryKey: ['get-example-file-content', exampleFile?.path],
+
           queryFn: () =>
             retrieveExampleFileContents(
               exampleFile?.path || '',
@@ -1255,30 +1418,63 @@ export const useRetrieveExampleFileContents: UseRetrieveExampleFileContents =
               queryClient,
               exampleInoPath,
             ),
-          onSuccess: (data: RetrieveExampleFileContentsResult): void => {
-            setExampleFileContents((prev) => {
-              const contents = [
-                ...prev.contents.filter(
-                  (f) =>
-                    f.path !== data.path &&
-                    f.exampleInoPath === data.exampleInoPath,
-                ),
-                data,
-              ];
-              return {
-                contents,
-                isComplete: exampleFiles?.length === contents.length,
-              };
-            });
-            onSuccess && onSuccess(data);
-          },
+
           enabled,
         })),
+
+      // `useQueries` returns a new results array on every render. The
+      // combined value keeps its reference while the contents are unchanged,
+      // so the effect below runs only when a file content arrives.
+      combine: combineExampleFileContents,
     });
 
+    useEffect(() => {
+      const received = fileContents.filter(
+        (data): data is RetrieveExampleFileContentsResult => Boolean(data),
+      );
+
+      if (received.length === 0) {
+        return;
+      }
+
+      const receivedPaths = new Set(received.map((data) => data.path));
+      const inoPath = received[0].exampleInoPath;
+
+      setExampleFileContents((prev) => {
+        const contents = [
+          ...prev.contents.filter(
+            (f) => f.exampleInoPath === inoPath && !receivedPaths.has(f.path),
+          ),
+          ...received,
+        ];
+        const isComplete = exampleFiles?.length === contents.length;
+
+        // `exampleFiles` may be a new array on every render; an unchanged
+        // state must keep its reference or the effect re-runs for ever.
+        const unchanged =
+          prev.isComplete === isComplete &&
+          prev.contents.length === contents.length &&
+          prev.contents.every((f, index) => f === contents[index]);
+
+        return unchanged ? prev : { contents, isComplete };
+      });
+
+      fileContents.forEach((data, index) => {
+        if (!data) return;
+
+        const updatedAt = fileContentsUpdatedAt[index];
+        if (deliveredFetches.current.get(data.path) === updatedAt) return;
+
+        deliveredFetches.current.set(data.path, updatedAt);
+        onSuccess?.(data);
+      });
+    }, [fileContents, fileContentsUpdatedAt, exampleFiles, onSuccess]);
+
     const refetchAll = useCallback(() => {
-      results.forEach((result) => result.refetch());
-    }, [results]);
+      refetchFileContents.forEach((refetch) => {
+        refetch();
+      });
+    }, [refetchFileContents]);
 
     return {
       exampleFileContents: exampleFileContents.contents,
@@ -1286,6 +1482,7 @@ export const useRetrieveExampleFileContents: UseRetrieveExampleFileContents =
       refetchAll,
     };
   };
+
 export const useRetrieveLibraryFilesContents: UseRetrieveLibraryFileContents =
   function (
     enabled,
@@ -1302,20 +1499,25 @@ export const useRetrieveLibraryFilesContents: UseRetrieveLibraryFileContents =
       }
     }, [library?.files]);
 
-    const { isLoading } = useQuery({
+    const { data: libraryData, isLoading } = useQuery({
       queryKey: ['get-library-files-contents', library?.path],
+
       queryFn: () =>
         Promise.all(
           (library?.files ?? []).map((libraryFile) =>
             retrieveLibraryFileContents(libraryFile.path, libraryFile.name),
           ),
         ),
-      onSuccess: (data: RetrieveLibraryFileContentsResult[]): void => {
-        setLibraryFilesContents(data);
-        onAllSuccess && onAllSuccess(data);
-      },
+
       enabled,
     });
+
+    useEffect(() => {
+      if (libraryData) {
+        setLibraryFilesContents(libraryData);
+        onAllSuccess?.(libraryData);
+      }
+    }, [libraryData, onAllSuccess]);
 
     return {
       isLoading,
@@ -1332,27 +1534,43 @@ export function getExamplesByFolder(examples: Example[]): ExamplesFolder[] {
     name: string,
   ): ExamplesFolder => {
     const idx = list.findIndex((f) => f.name === name);
-    if (idx >= 0) return list[idx];
-    const f: ExamplesFolder = { name, examples: [], examplesNumber: 0 };
+
+    if (idx >= 0) {
+      return list[idx];
+    }
+
+    const f: ExamplesFolder = {
+      name,
+      examples: [],
+      examplesNumber: 0,
+    };
+
     list.push(f);
+
     return f;
   };
 
   examples.forEach((ex) => {
     const segments = (ex?.path ?? '').split('/').filter(Boolean);
+
     const folderSegments = segments.slice(0, -1);
 
     if (folderSegments.length === 0) {
       const f = ensureFolder(root, '');
+
       f.examplesNumber++;
       f.examples.push(ex);
+
       return;
     }
 
     let cursor = root;
+
     folderSegments.forEach((seg, i) => {
       const folder = ensureFolder(cursor, seg);
+
       folder.examplesNumber++;
+
       if (i < folderSegments.length - 1) {
         cursor = folder.examples as unknown as ExamplesFolder[];
       } else {
@@ -1366,12 +1584,15 @@ export function getExamplesByFolder(examples: Example[]): ExamplesFolder[] {
 
   const sortFolders = (folders: ExamplesFolder[]): ExamplesFolder[] => {
     const sorted = sortItems(folders);
+
     sorted.forEach((f) => (f.examples = sortItems(f.examples)));
+
     return sorted;
   };
 
   return sortFolders(root);
 }
+
 const toReleaseId = (id: string, version?: string) =>
   id.includes('@') ? id : version ? `${id}@${version}` : id;
 
@@ -1381,19 +1602,26 @@ export async function downloadLibrary(
 ): Promise<void> {
   const releaseId = toReleaseId(id, version);
 
-  const details = await getLibrary({ id: releaseId });
+  const details = await getLibrary({
+    id: releaseId,
+  });
 
   const directUrl = details.downloadUrl;
 
   if (!directUrl) {
     throw new Error('error: download failed');
   }
+
   const link = document.createElement('a');
+
   link.href = directUrl;
   link.download = '';
   link.rel = 'noopener';
+
   document.body.appendChild(link);
+
   link.click();
+
   link.remove();
 }
 
@@ -1439,11 +1667,18 @@ export const useCachedSketchCompilation: UseGetCreatedSketchCompilation =
       }
     }, [deleteCompilationData, fqbn, initialSketchData, selectedFqbn]);
 
-    const { isLoading } = useQuery(
-      ['get-create-sketch-compilation', compilationId, compileDataWasStored],
-      () => {
+    const { data: cachedCompilation, isPending: isLoading } = useQuery({
+      queryKey: [
+        'get-create-sketch-compilation',
+        compilationId,
+        compileDataWasStored,
+      ],
+
+      queryFn: (): Promise<
+        ArduinoBuilderV2CompilationsResponse_BuilderApi | { status: 'noop' }
+      > => {
         if (compileDataWasStored) {
-          return Promise.resolve({ status: 'noop' });
+          return Promise.resolve({ status: 'noop' as const });
         }
 
         return compilationId
@@ -1452,38 +1687,54 @@ export const useCachedSketchCompilation: UseGetCreatedSketchCompilation =
               new Error('No sketch ID provided on session storage.'),
             );
       },
-      {
-        enabled:
-          !compileDataWasStored &&
-          cachedDataIsComplete &&
-          fqbn === selectedFqbn &&
-          !bypass,
-        onSuccess(
-          data:
-            | ArduinoBuilderV2CompilationsResponse_BuilderApi
-            | {
-                status: 'noop';
-              },
-        ) {
-          if (
-            data.status === 'noop' ||
-            data.status === 'failed' ||
-            data.status === 'cancelled'
-          )
-            return;
 
-          if (commandType === 'upload') {
-            uploadCommand({ existingCompilation: data });
-          }
+      enabled:
+        !compileDataWasStored &&
+        cachedDataIsComplete &&
+        fqbn === selectedFqbn &&
+        !bypass,
+    });
 
-          if (commandType === 'verify') {
-            verifyCommand(data);
-          }
+    // One resume per stored compilation id. The query data keeps its
+    // reference across renders, so the id is the marker.
+    const resumedCompilationId = useRef<string>();
 
-          deleteCompilationData();
-        },
-      },
-    );
+    useEffect(() => {
+      if (!cachedCompilation || !compilationId) {
+        return;
+      }
+
+      if (resumedCompilationId.current === compilationId) {
+        return;
+      }
+
+      resumedCompilationId.current = compilationId;
+
+      if (
+        cachedCompilation.status === 'noop' ||
+        cachedCompilation.status === 'failed' ||
+        cachedCompilation.status === 'cancelled'
+      ) {
+        return;
+      }
+
+      if (commandType === 'upload') {
+        uploadCommand({ existingCompilation: cachedCompilation });
+      }
+
+      if (commandType === 'verify') {
+        verifyCommand(cachedCompilation);
+      }
+
+      deleteCompilationData();
+    }, [
+      cachedCompilation,
+      commandType,
+      compilationId,
+      deleteCompilationData,
+      uploadCommand,
+      verifyCommand,
+    ]);
 
     return {
       cachedCompileIsLoading:

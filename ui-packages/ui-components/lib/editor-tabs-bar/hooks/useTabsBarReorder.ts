@@ -114,10 +114,10 @@ export const useTabsBarReorder: UseTabsBarReorder = ({
   }, []);
   const startPointerTracking = useCallback(
     (activatorEvent: Event) => {
-      if (
-        activatorEvent instanceof MouseEvent ||
-        activatorEvent instanceof PointerEvent
-      ) {
+      // PointerEvent derives from MouseEvent, so this one check covers both.
+      // Naming PointerEvent as well would throw a ReferenceError wherever the
+      // global is absent, which is the case in jsdom.
+      if (activatorEvent instanceof MouseEvent) {
         pointerRef.current = {
           x: activatorEvent.clientX,
           y: activatorEvent.clientY,
@@ -173,10 +173,7 @@ export const useTabsBarReorder: UseTabsBarReorder = ({
     (event: DragMoveEvent) => {
       const { activatorEvent, delta, over } = event;
 
-      if (
-        activatorEvent instanceof MouseEvent ||
-        activatorEvent instanceof PointerEvent
-      ) {
+      if (activatorEvent instanceof MouseEvent) {
         const pointer = pointerRef.current ?? {
           x: activatorEvent.clientX + delta.x,
           y: activatorEvent.clientY + delta.y,
@@ -231,10 +228,8 @@ export const useTabsBarReorder: UseTabsBarReorder = ({
 
         const mouseX =
           lastPointer?.x ??
-          (activatorEvent instanceof MouseEvent ||
-          activatorEvent instanceof PointerEvent
-            ? activatorEvent.clientX
-            : 0) + delta.x;
+          (activatorEvent instanceof MouseEvent ? activatorEvent.clientX : 0) +
+            delta.x;
 
         // Get the midpoint of the tab we are dropping on
         const overRect = over.rect;

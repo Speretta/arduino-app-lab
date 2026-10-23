@@ -24,36 +24,16 @@ export const headerMessages = defineMessages({
 });
 
 export const chatMessages = defineMessages({
-  placeholderSendBox: {
-    id: 'genai.placeholder-send-box',
-    defaultMessage: 'Ask a question to the Arduino AI Assistant or type ‘/’',
-    description: 'Placeholder for the send box in the chat',
-  },
   disclaimerArduinoAssistant: {
     id: 'genai.disclaimer-arduino-assistant',
     defaultMessage:
       'The Arduino AI Assistant can make mistakes. Consider checking important information.',
     description: 'Disclaimer for the Arduino Sketch Assistant',
   },
-  loadingMessage: {
-    id: 'genai.loading-message',
-    defaultMessage: 'Certainly! I will start searching for all need resources',
-    description: 'Loading message for the chat',
-  },
-  generatingRequirements: {
-    id: 'genai.generating-requirements',
-    defaultMessage: 'Generating requirements...',
-    description: 'Message for generating requirements',
-  },
   surveyLabel: {
     id: 'genai.survey-label',
     defaultMessage: 'How was your experience with this conversation?',
     description: 'Message for generating requirements',
-  },
-  surveyButton: {
-    id: 'genai.survey-button',
-    defaultMessage: 'Let us know',
-    description: 'Content of the link for opening survey for AI chat',
   },
   tryHintsMessage: {
     id: 'genai.try-hints-message',
@@ -70,11 +50,6 @@ export const chatMessages = defineMessages({
     defaultMessage: 'Explain this function: map(input, 0, 255, 0, 10)',
     description: 'Explain function example button',
   },
-  generateSketchExample: {
-    id: 'genai.generate-sketch-example',
-    defaultMessage: 'Generate Sketch for...',
-    description: 'Generate sketch example button',
-  },
   suggestProjectExample: {
     id: 'genai.suggest-project-example',
     defaultMessage: 'Suggest a project idea using a strip LED',
@@ -89,36 +64,6 @@ export const chatMessages = defineMessages({
     id: 'genai.new-messages',
     defaultMessage: 'New messages',
     description: 'New messages button',
-  },
-  reloadError: {
-    id: 'genai.reload-error',
-    defaultMessage: 'Reload error',
-    description: 'Reload error button',
-  },
-  goToError: {
-    id: 'genai.go-to-error',
-    defaultMessage: 'Go to error',
-    description: 'Go to error button',
-  },
-  fixError: {
-    id: 'genai.fix-error',
-    defaultMessage: 'Fix error',
-    description: 'Fix error button',
-  },
-  fixErrorMessage: {
-    id: 'genai.fix-error-message',
-    defaultMessage: 'Fix the error',
-    description: 'Fix error message',
-  },
-  applyFix: {
-    id: 'genai.apply-fix',
-    defaultMessage: 'Apply fix',
-    description: 'Apply fix button',
-  },
-  applyFixMessage: {
-    id: 'genai.apply-fix-message',
-    defaultMessage: 'Apply recommended fix in code',
-    description: 'Apply fix message',
   },
   upgradePlan: {
     id: 'genai.upgrade-plan',

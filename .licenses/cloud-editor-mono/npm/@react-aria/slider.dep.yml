@@ -1,9 +1,9 @@
 ---
 name: "@react-aria/slider"
-version: 3.7.15
+version: 3.9.1
 type: npm
 summary: Slider
-homepage: 
+homepage:
 license: apache-2.0
 licenses:
 - sources: LICENSE

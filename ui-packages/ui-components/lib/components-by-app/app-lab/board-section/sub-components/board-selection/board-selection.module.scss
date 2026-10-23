@@ -79,9 +79,13 @@
 .dropdown-menu-button {
     height: 28px;
     width: 28px;
-    padding: 7px;
     border-radius: 8px;
     background: var(--component-bg-flexible, #aeb8b826) !important;
+
+    svg {
+        height: 16px;
+        width: 16px;
+    }
 
     &:hover {
         background:

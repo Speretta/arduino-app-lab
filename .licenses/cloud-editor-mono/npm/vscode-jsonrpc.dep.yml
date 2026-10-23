@@ -1,6 +1,6 @@
 ---
 name: vscode-jsonrpc
-version: 8.2.0
+version: 9.0.2
 type: npm
 summary: A json rpc implementation over streams
 homepage:

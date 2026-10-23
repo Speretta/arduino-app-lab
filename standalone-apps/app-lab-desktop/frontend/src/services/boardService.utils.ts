@@ -1,5 +1,5 @@
+import { get, set } from '@cloud-editor-mono/core-ui/app-lab/persistent-store';
 import { Board } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
-import { get, set } from 'idb-keyval';
 
 const LAST_SEEN_USB_BOARD_KEY = 'last-seen-usb-board';
 const IGNORE_NETWORK_BOARD_AFTER_USB_DISCOVER_MS = 70_000;

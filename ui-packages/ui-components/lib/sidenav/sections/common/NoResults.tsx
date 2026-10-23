@@ -1,4 +1,8 @@
-import { NoResults as NoResultsIcon } from '@cloud-editor-mono/images/assets/icons';
+import { useTheme } from '@bcmi-labs/art-ui';
+import {
+  NoResults as NoResultsIcon,
+  NoResultsDark,
+} from '@cloud-editor-mono/images/assets/icons';
 import clsx from 'clsx';
 import { MessageDescriptor } from 'react-intl';
 
@@ -17,12 +21,20 @@ interface NoResultsProps {
 const NoResults: React.FC<NoResultsProps> = (props: NoResultsProps) => {
   const { resourceName = 'item', title, message, classes } = props;
   const { formatMessage } = useI18n();
+  const { themeName } = useTheme();
 
   return (
     <div className={clsx(styles['no-results'], classes?.container)}>
-      <NoResultsIcon
-        className={clsx(styles['ex-no-results-image'], classes?.image)}
-      />
+      {themeName === 'light' ? (
+        <NoResultsIcon
+          className={clsx(styles['ex-no-results-image'], classes?.image)}
+        />
+      ) : (
+        <NoResultsDark
+          className={clsx(styles['ex-no-results-image'], classes?.image)}
+        />
+      )}
+
       <Small bold>
         {title ? formatMessage(title) : formatMessage(messages.noResults)}
       </Small>

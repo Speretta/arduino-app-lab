@@ -1,6 +1,10 @@
 import { FileExt } from '../language/setup';
 import { LspId } from './lsp-types';
 
+// Must match LspFileExtensions in
+// standalone-apps/app-lab-desktop/internal/lsp/lsp_workspace.go;
+// standalone-apps/app-lab-desktop/frontend/src/services/lspFileExtensions.test.ts
+// fails when the two lists differ.
 export const LSP_LANGS = {
   [FileExt.Ino]: 'arduino',
   [FileExt.C]: 'arduino',
@@ -16,9 +20,10 @@ export const LSP_LANGS = {
   [FileExt.Tsx]: 'typescript',
   [FileExt.Jsx]: 'typescript',
   [FileExt.Html]: 'html',
-  [FileExt.Css]: 'css', 
-  [FileExt.Scss]: 'css', 
+  [FileExt.Css]: 'css',
+  [FileExt.Scss]: 'css',
 // eslint-disable-next-line prettier/prettier
 } as const satisfies Partial<Record<FileExt, LspId>>;
 
+export const LSP_WITH_PROVIDE_FORMATTER_INIT_OPTIONS: LspId[] = ['html', 'css'];
  

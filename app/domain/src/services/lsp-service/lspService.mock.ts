@@ -28,4 +28,12 @@ export const MockLspService: LspService = {
   async getLspWorkspaceFile(): Promise<string> {
     return '';
   },
+
+  async listLspSketchFiles(): Promise<string[]> {
+    return [];
+  },
+
+  async listLspFiles(): Promise<string[]> {
+    return [];
+  },
 };

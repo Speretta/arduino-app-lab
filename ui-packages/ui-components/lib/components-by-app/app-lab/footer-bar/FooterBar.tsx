@@ -64,7 +64,6 @@ const FooterBar: React.FC<FooterBarProps> = (props: FooterBarProps) => {
   } = footerBarLogic();
 
   const showVersion = isFFEnabled('SHOW_VERSION_IN_FOOTER');
-  const showAiAssistant = isFFEnabled('AI_ASSISTANT');
 
   const {
     appsStatus: { runningApp },
@@ -80,11 +79,14 @@ const FooterBar: React.FC<FooterBarProps> = (props: FooterBarProps) => {
     currentActionStatus === ActionStatus.Pending &&
     currentAction === Action.Stop;
 
-  const { props: tooltipPropsAppName, renderTooltip: renderTooltipAppName } =
-    useTooltip({
-      content: runningApp?.name,
-      timeout: 0,
-    });
+  const {
+    props: { ref: appNameRef, ...tooltipPropsAppName },
+    renderTooltip: renderTooltipAppName,
+  } = useTooltip({
+    content: runningApp?.name,
+    timeout: 0,
+    renderDelay: 500,
+  });
 
   const { props: tooltipLspLoading, renderTooltip: renderTooltipLspLoading } =
     useTooltip({
@@ -104,6 +106,12 @@ const FooterBar: React.FC<FooterBarProps> = (props: FooterBarProps) => {
               reason: lspState.message,
             })
           : formatMessage(messages.lspErrorTooltipNoReason),
+      timeout: 0,
+    });
+
+  const { props: tooltipPropsStop, renderTooltip: renderTooltipStop } =
+    useTooltip({
+      content: formatMessage(messages.stopButton),
       timeout: 0,
     });
 
@@ -162,7 +170,7 @@ const FooterBar: React.FC<FooterBarProps> = (props: FooterBarProps) => {
             />
           ) : null}
 
-          {systemResources.cpu ? (
+          {systemResources.cpu?.label ? (
             <BoardHardware
               icon={<HardwareCpu />}
               title={`${systemResources.cpu.value?.used?.toFixed(0)}%`}
@@ -199,40 +207,45 @@ const FooterBar: React.FC<FooterBarProps> = (props: FooterBarProps) => {
           )}
           {runningApp ? (
             <div className={styles['footer-section']}>
-              <div
-                role="button"
-                tabIndex={0}
-                className={styles['app-name-container']}
+              <Button
+                ref={
+                  appNameRef as unknown as React.RefObject<HTMLButtonElement>
+                }
                 {...tooltipPropsAppName}
-                onKeyUp={(): void => onOpenApp(runningApp)}
                 onClick={(): void => onOpenApp(runningApp)}
+                variant={ButtonVariant.Tertiary}
+                appearance={ButtonAppearance.LowContrast}
+                size={ButtonSize.XSmall}
               >
-                <span>{runningApp.icon}</span>
-                <XXSmall className={styles['app-name']}>
-                  {runningApp.name}
-                </XXSmall>
-                {renderTooltipAppName(styles['app-name-tooltip-content'])}
-              </div>
+                <span className={styles['app-content']}>
+                  <span className={styles['app-icon']}>{runningApp.icon}</span>
+                  <span className={styles['app-name']}>{runningApp.name}</span>
+                </span>
+              </Button>
+              {renderTooltipAppName()}
               {currentActionStatus === ActionStatus.Pending && (
                 <div className={styles['app-name-loader']}>
                   <Spinner />
                 </div>
               )}
-              <Button
-                onClick={stopApp}
-                variant={ButtonVariant.Secondary}
-                size={ButtonSize.XXSmall}
-                appearance={ButtonAppearance.Destructive}
-                Icon={Stop}
-                iconPosition="left"
-                disabled={stopDisabled}
-                classes={{
-                  button: styles['stop-button'],
-                  textButtonText: styles['stop-button-text'],
-                }}
-              >
-                {formatMessage(messages.stopButton)}
-              </Button>
+              <div {...tooltipPropsStop}>
+                <Button
+                  onClick={stopApp}
+                  variant={ButtonVariant.Secondary}
+                  size={ButtonSize.XSmall}
+                  appearance={ButtonAppearance.Destructive}
+                  Icon={Stop}
+                  iconPosition="left"
+                  disabled={stopDisabled}
+                  classes={{
+                    button: styles['stop-button'],
+                    textButtonText: styles['stop-button-text'],
+                  }}
+                >
+                  {formatMessage(messages.stopButton)}
+                </Button>
+                {renderTooltipStop()}
+              </div>
             </div>
           ) : null}
 
@@ -256,23 +269,21 @@ const FooterBar: React.FC<FooterBarProps> = (props: FooterBarProps) => {
 
           <Network networkItem={systemResources.network} boardIP={boardIP} />
 
-          {showAiAssistant ? (
-            <div className={styles['ai-assistant-entry']}>
-              <AiAssistantEntry
-                agentLabel={formatMessage(messages.aiAssistantEntryAgent)}
-                editorLabel={formatMessage(messages.aiAssistantEntryEditor)}
-                agentModeActive={aiAssistantActive}
-                onClick={onOpenAiAssistant}
-                shine={agentModeEntryShine}
+          <div className={styles['ai-assistant-entry']}>
+            <AiAssistantEntry
+              agentLabel={formatMessage(messages.aiAssistantEntryAgent)}
+              editorLabel={formatMessage(messages.aiAssistantEntryEditor)}
+              agentModeActive={aiAssistantActive}
+              onClick={onOpenAiAssistant}
+              shine={agentModeEntryShine}
+            />
+            {agentModeTooltip.variant ? (
+              <AgentModeTooltip
+                variant={agentModeTooltip.variant}
+                onDismiss={agentModeTooltip.onDismiss}
               />
-              {agentModeTooltip.variant ? (
-                <AgentModeTooltip
-                  variant={agentModeTooltip.variant}
-                  onDismiss={agentModeTooltip.onDismiss}
-                />
-              ) : null}
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </div>
 

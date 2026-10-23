@@ -2,7 +2,6 @@ import {
   AccountArduinoCloud,
   AccountConnectedBoards,
   AccountCustomAiModels,
-  ArduinoLogo,
 } from '@cloud-editor-mono/images/assets/icons';
 import { forwardRef, useCallback, useImperativeHandle, useState } from 'react';
 
@@ -78,19 +77,20 @@ const Login = forwardRef((props: LoginProps, ref) => {
             {formatMessage(messages.connectedBoards)}
           </XSmall>
         </div>
-        <Button
-          variant={ButtonVariant.Secondary}
-          size={ButtonSize.XSmall}
-          onClick={(): void => {
-            login({ isFromAccount: true });
-          }}
-          classes={{
-            button: styles['login-button'],
-          }}
-        >
-          {formatMessage(messages.signInButton)}
-          <ArduinoLogo />
-        </Button>
+        <div>
+          <Button
+            variant={ButtonVariant.Primary}
+            size={ButtonSize.XSmall}
+            onClick={(): void => {
+              login({ isFromAccount: true });
+            }}
+            classes={{
+              button: styles['login-button'],
+            }}
+          >
+            {formatMessage(messages.signInButton)}
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -9,11 +9,11 @@ import {
 } from '@codemirror/lsp-client';
 import { EditorView } from '@codemirror/view';
 
-import { FileNode } from '../../../../file-tree';
-import { LspState } from '../../..';
+import { LSP_WITH_PROVIDE_FORMATTER_INIT_OPTIONS, LspState } from '../../..';
 import { isWithinUri, joinFileUri, relativeUriPath } from '../lsp-file-uri';
 import {
   LspClientCapabilities,
+  lspDiagnosticMessage,
   LspId,
   LspMessage,
   LspProgressParams,
@@ -36,7 +36,6 @@ interface CreateLspClientParams {
     openAtIndex?: number;
     isPreview?: boolean;
   }) => void;
-  filesList?: FileNode[];
   sendLspMessage?: (lspId: LspId, message: LspMessage) => Promise<void>;
   subscribeLspMessages?: (
     lspId: LspId,
@@ -55,7 +54,6 @@ export const createLspClient = ({
   lspId,
   fileId,
   selectFile,
-  filesList,
   sendLspMessage,
   subscribeLspMessages,
   getLspWorkspaceFile,
@@ -93,13 +91,17 @@ export const createLspClient = ({
     ),
     rootUri,
     timeout: 10_000,
+    initializationOptions: {
+      ...(LSP_WITH_PROVIDE_FORMATTER_INIT_OPTIONS.includes(lspId) && {
+        provideFormatter: true,
+      }),
+    },
     workspace: (client): LspClientWorkspace =>
       new LspClientWorkspace(
         client,
         lspId,
         workspaceUri,
         openEditorFile,
-        filesList,
         getLspWorkspaceFile,
         getActiveView,
         setFileValue,
@@ -169,7 +171,7 @@ const getNotificationHandlers = (
     /**
      * Cache raw LSP diagnostics for use as context in `textDocument/codeAction` requests.
      *
-     * Render diagnostic squiggles in every pane(split view).
+     * Render diagnostic squiggles in every panel(split view).
      * Return true to suppress the single-view handler.
      */
     'textDocument/publishDiagnostics': (client, params): boolean => {
@@ -223,7 +225,7 @@ const getNotificationHandlers = (
                 plugin.fromPosition(diagnostic.range.end, plugin.syncedDoc),
               ),
               severity: LSP_DIAGNOSTIC_TO_CM_SEVERITY[diagnostic.severity ?? 1],
-              message: diagnostic.message,
+              message: lspDiagnosticMessage(diagnostic.message),
             })),
           ),
         );

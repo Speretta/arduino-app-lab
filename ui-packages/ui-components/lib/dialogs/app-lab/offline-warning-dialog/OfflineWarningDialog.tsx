@@ -19,7 +19,7 @@ export const OfflineWarningDialog: React.FC<OfflineWarningDialogProps> = ({
 }: OfflineWarningDialogProps) => {
   const { formatMessage } = useI18n();
 
-  const { open, onOpenChange, onContinue, onNetworkSettings } = logic;
+  const { open, onOpenChange, onContinue, onNetworkSettings } = logic();
 
   return (
     <AppLabDialog

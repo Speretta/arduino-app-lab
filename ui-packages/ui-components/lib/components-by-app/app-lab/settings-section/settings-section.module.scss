@@ -7,7 +7,7 @@
 }
 
 .settings-section-banner {
-  background-color: var(--component-bg-hover, #aeb8b826);
+  background-color: var(--component-bg-flexible, #AEB8B826);
   border-radius: 8px;
   padding: 16px;
 }
@@ -90,7 +90,7 @@
 .settings-section-info {
   width: 16px;
   height: 16px;
-  background: #AEB8B826;
+  background: var(--component-bg-flexible, #AEB8B826);
   border-radius: 32px;
   display: flex;
   justify-content: center;

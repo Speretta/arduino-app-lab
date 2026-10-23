@@ -27,6 +27,15 @@ import {
 } from './fetch.type';
 
 function defaultHandleError(error: WretchError): void {
+  // With errorType 'json', wretch puts the parsed body in `message`, which
+  // prints as "[object Object]".
+  if (error.status) {
+    console.error(
+      `HTTP ${error.status} ${error.response?.url ?? ''}`,
+      error.json ?? error.text,
+    );
+    return;
+  }
   console.error(error);
 }
 
@@ -182,6 +191,7 @@ function createRawRequest({
   url,
   token,
   headers,
+  abortController,
 }: CreateRawRequestOptions): BaseRequest<RawResponse> {
   let base = (token ? wretch(url).auth(`Bearer ${token}`) : wretch(url))
     .addon(AbortAddon())
@@ -191,6 +201,10 @@ function createRawRequest({
     base = base.headers(headers);
   }
 
+  if (abortController) {
+    base = base.signal(abortController);
+  }
+
   return base;
 }
 
@@ -198,12 +212,16 @@ export async function httpGetRaw({
   url,
   endpoint,
   token,
+  params,
+  abortController,
   handleError = defaultHandleError,
 }: HttpGetRawOptions): Promise<RawResponse | void> {
-  const api = createRawRequest({ url, token });
+  const api = createRawRequest({ url, token, abortController });
 
   try {
-    const response = await api.get(endpoint);
+    const response = await (params
+      ? queryRequest({ baseRequest: api, params }).get(endpoint)
+      : api.get(endpoint));
     return response;
   } catch (error) {
     handleError(error as WretchError);
@@ -216,9 +234,10 @@ export async function httpPostRaw({
   body = {},
   token,
   headers,
+  abortController,
   handleError = defaultHandleError,
 }: HttpPostRawOptions): Promise<RawResponse | void> {
-  const api = createRawRequest({ url, token, headers });
+  const api = createRawRequest({ url, token, headers, abortController });
 
   try {
     const response = await api.post(body, endpoint);
@@ -302,9 +321,15 @@ export async function httpFormDataPost<T>({
   wretchOptions = {},
   body = {},
   token,
+  abortController,
   handleError = defaultHandleError,
 }: HttpFormDataPostOptions): Promise<T | void> {
-  const api = createRequest<T>({ url: url + endpoint, wretchOptions, token });
+  const api = createRequest<T>({
+    url: url + endpoint,
+    wretchOptions,
+    token,
+    abortController,
+  });
 
   try {
     const response = await api

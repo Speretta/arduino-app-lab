@@ -2,10 +2,10 @@ import { Annotation, Extension } from '@codemirror/state';
 import { Text } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 
-import { FileNode } from '../file-tree';
 import { GutterData, ViewInstances } from './codeMirrorViewInstances';
 import { KeywordMap } from './extensions/keywords/keywords.type';
 import { LspClientRef } from './extensions/lsp/lsp-client/lsp-client-types';
+import { LspReferencesPanelActions } from './extensions/lsp/lsp-references/lsp-references-types';
 import { LspId, LspMessage } from './extensions/lsp/lsp-types';
 import { CodeEditorOnChangeType } from './utils';
 
@@ -39,7 +39,7 @@ export type LspState =
       progress?: number;
     };
 
-export interface UseCodeEditorParams {
+export type UseCodeEditorParams = {
   viewInstanceId: ViewInstances;
   getValueInstanceId?: GetCodeInstanceId;
   getExt?: GetCodeExt;
@@ -60,7 +60,6 @@ export interface UseCodeEditorParams {
   isLspEnabled?: boolean;
   lspWorkspaceDir?: string;
   lspClients?: Map<LspId, LspClientRef>;
-  filesList?: FileNode[];
   selectFile?: (params: {
     fileId?: string;
     openAtIndex?: number;
@@ -86,9 +85,9 @@ export interface UseCodeEditorParams {
    * lazily on first open.
    */
   ensureLspFileValue?: (fileId: string) => Promise<string | undefined>;
-  getActivePane?: () => 'A' | 'B';
+  getActiveEditorPanel?: () => 'A' | 'B';
   onLspStateChange?: (lspId: LspId, state: LspState) => void;
-}
+} & LspReferencesPanelActions;
 
 export enum CodeMirrorEventAnnotation {
   FileTabLoaded = 'fileTabLoaded',

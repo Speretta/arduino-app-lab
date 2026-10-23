@@ -1,9 +1,9 @@
 ---
 name: "@react-stately/overlays"
-version: 3.6.13
+version: 3.7.1
 type: npm
 summary: Spectrum UI components in React
-homepage: 
+homepage:
 license: apache-2.0
 licenses:
 - sources: LICENSE

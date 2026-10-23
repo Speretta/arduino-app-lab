@@ -32,14 +32,16 @@ func GetBoards(ctx context.Context) ([]*Board, error) {
 	}
 
 	boards, err := board.FromFQBN(ctx, supportedBoards)
+	// No supported board attached is a normal state, not an error.
+	// Non-nil, so it serializes as [] and not null.
+	if isNoPortsError(err) || (err == nil && len(boards) == 0) {
+		return []*Board{}, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failing to get board from FQBN: %w", err)
 	}
-	if len(boards) == 0 {
-		return nil, fmt.Errorf("no boards found for FQBNs %s", strings.Join(supportedBoards, ", "))
-	}
 
-	var result []*Board
+	result := make([]*Board, 0, len(boards))
 	for _, b := range boards {
 		board, err := New(&b)
 		if err != nil {
@@ -49,6 +51,12 @@ func GetBoards(ctx context.Context) ([]*Board, error) {
 		result = append(result, board)
 	}
 	return result, nil
+}
+
+// isNoPortsError reports whether err is FromFQBN finding no port at all. arduino-app-cli
+// returns this case as a plain string, so the text is the only signal.
+func isNoPortsError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "no hardware ID found")
 }
 
 func GetSbcBoard(ctx context.Context) (*Board, error) {

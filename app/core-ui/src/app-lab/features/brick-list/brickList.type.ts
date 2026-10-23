@@ -1,17 +1,20 @@
 import { BrickListItem } from '@cloud-editor-mono/infrastructure';
-import { BrickDetailLogic } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+import {
+  BrickDetailLogic,
+  BrickDetailTabId,
+} from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 
 export interface UseBrickListLogicParams {
   brickId?: string;
-  tab?: string;
+  tab?: BrickDetailTabId;
 }
 
 export interface UseBrickListLogic {
   bricks: BrickListItem[];
-  isLoading: boolean;
+  isPending: boolean;
   selectedBrick: BrickListItem | null;
   brickDetailLogic: BrickDetailLogic;
   setSelectedBrick: (brick: BrickListItem | null) => void;
-  selectedTab?: string;
-  setSelectedTab: (tab: string) => void;
+  selectedTab?: BrickDetailTabId;
+  setSelectedTab: (tab: BrickDetailTabId) => void;
 }

@@ -1,11 +1,6 @@
 import { defineMessages } from 'react-intl';
 
 export const messages = defineMessages({
-  aiModelBadge: {
-    id: 'brickDetail.aiModelBadge',
-    defaultMessage: 'AI',
-    description: 'Badge label indicating the brick uses an AI model',
-  },
   overviewTab: {
     id: 'brickDetail.overview',
     defaultMessage: 'Overview',
@@ -23,13 +18,8 @@ export const messages = defineMessages({
   },
   aiModelsTab: {
     id: 'brickDetail.aiModels',
-    defaultMessage: 'AI models',
+    defaultMessage: 'AI Models',
     description: 'Label for the AI models tab',
-  },
-  aiModelInUse: {
-    id: 'brickDetail.aiModelInUse',
-    defaultMessage: 'Model in use',
-    description: 'Label indicating the AI model currently in use',
   },
   fileNotFound: {
     id: 'brickDetail.fileNotFound',
@@ -51,58 +41,37 @@ export const messages = defineMessages({
     defaultMessage: 'See example',
     description: 'Label for the button to see the example',
   },
-  trainNewModel: {
-    id: 'brickDetail.trainNewModel',
-    defaultMessage: 'Train new AI model',
-    description: 'Label for the button and title to train a new AI model',
+  suggestedModelsSectionTitle: {
+    id: 'brickDetail.suggestedModelsSectionTitle',
+    defaultMessage: 'Suggested models',
+    description:
+      'Title of the section listing the models suggested for a brick',
+  },
+  userModelSectionTitle: {
+    id: 'brickDetail.userModelSectionTitle',
+    defaultMessage: 'Bring your own model',
+    description:
+      'Title of the section to link a user-provided AI model to the brick',
+  },
+  trainNewModelSectionTitle: {
+    id: 'brickDetail.trainNewModelSectionTitle',
+    defaultMessage: 'Train new AI Model on Edge Impulse',
+    description: 'Title of the section to train a new AI model on Edge Impulse',
+  },
+  trainNewModelButton: {
+    id: 'brickDetail.trainNewModelButton',
+    defaultMessage: 'Train new AI Model',
+    description: 'Label for the button to train a new AI model',
   },
   trainNewModelDescription: {
     id: 'brickDetail.trainNewModelDescription',
     defaultMessage:
-      'Create and train your own AI model using Edge Impulse Studio. An Arduino account login is required.',
+      'Create and train your own AI Model using Edge Impulse Studio. An <strong>Arduino account login is required.</strong>',
     description: 'Description for the action to train a new AI model',
   },
-  linkHuggingFace: {
-    id: 'aiModel.linkHuggingFace',
-    defaultMessage: 'Link model from Hugging Face',
-    description: 'Label for the link to view the model on Hugging Face',
-  },
-  customAIModelTitle: {
-    id: 'brickDetail.customAIModelTitle',
-    defaultMessage: 'Bring your own model',
-    description: 'Title for custom AI models that can be linked to the brick',
-  },
-  uploadGGUF: {
-    id: 'aiModel.uploadGGUF',
-    defaultMessage: 'Upload Model .GGUF',
-    description: 'Label for the button to upload a GGUF model',
-  },
-});
-
-export const aiModelMessages = defineMessages({
-  moreInfo: {
-    id: 'aiModel.moreInfo',
-    defaultMessage: '+ More info',
-    description: 'Label for the button to show more info',
-  },
-  lessInfo: {
-    id: 'aiModel.lessInfo',
-    defaultMessage: '- Less info',
-    description: 'Label for the button to show less info',
-  },
-  modelCard: {
-    id: 'aiModel.modelCard',
-    defaultMessage: 'Model card',
-    description: 'Label for the model card',
-  },
-  source: {
-    id: 'aiModel.source',
-    defaultMessage: 'Source: {source}',
-    description: 'Label for the source',
-  },
-  eiProjectID: {
-    id: 'aiModel.eiProjectID',
-    defaultMessage: '{isEI}Project ID: {id}',
-    description: 'Label for the EI Project ID',
+  linkHuggingFaceButton: {
+    id: 'brickDetail.linkHuggingFaceButton',
+    defaultMessage: 'Add model from Hugging Face',
+    description: 'Label for the button to add a model from Hugging Face',
   },
 });

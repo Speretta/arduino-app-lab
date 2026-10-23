@@ -68,6 +68,8 @@ const makeParams = (overrides: Partial<Params> = {}): Params => ({
   openTabIds: [],
   refreshFileContents: vi.fn(() => Promise.resolve()),
   deleteFile: vi.fn(() => Promise.resolve()),
+  unlistDir: vi.fn(),
+  relistDir: vi.fn(),
   ...overrides,
 });
 
@@ -206,7 +208,46 @@ describe('useFileWatch', () => {
         h.emitRefresh({ kind: 'dir', path: '/apps/foo/newdir', op: 'create' }),
       );
 
-      expect(h.invalidateQueries).toHaveBeenCalledWith(['app-files', 'app-1']);
+      expect(h.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['app-dir', 'app-1', ''],
+        exact: true,
+      });
+    });
+
+    // The sidebar reads one query per directory, so the flat index alone would
+    // leave the change invisible.
+    it('invalidates the listing of the directory that changed', () => {
+      renderHook(() => useFileWatch(makeParams()));
+
+      act(() =>
+        h.emitRefresh({
+          kind: 'dir',
+          path: '/apps/foo/python/lib/util.py',
+          op: 'create',
+        }),
+      );
+
+      expect(h.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['app-dir', 'app-1', 'python/lib'],
+        exact: true,
+      });
+    });
+
+    it('invalidates the root listing for a change at the top level', () => {
+      renderHook(() => useFileWatch(makeParams()));
+
+      act(() =>
+        h.emitRefresh({
+          kind: 'dir',
+          path: '/apps/foo/notes.md',
+          op: 'create',
+        }),
+      );
+
+      expect(h.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['app-dir', 'app-1', ''],
+        exact: true,
+      });
     });
 
     it('invalidates the app file tree on a dir event with no op (legacy payload)', () => {
@@ -214,7 +255,10 @@ describe('useFileWatch', () => {
 
       act(() => h.emitRefresh({ kind: 'dir', path: '/apps/foo/newdir' }));
 
-      expect(h.invalidateQueries).toHaveBeenCalledWith(['app-files', 'app-1']);
+      expect(h.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['app-dir', 'app-1', ''],
+        exact: true,
+      });
     });
 
     it('closes an open file through deleteFile (stream) on a dir remove of that file', () => {
@@ -235,7 +279,7 @@ describe('useFileWatch', () => {
       renderHook(() =>
         useFileWatch(
           makeParams({
-            // 'test/a' is open (e.g. in pane B); the folder itself is not a tab.
+            // 'test/a' is open (e.g. in panel B); the folder itself is not a tab.
             openTabIds: ['test/a', 'other.py'],
             deleteFile,
           }),
@@ -253,6 +297,57 @@ describe('useFileWatch', () => {
       expect(deleteFile).toHaveBeenCalledWith('test/a', { source: 'stream' });
     });
 
+    // A folder renamed on disk arrives as remove(old) + create(new). Without
+    // this the old path stays listed and a folder that later takes the name is
+    // shown holding the old contents.
+    it('stops listing a removed directory and everything under it', () => {
+      const unlistDir = vi.fn();
+      renderHook(() => useFileWatch(makeParams({ unlistDir })));
+
+      act(() =>
+        h.emitRefresh({ kind: 'dir', path: '/apps/foo/test', op: 'remove' }),
+      );
+
+      expect(unlistDir).toHaveBeenCalledWith('test');
+    });
+
+    it('does not unlist anything on a dir create', () => {
+      const unlistDir = vi.fn();
+      renderHook(() => useFileWatch(makeParams({ unlistDir })));
+
+      act(() =>
+        h.emitRefresh({ kind: 'dir', path: '/apps/foo/test', op: 'create' }),
+      );
+
+      expect(unlistDir).not.toHaveBeenCalled();
+    });
+
+    // A folder replaced in one step (`mv sub sub_moved && mkdir sub`) is
+    // debounced by the backend into this one create, so a create has to be
+    // able to invalidate a listing the tree is still showing. The tree ignores
+    // a path it does not list, which is what a plain file create is.
+    it('relists a directory on a dir create', () => {
+      const relistDir = vi.fn();
+      renderHook(() => useFileWatch(makeParams({ relistDir })));
+
+      act(() =>
+        h.emitRefresh({ kind: 'dir', path: '/apps/foo/test', op: 'create' }),
+      );
+
+      expect(relistDir).toHaveBeenCalledWith('test');
+    });
+
+    it('does not relist anything on a dir remove', () => {
+      const relistDir = vi.fn();
+      renderHook(() => useFileWatch(makeParams({ relistDir })));
+
+      act(() =>
+        h.emitRefresh({ kind: 'dir', path: '/apps/foo/test', op: 'remove' }),
+      );
+
+      expect(relistDir).not.toHaveBeenCalled();
+    });
+
     it('only refetches the tree (no deleteFile) on a dir remove with nothing open under the path', () => {
       const deleteFile = vi.fn(() => Promise.resolve());
       renderHook(() =>
@@ -264,7 +359,10 @@ describe('useFileWatch', () => {
       );
 
       expect(deleteFile).not.toHaveBeenCalled();
-      expect(h.invalidateQueries).toHaveBeenCalledWith(['app-files', 'app-1']);
+      expect(h.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['app-dir', 'app-1', ''],
+        exact: true,
+      });
     });
 
     it('syncs LS content on a dir create of a non-open file (atomic save)', () => {
@@ -348,16 +446,18 @@ describe('useFileWatch', () => {
         h.emitRefresh({ kind: 'manifest', path: '/apps/foo/app.yaml' }),
       );
 
-      expect(h.invalidateQueries).toHaveBeenCalledWith(['app-files', 'app-1']);
-      expect(h.invalidateQueries).toHaveBeenCalledWith(['app-bricks', 'app-1']);
-      expect(h.invalidateQueries).toHaveBeenCalledWith([
-        'app-sketch-libraries',
-        'app-1',
-      ]);
-      expect(h.invalidateQueries).toHaveBeenCalledWith([
-        'list-my-apps',
-        'app-1',
-      ]);
+      expect(h.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['app-dir', 'app-1'],
+      });
+      expect(h.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['app-bricks', 'app-1'],
+      });
+      expect(h.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['app-sketch-libraries', 'app-1'],
+      });
+      expect(h.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['list-my-apps', 'app-1'],
+      });
       expect(refreshFileContents).toHaveBeenCalledWith(
         ['app.yaml', 'sketch/sketch.yaml'],
         'external-change',

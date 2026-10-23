@@ -1,4 +1,5 @@
-import { CaretDown } from '@cloud-editor-mono/images/assets/icons';
+import { CaretDown, Checkmark } from '@cloud-editor-mono/images/assets/icons';
+import type { Key } from '@react-types/shared';
 import clsx from 'clsx';
 import React, {
   forwardRef,
@@ -21,6 +22,8 @@ type SelectProps<T, L extends MessageDescriptor | string> = Pick<
   id?: string;
   name?: string;
   value: string;
+  // Marks this item with a checkmark in the open menu.
+  selectedKey?: Key;
   label?: string;
   disabled?: boolean;
   onChange: NonNullable<DropdownMenuButtonProps<T, L>['onAction']>;
@@ -86,8 +89,29 @@ export const Select = forwardRef(
       onChange,
       onEnter,
       sections,
+      selectedKey,
       classes,
     } = props;
+
+    const menuSections =
+      selectedKey === undefined
+        ? sections
+        : sections.map((section) => ({
+            ...section,
+            items: section.items.map((item) =>
+              item.id === selectedKey
+                ? {
+                    ...item,
+                    labelSuffix: (
+                      <Checkmark
+                        aria-hidden="true"
+                        className={styles['selected-check']}
+                      />
+                    ),
+                  }
+                : item,
+            ),
+          }));
 
     return (
       <div
@@ -122,7 +146,7 @@ export const Select = forwardRef(
         {!disabled && (
           <DropdownMenuButton
             isOpen={open}
-            sections={sections}
+            sections={menuSections}
             classes={{
               dropdownMenu: clsx(
                 styles['dropdown-menu'],
@@ -137,6 +161,10 @@ export const Select = forwardRef(
                 classes?.dropdownMenuButtonWrapper,
               ),
               dropdownMenuPopover: styles['dropdown-menu-popover'],
+              dropdownMenuItem:
+                selectedKey !== undefined
+                  ? styles['dropdown-menu-item']
+                  : undefined,
             }}
             useStaticPosition={false}
             onAction={(key): void => {

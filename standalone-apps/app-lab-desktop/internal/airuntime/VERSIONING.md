@@ -17,7 +17,7 @@ ever resolved as `@latest`.
 | Thing | Pinned in | Current value |
 |---|---|---|
 | Node version | `defaultNodeVersion` in [`node.go`](node.go) | `v22.16.0` |
-| Agent npm packages | [`runtime-deps/package.json`](runtime-deps/package.json) | `@anthropic-ai/claude-code` `2.1.220`, `@agentclientprotocol/claude-agent-acp` `0.63.0` |
+| Agent npm packages | [`runtime-deps/package.json`](runtime-deps/package.json) | `@anthropic-ai/claude-code` `2.1.287`, `@agentclientprotocol/claude-agent-acp` `0.85.0` |
 | Full transitive tree | [`runtime-deps/package-lock.json`](runtime-deps/package-lock.json) | locked, with integrity hashes |
 | Manifest layout | `manifestSchema` in [`manifest.go`](manifest.go) | `2` |
 

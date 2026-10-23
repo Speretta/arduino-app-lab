@@ -82,7 +82,7 @@ const SystemPanel = forwardRef<HTMLDivElement, SystemPanelProps>(
           </span>
         ) : null}
 
-        {systemResources.cpu ? (
+        {systemResources.cpu?.label ? (
           <span
             className={clsx(
               styles['system-stat'],

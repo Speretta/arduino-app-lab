@@ -54,8 +54,21 @@
     }
 }
 
-// Right pane in split view: flex-column so tabs bar stacks above the editor
-.split-pane {
+// Keeps the editor's forced layout from re-running the app's flex chain. `layout` alone is a no-op,
+// and `contain: size` makes the used size independent of the contents, so it collapses any surface
+// where `.cm-editor` is auto-height (snippet mode, the console panel, `code-block`,
+// `code-diff-block`). Safe here only because the height is already definite, so the rule stays on
+// this class: it is reached through `EditorPanel`'s `classes.editorCode`, which Cloud Editor never
+// passes. `:global` is required — `.cm-editor` is CodeMirror's own class, so CSS Modules must not
+// hash it.
+.editor-code {
+    :global(.cm-editor) {
+        contain: size layout;
+    }
+}
+
+// Right panel in split view: flex-column so tabs bar stacks above the editor
+.split-panel {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -67,25 +80,12 @@
     position: relative;
 }
 
-// Markdown content area inside a split pane
+// Markdown content area inside a split panel
 .markdown-container {
     flex: 1;
     min-height: 0;
     padding: 16px 4px 0px 16px;
     overflow: auto;
-
-    &::-webkit-scrollbar {
-        height: 12px;
-        background-color: shared.theme-var(--editor-background);
-    }
-
-    &::-webkit-scrollbar-thumb {
-        border: 2px solid shared.theme-var(--editor-background);
-        background-clip: padding-box;
-        border-radius: 8px;
-        background-color: transparent;
-        cursor: pointer;
-    }
 }
 
 .editor-toolbar-disabled {

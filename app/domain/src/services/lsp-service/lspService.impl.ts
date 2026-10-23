@@ -31,6 +31,15 @@ export let getLspWorkspaceFile: LspService['getLspWorkspaceFile'] =
     throw new Error('getLspWorkspaceFile method not implemented');
   };
 
+export let listLspSketchFiles: LspService['listLspSketchFiles'] =
+  async function () {
+    throw new Error('listLspSketchFiles method not implemented');
+  };
+
+export let listLspFiles: LspService['listLspFiles'] = async function () {
+  throw new Error('listLspFiles method not implemented');
+};
+
 export const setLspService = (service: LspService): void => {
   isLspEnabled = service.isLspEnabled;
   initLspWorkspace = service.initLspWorkspace;
@@ -39,4 +48,6 @@ export const setLspService = (service: LspService): void => {
   sendLspMessage = service.sendLspMessage;
   getLspTempWorkspaceAppDir = service.getLspTempWorkspaceAppDir;
   getLspWorkspaceFile = service.getLspWorkspaceFile;
+  listLspSketchFiles = service.listLspSketchFiles;
+  listLspFiles = service.listLspFiles;
 };

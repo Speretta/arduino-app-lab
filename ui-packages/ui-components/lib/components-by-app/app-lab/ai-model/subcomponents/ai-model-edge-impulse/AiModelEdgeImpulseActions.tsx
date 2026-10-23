@@ -6,7 +6,7 @@ import {
   Warning,
 } from '@cloud-editor-mono/images/assets/icons';
 import {
-  BrickDetailModelImpulse,
+  AiModelImpulse,
   Button,
   ButtonSize,
   ButtonVariant,
@@ -19,11 +19,12 @@ import { Key } from 'react';
 import { XXSmall } from '../../../../../typography';
 import styles from '../../ai-model.module.scss';
 import { AiModelProps } from '../../AiModel.type';
+import { isEdgeImpulseModel } from '../../helpers';
 
 export interface AiModelEdgeImpulseActionsProps {
   model: AiModelProps['model'];
-  impulses: BrickDetailModelImpulse[];
-  selectedImpulse?: BrickDetailModelImpulse;
+  impulses: AiModelImpulse[];
+  selectedImpulse?: AiModelImpulse;
   inUseModelId?: string;
   isModelInUse: boolean;
   isDownloading?: boolean;
@@ -124,7 +125,7 @@ export const AiModelEdgeImpulseActions: React.FC<
                 e.stopPropagation();
                 model.id &&
                   selectedImpulse &&
-                  model.edgeImpulseProps &&
+                  isEdgeImpulseModel(model) &&
                   downloadEIModel &&
                   downloadEIModel(
                     model.edgeImpulseProps.projectId,

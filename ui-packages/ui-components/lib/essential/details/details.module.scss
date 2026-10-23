@@ -1,3 +1,5 @@
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
+
 .details {
   width: 100%;
 
@@ -13,6 +15,7 @@
   width: 100%;
   align-items: center;
   cursor: pointer;
+  color: var(--text-default);
 }
 
 .details-summary-icon {
@@ -26,6 +29,7 @@
 }
 
 .details-chevron {
+  color: var(--text-default);
   transition: transform 0.05s;
   justify-self: flex-end;
 

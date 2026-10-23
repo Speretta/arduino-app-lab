@@ -15,12 +15,11 @@ import {
   listDeviceOTA,
   NotificationMode,
   NotificationType,
+  parseCompileData,
   sendNotification,
   UploadIotSketchNotReadyError,
-  UploadIotSketchReady_Result,
 } from '@cloud-editor-mono/domain';
 import {
-  ArduinoBuilderBoardv3Full_BuilderApi,
   ArduinoBuilderV2CompilationsResponse_BuilderApi,
   CheckThingCert_Response,
   CreateOtaV1_Response,
@@ -46,8 +45,9 @@ import {
   useQueries,
   useQuery,
   useQueryClient,
+  UseQueryResult,
 } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MessageDescriptor } from 'react-intl';
 import { WretchError } from 'wretch/types';
 
@@ -72,6 +72,48 @@ export type ShowThingV1Device_ResponseWithArchAndOriginalName =
     originalName?: string; // presence of this property shows that `.name` was modified
   };
 
+type EnrichedBoard = Awaited<ReturnType<typeof getBoardByFqbn>>;
+
+type IotReadinessTarget = { thingId?: string; deviceId?: string };
+
+type CombinedBoardQueries = {
+  boards: (EnrichedBoard | undefined)[];
+  isLoading: boolean;
+};
+
+function combineBoardQueries(
+  results: UseQueryResult<EnrichedBoard>[],
+): CombinedBoardQueries {
+  return {
+    boards: results.map((result) =>
+      result.data && !result.error ? result.data : undefined,
+    ),
+    isLoading: results.some((result) => result.isLoading),
+  };
+}
+
+function iotDevicesKey(devices: ShowDeviceV2_Response[]): string {
+  return JSON.stringify(devices.map((d) => `${d.id}-${d.name}`).sort());
+}
+
+// The device list is polled every 1.5 s. Only the id-name set per group
+// matters here; any other changed field would give a new reference and
+// re-render the whole editor on every poll.
+function keepIotCloudDevicesIfEqual(prev: unknown, next: unknown): unknown {
+  const prevDevices = prev as GetIotCloudDevices_Result | undefined;
+  const nextDevices = next as GetIotCloudDevices_Result;
+
+  if (!prevDevices) return nextDevices;
+
+  const equal =
+    iotDevicesKey(prevDevices[DetectedDevicesGroup.Online]) ===
+      iotDevicesKey(nextDevices[DetectedDevicesGroup.Online]) &&
+    iotDevicesKey(prevDevices[DetectedDevicesGroup.Offline]) ===
+      iotDevicesKey(nextDevices[DetectedDevicesGroup.Offline]);
+
+  return equal ? prevDevices : nextDevices;
+}
+
 export const useIotSketch: UseIoTSketch = function (
   isReadOnly: boolean,
   sketchData?: GetSketchResult,
@@ -92,9 +134,9 @@ export const useIotSketch: UseIoTSketch = function (
     data: thingDevice,
     isLoading: thingDeviceIsLoading,
     isError: thingDeviceNotFound,
-  } = useQuery(
-    thingDeviceDetailsQueryKey,
-    () => {
+  } = useQuery({
+    queryKey: thingDeviceDetailsQueryKey,
+    queryFn: () => {
       if (!sketchData?.thingId) {
         return Promise.reject('No thingId provided for Thing device');
       }
@@ -105,14 +147,14 @@ export const useIotSketch: UseIoTSketch = function (
         return undefined;
       }
     },
-    {
-      enabled: isIotSketch,
-    },
-  );
+    enabled: isIotSketch,
+  });
 
   const refreshThingDeviceDetails = useCallback((): void => {
-    queryClient.invalidateQueries(thingDeviceDetailsQueryKey);
-    queryClient.invalidateQueries(['get-iot-cloud-devices']);
+    queryClient.invalidateQueries({ queryKey: thingDeviceDetailsQueryKey });
+    queryClient.invalidateQueries({
+      queryKey: ['get-iot-cloud-devices'],
+    });
   }, [queryClient, thingDeviceDetailsQueryKey]);
 
   const {
@@ -155,177 +197,153 @@ export const useIotSketch: UseIoTSketch = function (
     [iotDevicesGroups],
   );
 
-  const fqbnQueries = useQueries({
+  const { boards: enrichedBoards, isLoading: boardsAreLoading } = useQueries({
     queries: (iotDevicesToEnrich ?? []).map(({ fqbn: deviceFqbn, name }) => ({
       queryKey: ['get-board-by-fqbn', deviceFqbn, name],
       queryFn: () =>
         deviceFqbn
           ? getBoardByFqbn({ fqbn: deviceFqbn })
           : Promise.reject('No FQBN provided for IoT device'),
-      onSuccess: (data: ArduinoBuilderBoardv3Full_BuilderApi): void => {
-        setIotDevicesGroups((prev) => {
-          if (!prev) return prev;
-
-          const mapNameAndArchToDevice = (
-            d: DetectedDevice,
-          ): DetectedDevice => {
-            if (d.fqbn !== data.fqbn) return d;
-
-            return {
-              ...d,
-              name: d.name !== data.name ? `${d.name} - ${data.name}` : d.name,
-              architecture: data.architecture,
-              originalName: d.name,
-            };
-          };
-
-          const updatedOnlineDevices = prev[DetectedDevicesGroup.Online].map(
-            mapNameAndArchToDevice,
-          );
-
-          const updatedOfflineDevices = prev[DetectedDevicesGroup.Offline].map(
-            mapNameAndArchToDevice,
-          );
-
-          return {
-            [DetectedDevicesGroup.Online]: updatedOnlineDevices,
-            [DetectedDevicesGroup.Offline]: updatedOfflineDevices,
-          };
-        });
-      },
     })),
+
+    // `useQueries` returns a new results array on every render. The combined
+    // value keeps its reference until a board arrives.
+    combine: combineBoardQueries,
   });
 
-  useQuery(
-    ['get-iot-cloud-devices'],
-    () => getIotCloudDevices(sketchData?.thingId),
-    {
-      staleTime: 0,
-      refetchInterval: 1500,
-      isDataEqual: (prev, next) => {
-        if (!prev) return false;
+  useEffect(() => {
+    const boards = enrichedBoards.filter((board): board is EnrichedBoard =>
+      Boolean(board),
+    );
 
-        const mapToIdAndSort = (devices: ShowDeviceV2_Response[]): string[] => {
-          return devices.map((d) => `${d.id}-${d.name}`).sort();
+    if (boards.length === 0) return;
+
+    setIotDevicesGroups((prev) => {
+      if (!prev) return prev;
+
+      const mapNameAndArchToDevice = (d: DetectedDevice): DetectedDevice => {
+        const data = boards.find((board) => board.fqbn === d.fqbn);
+
+        // An enriched device keeps its suffixed name; two devices with the
+        // same fqbn share the board data.
+        if (!data || (d.architecture && d.originalName)) return d;
+
+        return {
+          ...d,
+          name: d.name !== data.name ? `${d.name} - ${data.name}` : d.name,
+          architecture: data.architecture,
+          originalName: d.name,
         };
+      };
 
-        const prevOnlineIds = mapToIdAndSort(prev[DetectedDevicesGroup.Online]);
-        const prevOfflineIds = mapToIdAndSort(
-          prev[DetectedDevicesGroup.Offline],
+      return {
+        [DetectedDevicesGroup.Online]: prev[DetectedDevicesGroup.Online].map(
+          mapNameAndArchToDevice,
+        ),
+        [DetectedDevicesGroup.Offline]: prev[DetectedDevicesGroup.Offline].map(
+          mapNameAndArchToDevice,
+        ),
+      };
+    });
+  }, [enrichedBoards]);
+
+  const { data: iotCloudDevices } = useQuery({
+    queryKey: ['get-iot-cloud-devices'],
+    queryFn: () => getIotCloudDevices(sketchData?.thingId),
+    staleTime: 0,
+    refetchInterval: 1500,
+    structuralSharing: keepIotCloudDevicesIfEqual,
+    notifyOnChangeProps: ['data'],
+    // avoids race condition with the board queries above
+    enabled: !isReadOnly && isIotSketch && !boardsAreLoading,
+  });
+
+  // Handle successful IoT cloud devices query with device change detection
+  useEffect(() => {
+    if (!iotCloudDevices) return;
+
+    const createMapOtaDevice = (port: IotPortName) =>
+      function mapOtaDevice(d: ShowDeviceV2_Response): DetectedDevice {
+        const portBoardId = createIotPortBoardID(port, d.id);
+
+        return {
+          id: d.id,
+          portBoardId,
+          name: d.name,
+          fqbn: d.fqbn,
+          portName: port,
+          isUnknownBoard: false,
+          isAssociated: false,
+          isIot: true,
+          serialNumber: d.serial,
+          otaCompatible: d.otaCompatible,
+        };
+      };
+
+    const onlineDevicesMapped = iotCloudDevices[
+      DetectedDevicesGroup.Online
+    ].map(createMapOtaDevice(IotPortName.Online));
+    const offlineDevicesMapped = iotCloudDevices[
+      DetectedDevicesGroup.Offline
+    ].map(createMapOtaDevice(IotPortName.Offline));
+
+    const mappedDevices = [...onlineDevicesMapped, ...offlineDevicesMapped];
+
+    const deviceIdsKey = JSON.stringify(
+      mappedDevices
+        .map((d) => `${d.portBoardId}-${d.originalName || d.name}`)
+        .sort(),
+    );
+
+    setIotDevicesGroups((prev) => {
+      const prevDevices = prev && [
+        ...prev[DetectedDevicesGroup.Online],
+        ...prev[DetectedDevicesGroup.Offline],
+      ];
+
+      const previousDeviceIdsKey = JSON.stringify(
+        prevDevices
+          ?.map((d) => `${d.portBoardId}-${d.originalName || d.name}`)
+          .sort(),
+      );
+
+      const devicesUnchanged = deviceIdsKey === previousDeviceIdsKey;
+      if (devicesUnchanged) return prev;
+
+      const mapNameAndArchToDevice = (d: DetectedDevice): DetectedDevice => {
+        const prevMappedDevice = prevDevices?.find(
+          (pd) => pd.portBoardId === d.portBoardId,
         );
 
-        const nextOnlineIds = mapToIdAndSort(next[DetectedDevicesGroup.Online]);
-        const nextOfflineIds = mapToIdAndSort(
-          next[DetectedDevicesGroup.Offline],
-        );
+        const prevMappedArch = prevMappedDevice?.architecture;
+        const prevMappedDeviceName = prevMappedDevice?.name;
+        const prevMappedDeviceOriginalName = prevMappedDevice?.originalName;
 
-        const onlineDevicesEqual =
-          JSON.stringify(prevOnlineIds) === JSON.stringify(nextOnlineIds);
+        const nameAlreadySuffixed =
+          prevMappedDeviceOriginalName &&
+          prevMappedDeviceOriginalName === d.name;
 
-        const offlineDevicesEqual =
-          JSON.stringify(prevOfflineIds) === JSON.stringify(nextOfflineIds);
+        return {
+          ...d,
+          name: nameAlreadySuffixed ? prevMappedDeviceName ?? d.name : d.name,
+          architecture: prevMappedArch ?? d.architecture,
+          originalName: nameAlreadySuffixed
+            ? prevMappedDeviceOriginalName
+            : undefined,
+          // ** if the name has changes backend, set this to undefined, to recreate board name suffix
+          // ** in `fqbnQueries`
+        };
+      };
 
-        return onlineDevicesEqual && offlineDevicesEqual;
-      },
-      // ** here (in `isDataEqual`, `notifyOnChangeProps` and in `onSuccess`) we prevent rerenders/state changes
-      // ** when devices are the same in terms of id-name and online/offline status, this hook is NOT sensitive to other changes
-      // ** in IoT device props
-      notifyOnChangeProps: ['data'],
-      enabled:
-        !isReadOnly &&
-        isIotSketch &&
-        (fqbnQueries.length === 0 || fqbnQueries.every((r) => !r.isLoading)), // avoids race condition with fqbn useQueries
-      onSuccess: (data: GetIotCloudDevices_Result) => {
-        const createMapOtaDevice = (port: IotPortName) =>
-          function mapOtaDevice(d: ShowDeviceV2_Response): DetectedDevice {
-            const portBoardId = createIotPortBoardID(port, d.id);
+      const onlineDevices = onlineDevicesMapped.map(mapNameAndArchToDevice);
+      const offlineDevices = offlineDevicesMapped.map(mapNameAndArchToDevice);
 
-            return {
-              id: d.id,
-              portBoardId,
-              name: d.name,
-              fqbn: d.fqbn,
-              portName: port,
-              isUnknownBoard: false,
-              isAssociated: false,
-              isIot: true,
-              serialNumber: d.serial,
-              otaCompatible: d.otaCompatible,
-            };
-          };
-
-        const onlineDevicesMapped = data[DetectedDevicesGroup.Online].map(
-          createMapOtaDevice(IotPortName.Online),
-        );
-        const offlineDevicesMapped = data[DetectedDevicesGroup.Offline].map(
-          createMapOtaDevice(IotPortName.Offline),
-        );
-
-        const mappedDevices = [...onlineDevicesMapped, ...offlineDevicesMapped];
-
-        const deviceIdsKey = JSON.stringify(
-          mappedDevices
-            .map((d) => `${d.portBoardId}-${d.originalName || d.name}`)
-            .sort(),
-        );
-
-        setIotDevicesGroups((prev) => {
-          const prevDevices = prev && [
-            ...prev[DetectedDevicesGroup.Online],
-            ...prev[DetectedDevicesGroup.Offline],
-          ];
-
-          const previousDeviceIdsKey = JSON.stringify(
-            prevDevices
-              ?.map((d) => `${d.portBoardId}-${d.originalName || d.name}`)
-              .sort(),
-          );
-
-          const devicesUnchanged = deviceIdsKey === previousDeviceIdsKey;
-          if (devicesUnchanged) return prev;
-
-          const mapNameAndArchToDevice = (
-            d: DetectedDevice,
-          ): DetectedDevice => {
-            const prevMappedDevice = prevDevices?.find(
-              (pd) => pd.portBoardId === d.portBoardId,
-            );
-
-            const prevMappedArch = prevMappedDevice?.architecture;
-            const prevMappedDeviceName = prevMappedDevice?.name;
-            const prevMappedDeviceOriginalName = prevMappedDevice?.originalName;
-
-            const nameAlreadySuffixed =
-              prevMappedDeviceOriginalName &&
-              prevMappedDeviceOriginalName === d.name;
-
-            return {
-              ...d,
-              name: nameAlreadySuffixed
-                ? prevMappedDeviceName ?? d.name
-                : d.name,
-              architecture: prevMappedArch ?? d.architecture,
-              originalName: nameAlreadySuffixed
-                ? prevMappedDeviceOriginalName
-                : undefined,
-              // ** if the name has changes backend, set this to undefined, to recreate board name suffix
-              // ** in `fqbnQueries`
-            };
-          };
-
-          const onlineDevices = onlineDevicesMapped.map(mapNameAndArchToDevice);
-          const offlineDevices = offlineDevicesMapped.map(
-            mapNameAndArchToDevice,
-          );
-
-          return {
-            [DetectedDevicesGroup.Online]: onlineDevices,
-            [DetectedDevicesGroup.Offline]: offlineDevices,
-          };
-        });
-      },
-    },
-  );
+      return {
+        [DetectedDevicesGroup.Online]: onlineDevices,
+        [DetectedDevicesGroup.Offline]: offlineDevices,
+      };
+    });
+  }, [iotCloudDevices]);
 
   useEffect(() => {
     if (!thingDeviceDetails || !iotDevicesGroups) return;
@@ -390,15 +408,15 @@ export type UseIotUploadQueries = (
   selectedIoTDeviceId?: string,
   commandParams?: CommandParams,
   enableGetOutput?: boolean,
-  createdSketchCompilation?: ArduinoBuilderV2CompilationsResponse_BuilderApi,
+  createdSketchCompilation?: ArduinoBuilderV2CompilationsResponse_BuilderApi & {
+    sketchName?: string;
+  },
 ) => {
   shouldCheckForOngoingOta: boolean;
   checkOngoingOta: () => Promise<
     QueryObserverResult<ListOtaV1_Response, unknown>
   >;
-  startIotUpload: () => Promise<
-    QueryObserverResult<UploadIotSketchReady_Result, unknown>
-  >;
+  startIotUpload: () => void;
   newOtaUpload: UseMutateAsyncFunction<
     | CreateOtaV1_Response
     | {
@@ -430,7 +448,9 @@ export const useIotUploadQueries: UseIotUploadQueries = function (
   selectedIoTDeviceId?: string,
   commandParams?: CommandParams,
   enableGetOutput?: boolean,
-  createdSketchCompilation?: ArduinoBuilderV2CompilationsResponse_BuilderApi,
+  createdSketchCompilation?: ArduinoBuilderV2CompilationsResponse_BuilderApi & {
+    sketchName?: string;
+  },
 ): ReturnType<UseIotUploadQueries> {
   const { formatMessage } = useI18n();
 
@@ -441,9 +461,10 @@ export const useIotUploadQueries: UseIotUploadQueries = function (
     thingDeviceDetailsIsLoading ||
     Boolean(selectedIoTDeviceId && !hasCheckedForOngoingOta);
 
-  const { refetch: checkOngoingOta } = useQuery(
-    ['check-iot-in-progress', selectedIoTDeviceId],
-    () => {
+  const { data: otaData, refetch: checkOngoingOta } = useQuery({
+    queryKey: ['check-iot-in-progress', selectedIoTDeviceId],
+
+    queryFn: () => {
       return selectedIoTDeviceId
         ? listDeviceOTA(selectedIoTDeviceId, {
             limit: 1,
@@ -451,122 +472,174 @@ export const useIotUploadQueries: UseIotUploadQueries = function (
           })
         : Promise.reject('Cannot fetch IOT request from DB');
     },
-    {
-      onSuccess: async (data: ListOtaV1_Response) => {
-        if (!data.ota?.length) {
-          setHasCheckedForOngoingOta(true);
-          return;
-        }
 
-        if (data.ota[0].status === 'in_progress') {
-          //Set the ID
-          setOtaId(data.ota[0].id);
-          setUploading(true);
+    enabled: !!selectedIoTDeviceId && shouldCheckForOngoingOta,
+  });
 
-          setHasCheckedForOngoingOta(true);
+  // Handle successful OTA check
+  useEffect(() => {
+    if (!otaData) return;
 
-          return;
-        }
+    if (!otaData.ota?.length) {
+      setHasCheckedForOngoingOta(true);
+      return;
+    }
 
-        if (data.ota[0].status === 'pending') {
-          setIsPending(true);
-          setOtaId(data.ota[0].id);
-          setUploading(true);
+    if (otaData.ota[0].status === 'in_progress') {
+      //Set the ID
+      setOtaId(otaData.ota[0].id);
+      setUploading(true);
 
-          setHasCheckedForOngoingOta(true);
+      setHasCheckedForOngoingOta(true);
 
-          return;
-        }
+      return;
+    }
 
-        setHasCheckedForOngoingOta(true);
-      },
-      enabled: !!selectedIoTDeviceId && shouldCheckForOngoingOta,
-    },
-  );
+    if (otaData.ota[0].status === 'pending') {
+      setIsPending(true);
+      setOtaId(otaData.ota[0].id);
+      setUploading(true);
 
-  const { data: iotUploadIsReady, refetch: startIotUpload } = useQuery(
-    ['iot-sketch-is-ready', thingId, selectedIoTDeviceId, commandParams],
-    () => {
-      return thingId && selectedIoTDeviceId
-        ? iotUploadReady(thingId, selectedIoTDeviceId)
+      setHasCheckedForOngoingOta(true);
+
+      return;
+    }
+
+    setHasCheckedForOngoingOta(true);
+  }, [otaData]);
+
+  // The check that is running, set in the same call that starts it. The
+  // mutation's `isPending` reaches React one macrotask later, so a second
+  // click before that re-render would still read `false`.
+  const readinessCheckInFlight = useRef<IotReadinessTarget>();
+
+  // A check started for another thing or device must not start a compile.
+  // Changing the device resets the mutation observer, but the running
+  // mutation still calls its own `onSuccess`.
+  const currentReadinessTarget = useRef<IotReadinessTarget>({
+    thingId,
+    deviceId: selectedIoTDeviceId,
+  });
+  useEffect(() => {
+    currentReadinessTarget.current = { thingId, deviceId: selectedIoTDeviceId };
+  }, [thingId, selectedIoTDeviceId]);
+
+  const isCurrentTarget = (target: IotReadinessTarget): boolean =>
+    target.thingId === currentReadinessTarget.current.thingId &&
+    target.deviceId === currentReadinessTarget.current.deviceId;
+
+  // A mutation, not a disabled query with `refetch`: a repeat result equal
+  // to the last one keeps the same query data reference, and the compile
+  // must still start on every Upload click.
+  const { data: iotUploadIsReady, mutate: checkIotUploadReady } = useMutation({
+    mutationKey: ['iot-sketch-is-ready', thingId, selectedIoTDeviceId],
+
+    mutationFn: (target: IotReadinessTarget) =>
+      target.thingId && target.deviceId
+        ? iotUploadReady(target.thingId, target.deviceId)
         : Promise.reject(
             'Cannot assert IoT upload readiness. No thingId or deviceId provided.',
-          );
+          ),
+
+    // Mutation-level, so it also runs when a device change resets the
+    // observer during the check.
+    onSettled: (_data, _error, target) => {
+      if (readinessCheckInFlight.current === target) {
+        readinessCheckInFlight.current = undefined;
+      }
     },
-    {
-      onError: () => {
-        const msg = formatMessage(messages.iotUploadFailedUnknownIfReady);
+
+    onError: (_error, target) => {
+      if (!isCurrentTarget(target)) return;
+
+      const msg = formatMessage(messages.iotUploadFailedUnknownIfReady);
+      setOutput({
+        stage: 'precompile',
+        output: msg,
+        stderr: msg,
+        hasFailed: true,
+      });
+    },
+
+    onSuccess: (data, target) => {
+      if (!isCurrentTarget(target)) return;
+
+      if (data.value === false) {
+        const msg = formatMessage(getIotUploadNotReadyMsg(data));
         setOutput({
           stage: 'precompile',
           output: msg,
           stderr: msg,
           hasFailed: true,
         });
-      },
-      onSuccess: async (data: UploadIotSketchReady_Result) => {
-        if (data.value === false) {
-          const msg = formatMessage(getIotUploadNotReadyMsg(data));
-          setOutput({
-            stage: 'precompile',
-            output: msg,
-            stderr: msg,
-            hasFailed: true,
-          });
 
-          return;
-        }
+        return;
+      }
 
-        setOutput({
-          stage: 'precompile',
-          output: '',
-          stdout: '',
-          hasFailed: false,
-        });
+      setOutput({
+        stage: 'precompile',
+        output: '',
+        stdout: '',
+        hasFailed: false,
+      });
 
-        if (!commandParams) return;
+      if (!commandParams) return;
 
-        const updatedCompilePayload = createUpdatedCompilePayload({
-          fqbn: commandParams.selectedFqbn,
-          sketchData: commandParams.initialSketchData,
-          mainInoData: commandParams.initialInoData,
-          isVerboseOutput: verboseCompile,
-          filesData: commandParams.initialFilesData,
-          isIot: true,
-        });
+      const updatedCompilePayload = createUpdatedCompilePayload({
+        fqbn: commandParams.selectedFqbn,
+        sketchData: commandParams.initialSketchData,
+        mainInoData: commandParams.initialInoData,
+        isVerboseOutput: verboseCompile,
+        filesData: commandParams.initialFilesData,
+        isIot: true,
+      });
 
-        updatedCompilePayload.commandType = 'upload';
-        updatedCompilePayload.shouldCache =
-          !!commandParams.initialSketchData.fqbn || !!thingId;
+      updatedCompilePayload.commandType = 'upload';
+      updatedCompilePayload.shouldCache =
+        !!commandParams.initialSketchData.fqbn || !!thingId;
 
-        createCompilation(updatedCompilePayload);
+      createCompilation(updatedCompilePayload);
 
-        ga4Emitter({
-          type: 'COMPILE',
-          payload: { sketch_id: commandParams.initialSketchData.id },
-        });
-      },
-      enabled: false,
+      ga4Emitter({
+        type: 'COMPILE',
+        payload: { sketch_id: commandParams.initialSketchData.id },
+      });
     },
-  );
+  });
+
+  // No upload flag is set until the compilation starts, so a second Upload
+  // click during the readiness check would start a second compilation.
+  const startIotUpload = useCallback(() => {
+    const target = { thingId, deviceId: selectedIoTDeviceId };
+    const running = readinessCheckInFlight.current;
+    if (
+      running &&
+      running.thingId === target.thingId &&
+      running.deviceId === target.deviceId
+    ) {
+      return;
+    }
+
+    readinessCheckInFlight.current = target;
+    checkIotUploadReady(target);
+  }, [checkIotUploadReady, selectedIoTDeviceId, thingId]);
 
   const onUploadError = useCallback(() => {
-    (): void => {
-      const msg = formatMessage(messages.iotUploadRequestUnsuccessful);
-      setOutput((prev) => ({
-        ...prev,
-        stage: 'upload',
-        output: `${prev?.output ? `${prev.output}\n` : ''}${msg}`,
-        stderr: `${prev?.stderr ? `${prev.stderr}\n` : ''}${msg}`,
-        hasFailed: true,
-      }));
+    const msg = formatMessage(messages.iotUploadRequestUnsuccessful);
+    setOutput((prev) => ({
+      ...prev,
+      stage: 'upload',
+      output: `${prev?.output ? `${prev.output}\n` : ''}${msg}`,
+      stderr: `${prev?.stderr ? `${prev.stderr}\n` : ''}${msg}`,
+      hasFailed: true,
+    }));
 
-      setIsPending(false);
-    };
+    setIsPending(false);
   }, [formatMessage, setIsPending, setOutput]);
 
   const {
     data: otaUploadData,
-    isLoading: isCreating,
+    isPending: isCreating,
     reset: resetUpload,
     isError: uploadHasError,
     mutateAsync: newOtaUpload,
@@ -626,7 +699,7 @@ export const useIotUploadQueries: UseIotUploadQueries = function (
     (otaUploadData && 'ota' in otaUploadData && otaUploadData?.ota?.id) ||
     otaId;
 
-  const { mutate: abortPending, isLoading: isAborting } = useMutation({
+  const { mutate: abortPending, isPending: isAborting } = useMutation({
     mutationKey: ['abort-pending-iot-upload', currentOtaId],
     mutationFn: () => {
       return currentOtaId
@@ -690,7 +763,8 @@ export const useIotUploadQueries: UseIotUploadQueries = function (
         : Promise.reject('No OTA ID provided.');
     },
     enabled: otaUploadReady && !!currentOtaId && isUploading && !isAborting,
-    refetchInterval: (data) => (data?.ota?.status === 'pending' ? 1000 : 1500),
+    refetchInterval: (query) =>
+      query.state.data?.ota?.status === 'pending' ? 1000 : 1500,
   });
 
   const clearOtaState = useCallback(() => {
@@ -723,17 +797,50 @@ export const useIotUploadQueries: UseIotUploadQueries = function (
   );
 
   // On getCompilationOutput, BE responds with extra_files on builderV2 instead of files like builderV1. On the function we modify the response
-  const { isFetching: isFetchingCompilationOutput } = useQuery(
-    ['get-compilation-output', createdSketchCompilation?.id],
-    () =>
-      createdSketchCompilation?.id
-        ? getCompilationOutput(createdSketchCompilation?.id)
-        : Promise.reject(new Error('No sketch ID provided')),
-    {
-      onSuccess: verifyIoTSketchOnSuccess,
+  const { data: compilationOutput, isFetching: isFetchingCompilationOutput } =
+    useQuery({
+      queryKey: ['get-compilation-output', createdSketchCompilation?.id],
+
+      queryFn: () =>
+        createdSketchCompilation?.id
+          ? getCompilationOutput(createdSketchCompilation?.id)
+          : Promise.reject(new Error('No sketch ID provided')),
+
       enabled: !!createdSketchCompilation?.id && enableGetOutput,
-    },
-  );
+    });
+
+  // One OTA request per compilation output. The effect also re-runs when
+  // `verifyIoTSketchOnSuccess` changes (device selection), and cached output
+  // must not start another upload then.
+  const uploadedCompilationOutput = useRef<typeof compilationOutput>();
+
+  useEffect(() => {
+    if (!compilationOutput || !enableGetOutput) {
+      return;
+    }
+
+    if (uploadedCompilationOutput.current === compilationOutput) {
+      return;
+    }
+
+    uploadedCompilationOutput.current = compilationOutput;
+
+    const derivatives = parseCompileData(
+      compilationOutput.stdout,
+      compilationOutput.stderr,
+      createdSketchCompilation?.sketchName,
+    );
+    const result: CompileSketch_Result = {
+      ...compilationOutput,
+      ...derivatives,
+    };
+    verifyIoTSketchOnSuccess(result);
+  }, [
+    compilationOutput,
+    enableGetOutput,
+    verifyIoTSketchOnSuccess,
+    createdSketchCompilation?.sketchName,
+  ]);
 
   return {
     shouldCheckForOngoingOta,
@@ -976,7 +1083,13 @@ export const useIotCertificateCheck: UseIotCertificateCheck = function (
   const [contentAfterThingCertCheck, setContentAfterThingCertCheck] =
     useState<string>();
 
-  const { mutate, reset, isLoading, isError, data } = useMutation({
+  const {
+    mutate,
+    reset,
+    isPending: isLoading,
+    isError,
+    data,
+  } = useMutation({
     mutationKey: ['check-device-cert', thingId, thingPropertiesPath],
     onMutate: () => {
       setSecretsBeforeThingCertCheck(thingSketchSecretsTS);

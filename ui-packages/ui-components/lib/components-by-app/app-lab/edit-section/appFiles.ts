@@ -1,7 +1,7 @@
 import { getBrickDetails } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import {
+  AppBrickListItem,
   BrickCreateUpdateRequest,
-  BrickInstance,
   BrickListItem,
 } from '@cloud-editor-mono/infrastructure';
 import {
@@ -9,26 +9,19 @@ import {
   BrickDetailLogic,
   ConfigureAppBrickDialogLogic,
   DeleteAppBrickDialogLogic,
+  useI18n,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useCallback, useState } from 'react';
 
 import { CustomBrickDialogLogic } from '../../../dialogs/app-lab/add-app-brick-dialog/sub-components/CustomBrickDialog';
+import { messages } from '../app-detail/messages';
+import { SendAppLabNotification } from './appLabEditSection.type';
 
 interface UseAppFilesSectionLogicParams {
   appId: string;
-  appBricks: BrickInstance[] | undefined;
+  appBricks: AppBrickListItem[] | undefined;
   bricks: BrickListItem[] | undefined;
   openExternalLink: (url: string) => void;
-  addAppBrick(
-    brickId: string,
-    params?: BrickCreateUpdateRequest,
-    isCustom?: boolean,
-  ): Promise<boolean>;
-  deleteAppBrick(brickId: string): Promise<boolean>;
-  updateAppBrick(
-    brickId: string,
-    params: BrickCreateUpdateRequest,
-  ): Promise<boolean>;
   brickDetailLogic: BrickDetailLogic;
   configureAppBrickDialogLogic: ConfigureAppBrickDialogLogic;
   addAppCustomBrick: (
@@ -38,6 +31,21 @@ interface UseAppFilesSectionLogicParams {
       description?: string;
     },
   ) => Promise<{ id: string } | undefined>;
+  sendAppLabNotification: SendAppLabNotification;
+
+  addAppBrick(
+    brickId: string,
+    params?: BrickCreateUpdateRequest,
+    isCustom?: boolean,
+  ): Promise<boolean>;
+
+  deleteAppBrick(brickId: string): Promise<boolean>;
+
+  updateAppBrick(
+    brickId: string,
+    params: BrickCreateUpdateRequest,
+  ): Promise<boolean>;
+
   renameAppCustomBrick(
     brickId: string,
     params: { name: string },
@@ -47,11 +55,15 @@ interface UseAppFilesSectionLogicParams {
 type UseAppFilesSectionLogic = (params: UseAppFilesSectionLogicParams) => {
   addAppBrickDialogLogic: AddAppBrickDialogLogic;
   openAddAppBrickDialog: () => void;
+  openCreateAppBrickDialog: () => void;
   deleteAppBrickDialogLogic: DeleteAppBrickDialogLogic;
-  openDeleteAppBrickDialog: (brick: BrickInstance) => void;
+  openDeleteAppBrickDialog: (brick: AppBrickListItem) => void;
   renameAppBrickDialogLogic: CustomBrickDialogLogic;
-  openRenameAppBrickDialog: (brick: BrickInstance) => void;
+  openRenameAppBrickDialog: (brick: AppBrickListItem) => void;
 };
+
+// A new [] on every render would re-run the add dialog's selection effect each render.
+const NO_BRICKS: BrickListItem[] = [];
 
 export const useAppFilesSectionLogic: UseAppFilesSectionLogic = function (
   params: UseAppFilesSectionLogicParams,
@@ -67,19 +79,22 @@ export const useAppFilesSectionLogic: UseAppFilesSectionLogic = function (
     brickDetailLogic,
     renameAppCustomBrick,
     openExternalLink,
+    sendAppLabNotification,
   } = params;
 
   const [addAppBrickDialogOpen, setAddAppBrickDialogOpen] = useState(false);
   const [deleteAppBrickDialogOpen, setDeleteAppBrickDialogOpen] =
     useState(false);
   const [deletingAppBrick, setDeletingAppBrick] =
-    useState<BrickInstance | null>(null);
+    useState<AppBrickListItem | null>(null);
   const [createAppBrickDialogOpen, setCreateAppAppBrickDialogOpen] =
     useState(false);
   const [renameAppBrickDialogOpen, setRenameAppAppBrickDialogOpen] =
     useState(false);
   const [renamingAppBrick, setRenamingAppBrick] =
-    useState<BrickInstance | null>(null);
+    useState<AppBrickListItem | null>(null);
+
+  const { formatMessage } = useI18n();
 
   const useCreateAppBrickDialogLogic =
     (): ReturnType<CustomBrickDialogLogic> => {
@@ -88,9 +103,24 @@ export const useAppFilesSectionLogic: UseAppFilesSectionLogic = function (
         onOpenChange: setCreateAppAppBrickDialogOpen,
         confirmAction: async (name): Promise<boolean> => {
           if (!createAppBrickDialogOpen) return Promise.resolve(false);
+          const trimmedName = name.trim();
+
+          // Check if a brick with this name already exists
+          const brickExists = appBricks?.some(
+            (brick) => brick.name?.toLowerCase() === trimmedName.toLowerCase(),
+          );
+
+          if (brickExists) {
+            sendAppLabNotification({
+              message: formatMessage(messages.failedAddBrick),
+              variant: 'warning',
+            });
+            return Promise.resolve(false);
+          }
+
           const result = await addAppCustomBrick(appId, {
-            name,
-            description: name,
+            name: trimmedName,
+            description: trimmedName,
           });
           setAddAppBrickDialogOpen(false);
           if (!result) {
@@ -108,6 +138,9 @@ export const useAppFilesSectionLogic: UseAppFilesSectionLogic = function (
     addAppCustomBrick,
     appId,
     addAppBrick,
+    appBricks,
+    formatMessage,
+    sendAppLabNotification,
   ]);
 
   const openCreateAppBrickDialog = useCallback(() => {
@@ -118,8 +151,8 @@ export const useAppFilesSectionLogic: UseAppFilesSectionLogic = function (
     return {
       open: addAppBrickDialogOpen,
       appId,
-      appBricks: appBricks || [],
-      bricks: bricks || [],
+      appBricks,
+      bricks: bricks ?? NO_BRICKS,
       onOpenChange: setAddAppBrickDialogOpen,
       brickDetailLogic,
       configureDialogLogic: configureAppBrickDialogLogic,
@@ -174,7 +207,7 @@ export const useAppFilesSectionLogic: UseAppFilesSectionLogic = function (
     deleteAppBrick,
   ]);
 
-  const openDeleteAppBrickDialog = useCallback((brick: BrickInstance) => {
+  const openDeleteAppBrickDialog = useCallback((brick: AppBrickListItem) => {
     setDeletingAppBrick(brick);
     setDeleteAppBrickDialogOpen(true);
   }, []);
@@ -199,7 +232,7 @@ export const useAppFilesSectionLogic: UseAppFilesSectionLogic = function (
     renameAppCustomBrick,
   ]);
 
-  const openRenameAppBrickDialog = useCallback((brick: BrickInstance) => {
+  const openRenameAppBrickDialog = useCallback((brick: AppBrickListItem) => {
     setRenamingAppBrick(brick);
     setRenameAppAppBrickDialogOpen(true);
   }, []);
@@ -207,6 +240,7 @@ export const useAppFilesSectionLogic: UseAppFilesSectionLogic = function (
   return {
     addAppBrickDialogLogic,
     openAddAppBrickDialog,
+    openCreateAppBrickDialog,
     deleteAppBrickDialogLogic,
     openDeleteAppBrickDialog,
     renameAppBrickDialogLogic,

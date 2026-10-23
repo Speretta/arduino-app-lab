@@ -7,16 +7,12 @@ import (
 	"slices"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/arduino/arduino-app-cli/pkg/board/remote"
 	"github.com/arduino/arduino-app-cli/pkg/board/remotefs"
 )
 
-// maxConcurrentDirReads limits the number of directory listings in-flight at
-// once. Keeps us well below the SSH MaxSessions default (10) and avoids
-// saturating ADB with parallel subprocesses.
-const maxConcurrentDirReads = 8
+var defaultIgnorePatterns = []string{".DS_Store", "Thumbs.db", ".cache"}
 
 type FSNode struct {
 	Name       string    `json:"name"`
@@ -34,126 +30,128 @@ func getFS(path string, conn remote.RemoteConn) fs.FS {
 	return remotefs.New(path, conn)
 }
 
-func BuildFileTree(fs fs.FS, ignorePatterns []string) (*FSNode, error) {
-	ignoreFn := func(p string) bool {
-		return slices.ContainsFunc(ignorePatterns, func(pattern string) bool {
-			return path.Base(p) == pattern
-		})
-	}
+// WalkFilePaths returns the path of every file under the root of fss, relative
+// to it, directories traversed but never returned. Order matches the listings:
+// directories first, then alphabetical.
+//
+// A directory that cannot be listed even after listDirEntries' retries is named
+// in an *UnreadableDirsError, returned alongside the paths that were found. It
+// used to be skipped, which made a short list indistinguishable from a complete
+// one — and this list becomes the set of files known to exist on the board, so
+// callers that cannot tolerate a gap must treat that error as fatal. Only the
+// root failing yields no paths at all.
+func WalkFilePaths(fss fs.FS, ignorePatterns []string) ([]string, error) {
+	ignored := func(name string) bool { return slices.Contains(ignorePatterns, name) }
 
-	sem := make(chan struct{}, maxConcurrentDirReads)
-	return buildFileTreeRecursive(fs, ".", nil, ignoreFn, sem)
-}
-
-func GetFileTree(rootPath string, conn remote.RemoteConn) (*FSNode, error) {
-	fs := getFS(rootPath, conn)
-	return BuildFileTree(fs, []string{".DS_Store", "Thumbs.db", ".cache"})
-}
-
-func buildFileTreeRecursive(fss fs.FS, currentPath string, entry fs.DirEntry, ignoreFn func(string) bool, sem chan struct{}) (*FSNode, error) {
-	if ignoreFn(currentPath) {
-		return nil, nil
-	}
-
-	var node FSNode
-
-	if entry != nil && !entry.IsDir() {
-		// File node: entry.Info() is served from the parent's cached directory
-		// listing — no additional network round-trip needed.
-		info, err := entry.Info()
+	var walk func(dir string) ([]string, []string, error)
+	walk = func(dir string) ([]string, []string, error) {
+		entries, err := listDirEntries(fss, dir)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		ext := path.Ext(currentPath)
+
+		sortDirEntries(entries)
+
+		// Both keyed by sorted index, so the paths and the unreadable ones come
+		// back in listing order despite the fan-out.
+		found := make([][]string, len(entries))
+		unlisted := make([][]string, len(entries))
+		var wg sync.WaitGroup
+
+		for i, e := range entries {
+			if ignored(e.Name()) {
+				continue
+			}
+			// path.Join drops the leading "./", so the root's own children come
+			// back as plain names.
+			child := path.Join(dir, e.Name())
+			if !e.IsDir() {
+				found[i] = []string{child}
+				continue
+			}
+			wg.Add(1)
+			go func(idx int, cp string) {
+				defer wg.Done()
+				paths, unreadable, err := walk(cp)
+				if err != nil {
+					// The parent's listing already proved this folder exists, so
+					// its contents are files we know nothing about rather than
+					// files that are not there.
+					unreadable = []string{cp}
+				}
+				found[idx], unlisted[idx] = paths, unreadable
+			}(i, child)
+		}
+		wg.Wait()
+
+		var paths, unreadable []string
+		for i := range entries {
+			paths = append(paths, found[i]...)
+			unreadable = append(unreadable, unlisted[i]...)
+		}
+		return paths, unreadable, nil
+	}
+
+	// The root's own failure comes back from the walk, so it needs no separate
+	// Open to tell it apart from a subtree's.
+	paths, unreadable, err := walk(".")
+	if err != nil {
+		return nil, err
+	}
+	if len(unreadable) > 0 {
+		return paths, &UnreadableDirsError{Paths: unreadable}
+	}
+	return paths, nil
+}
+
+// ListFilePaths is WalkFilePaths over a board connection.
+func ListFilePaths(rootPath string, conn remote.RemoteConn) ([]string, error) {
+	return WalkFilePaths(getFS(rootPath, conn), defaultIgnorePatterns)
+}
+
+// ListDirectory returns the immediate children of rootPath, directories first
+// then alphabetical.
+func ListDirectory(rootPath string, conn remote.RemoteConn) ([]FSNode, error) {
+	entries, err := listConnEntries(conn, rootPath)
+	if err != nil {
+		return nil, err
+	}
+
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].IsDir != entries[j].IsDir {
+			return entries[i].IsDir
+		}
+		return entries[i].Name < entries[j].Name
+	})
+
+	nodes := make([]FSNode, 0, len(entries))
+	for _, e := range entries {
+		if slices.Contains(defaultIgnorePatterns, e.Name) {
+			continue
+		}
+		nodes = append(nodes, newRemoteFSNode(rootPath, e))
+	}
+
+	return nodes, nil
+}
+
+// newRemoteFSNode names a child by its full board path, as StatPath does: a bare
+// name means nothing to a caller holding a node from a directory it no longer
+// knows.
+func newRemoteFSNode(dir string, info remote.FileInfo) FSNode {
+	node := FSNode{Name: info.Name, Path: path.Join(dir, info.Name), IsDir: info.IsDir}
+
+	if !info.IsDir {
+		ext := path.Ext(info.Name)
 		mimeType := mime.TypeByExtension(ext)
 		if mimeType == "" {
 			mimeType = "application/octet-stream"
 		}
-		node = FSNode{
-			Name:       info.Name(),
-			Path:       currentPath,
-			Size:       info.Size(),
-			IsDir:      false,
-			CreatedAt:  info.ModTime().Format(time.RFC3339),
-			ModifiedAt: info.ModTime().Format(time.RFC3339),
-			Extension:  &ext,
-			MimeType:   &mimeType,
-		}
-		return &node, nil
+		node.Extension = &ext
+		node.MimeType = &mimeType
 	}
 
-	// Directory node (or root "." where entry is nil): open to read children.
-	// Acquire the semaphore so we bound concurrent remote directory listings.
-	sem <- struct{}{}
-	f, err := fss.Open(currentPath)
-	if err != nil {
-		<-sem
-		return nil, err
-	}
-
-	info, err := f.Stat()
-	if err != nil {
-		<-sem
-		return nil, err
-	}
-
-	node = FSNode{
-		Name:       info.Name(),
-		Path:       currentPath,
-		Size:       info.Size(),
-		IsDir:      info.IsDir(),
-		CreatedAt:  info.ModTime().Format(time.RFC3339),
-		ModifiedAt: info.ModTime().Format(time.RFC3339),
-	}
-
-	entries, err := f.(fs.ReadDirFile).ReadDir(0)
-	<-sem // release as soon as listing is done; child traversal runs in parallel
-	if err != nil {
-		return nil, err
-	}
-
-	sortDirEntries(entries)
-
-	// nodeResult carries the outcome for one child slot, keyed by sorted index so
-	// we can reconstruct the ordered children slice after all goroutines finish.
-	type nodeResult struct {
-		node *FSNode
-		err  error
-	}
-
-	results := make([]nodeResult, len(entries))
-	var wg sync.WaitGroup
-
-	for i, e := range entries {
-		childPath := path.Join(currentPath, e.Name())
-		if e.IsDir() {
-			// Process subdirectories concurrently.
-			wg.Add(1)
-			go func(idx int, dirEntry fs.DirEntry, cp string) {
-				defer wg.Done()
-				child, err := buildFileTreeRecursive(fss, cp, dirEntry, ignoreFn, sem)
-				results[idx] = nodeResult{node: child, err: err}
-			}(i, e, childPath)
-		} else {
-			// File nodes require no network call after the parent listing — handle
-			// inline to avoid goroutine overhead.
-			child, err := buildFileTreeRecursive(fss, childPath, e, ignoreFn, sem)
-			results[i] = nodeResult{node: child, err: err}
-		}
-	}
-
-	wg.Wait()
-
-	var children []FSNode
-	for _, r := range results {
-		if r.err != nil || r.node == nil {
-			continue
-		}
-		children = append(children, *r.node)
-	}
-
-	node.Children = &children
-	return &node, nil
+	return node
 }
 
 // Alphabetical order, directories first

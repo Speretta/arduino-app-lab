@@ -1,9 +1,12 @@
 import {
   IconMediaLibraryBooksNormal,
-  IconNavigationDashboardNormal,
   IconTechnologyCablePlugNormal,
 } from '@arduino/react-icons';
-import { Brick, NavigationTable } from '@cloud-editor-mono/images/assets/icons';
+import {
+  Brick,
+  NavigationGroupOutline,
+  NavigationTable,
+} from '@cloud-editor-mono/images/assets/icons';
 import { ReactNode } from 'react';
 
 import { useI18n } from '../../../i18n/useI18n';
@@ -56,7 +59,7 @@ const AppLabSidePanel = ({
         />
         <SidePanel.Row
           id={SidePanelItemId.MyApps}
-          icon={<IconNavigationDashboardNormal />}
+          icon={<NavigationGroupOutline />}
           title={formatMessage(messages.appsLabel)}
           route="/my-apps"
           active={activeItemId === SidePanelItemId.MyApps}
@@ -66,6 +69,7 @@ const AppLabSidePanel = ({
               onImportApp={onImportApp}
             />
           }
+          trailingIsInteractive
         />
         <SidePanel.Accordion
           title={formatMessage(messages.learnAndExploreLabel)}

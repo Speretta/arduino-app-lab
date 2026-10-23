@@ -1,7 +1,11 @@
 import { Checkmark, Copy } from '@cloud-editor-mono/images/assets/icons';
 import React, { useCallback, useState } from 'react';
 
+import { useIsTruncated } from '../common/hooks/useIsTruncated';
+import { useTooltip } from '../components-by-app/app-lab/essential/tooltip';
+import { useI18n } from '../i18n/useI18n';
 import styles from './error-banner.module.scss';
+import { messages } from './messages';
 
 export interface ErrorBannerProps {
   message: string;
@@ -13,6 +17,15 @@ export const ErrorBanner: React.FC<ErrorBannerProps> = ({
   onCopy,
 }) => {
   const [copied, setCopied] = useState(false);
+  const { formatMessage } = useI18n();
+
+  const { ref: messageRef, isTruncated } =
+    useIsTruncated<HTMLSpanElement>(message);
+
+  const { props: tooltipProps, renderTooltip } = useTooltip({
+    content: message,
+    timeout: 0,
+  });
 
   const handleCopy = useCallback(async () => {
     try {
@@ -30,14 +43,25 @@ export const ErrorBanner: React.FC<ErrorBannerProps> = ({
 
   return (
     <div className={styles['error-banner']}>
-      <span className={styles['error-label']}>Error:</span>
-      <span className={styles['error-message']} title={message}>
-        {message}
-      </span>
+      <div
+        {...tooltipProps}
+        aria-describedby={
+          isTruncated ? tooltipProps['aria-describedby'] : undefined
+        }
+        className={styles['tooltip-trigger']}
+      >
+        <span className={styles['error-label']}>
+          {formatMessage(messages.label)}
+        </span>
+        <span ref={messageRef} className={styles['error-message']}>
+          {message}
+        </span>
+        {isTruncated && renderTooltip(styles['error-tooltip'])}
+      </div>
       <button
         className={styles['copy-button']}
         onClick={handleCopy}
-        aria-label="Copy error message"
+        aria-label={formatMessage(messages.copyMessage)}
         type="button"
       >
         {copied ? <Checkmark /> : <Copy />}

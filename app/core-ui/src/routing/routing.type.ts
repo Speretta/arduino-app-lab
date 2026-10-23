@@ -11,7 +11,6 @@ export const CUSTOM_LIBRARY_ID_PARAM = 'clid';
 export const CREATE_EXAMPLE_PARAM = 'createExample';
 export const CREATE_SKETCH_PARAM = 'createSketch';
 export const SKETCH_ID_ROUTE_PARAM = 'sketchID';
-export const BYPASS_OPT_IN = 'optIn';
 export const BYPASS_IOT_REDIRECT = 'bypassIotRedirect';
 export const NOT_FOUND_PARAM = 'notFound';
 
@@ -91,7 +90,6 @@ export type SearchGenerics = MakeGenerics<{
     [UI_MODE_PARAM]: UIMode;
     [CREATE_EXAMPLE_PARAM]: boolean;
     [CREATE_SKETCH_PARAM]: boolean;
-    [BYPASS_OPT_IN]: boolean;
     [VIEW_MODE_PARAM]: ViewModeValue;
     [SCOPE_PARAM]: ScopeValue;
     [HIGHLIGHT_PARAM]: HighlightValue;

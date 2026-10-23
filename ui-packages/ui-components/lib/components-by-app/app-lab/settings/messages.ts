@@ -8,7 +8,7 @@ export const appMessages = defineMessages({
   },
   appLabVersion: {
     id: 'appLabSettings.app.version',
-    defaultMessage: 'App Lab Version',
+    defaultMessage: 'App Lab version',
     description: 'Label for the App Lab version in the settings page',
   },
   appLabUpToDate: {
@@ -38,7 +38,7 @@ export const appMessages = defineMessages({
 export const deviceMessages = defineMessages({
   title: {
     id: 'appLabSettings.device.title',
-    defaultMessage: 'Device Details',
+    defaultMessage: 'Device details',
     description: 'Title for the device details section in the settings page',
   },
   fqbn: {
@@ -48,12 +48,12 @@ export const deviceMessages = defineMessages({
   },
   serialNumber: {
     id: 'appLabSettings.device.serialNumber',
-    defaultMessage: 'Serial Number',
+    defaultMessage: 'Serial number',
     description: 'Label for the device serial number in the settings page',
   },
   diskStorage: {
     id: 'appLabSettings.device.diskStorage',
-    defaultMessage: 'Disk Storage',
+    defaultMessage: 'Disk storage',
     description: 'Label for the device disk storage usage in the settings page',
   },
   diskStorageUsage: {
@@ -83,55 +83,122 @@ export const deviceMessages = defineMessages({
   },
 });
 
-export const carrierMessages = defineMessages({
+export const boardExtensionsMessages = defineMessages({
   title: {
-    id: 'appLabSettings.carrier.title',
-    defaultMessage: 'Carriers',
+    id: 'appLabSettings.boardExtensions.title',
+    defaultMessage: 'Board extensions',
+    description: 'Title for the board extensions section in the settings page',
+  },
+  unsupportedTitle: {
+    id: 'appLabSettings.boardExtensions.unsupportedTitle',
+    defaultMessage: 'Extensions need a board update',
+    description:
+      'Title for the unsupported board extensions section in the settings page',
+  },
+  unsupportedDescription: {
+    id: 'appLabSettings.boardExtensions.unsupportedDescription',
+    defaultMessage:
+      'App Lab can’t tell which extensions your board supports until it’s updated.',
+    description:
+      'Description for the unsupported board extensions section in the settings page',
+  },
+  carrierTitle: {
+    id: 'appLabSettings.boardExtensions.carrierTitle',
+    defaultMessage: 'Carriers connected to your board',
     description: 'Title for the carriers section in the settings page',
   },
-  carrierToggle: {
-    id: 'appLabSettings.carrier.toggle',
-    defaultMessage:
-      'Enable external carriers connected to your Arduino { boardType }',
-    description:
-      'Label for the toggle to enable a carrier in the settings page',
-  },
-  carrierType: {
-    id: 'appLabSettings.carrier.type',
-    defaultMessage: 'Carrier type',
-    description: 'Label for the carrier type in the settings page',
+  carrierButton: {
+    id: 'appLabSettings.boardExtensions.carrierButton',
+    defaultMessage: 'How to attach a carrier',
+    description: 'Label for the carrier button in the settings page',
   },
   carrierDescription: {
-    id: 'appLabSettings.carrier.description',
+    id: 'appLabSettings.boardExtensions.carrierDescription',
     defaultMessage:
       'Select which peripheral you are connecting to the carrier.',
     description: 'Label for the carrier description in the settings page',
   },
+  carrierDescriptionVentunoQ: {
+    id: 'appLabSettings.boardExtensions.carrierDescriptionVentunoQ',
+    defaultMessage:
+      'Select which peripheral you are connecting to the carrier. A DSI display disables CSI 0 on the board, and the other two CSI ports work either on the carrier or on the board, not both.',
+    description: 'Label for the carrier description in the settings page',
+  },
+  carrierTypeNoOption: {
+    id: 'appLabSettings.boardExtensions.carrierTypeNoOption',
+    defaultMessage: 'No {type}',
+    description:
+      'Message indicating that no carrier is connected in the settings page',
+  },
   carrierTooltip: {
-    id: 'appLabSettings.carrier.tooltip',
+    id: 'appLabSettings.boardExtensions.carrierTooltip',
     defaultMessage:
       "If you connect a display, the USB-C video port will be deactivated. This means that after restarting, the USB-C port won't work for video anymore, as long as the display port is properly set up.",
     description:
       'Tooltip providing information about carriers in the settings page',
   },
-  carrierInfo: {
-    id: 'appLabSettings.carrier.info',
+  hatTitle: {
+    id: 'appLabSettings.boardExtensions.hatTitle',
+    defaultMessage: 'Add-ons connected to JHat header',
+    description: 'Title for the hats section in the settings page',
+  },
+  hatButton: {
+    id: 'appLabSettings.boardExtensions.hatButton',
+    defaultMessage: 'How to attach an Hat',
+    description: 'Label for the hat button in the settings page',
+  },
+  hatType: {
+    id: 'appLabSettings.boardExtensions.hatType',
+    defaultMessage: 'Add-on type',
+    description: 'Label for the hat type in the settings page',
+  },
+  hatTypePlaceholder: {
+    id: 'appLabSettings.boardExtensions.hatTypePlaceholder',
+    defaultMessage: 'No add-on',
+    description: 'Placeholder for the hat type dropdown in the settings page',
+  },
+  hatTooltip: {
+    id: 'appLabSettings.boardExtensions.hatTooltip',
+    defaultMessage: 'Only add-ons that need to be declared are listed here.',
+    description:
+      'Tooltip providing information about hats in the settings page',
+  },
+  applyInfo: {
+    id: 'appLabSettings.boardExtensions.applyInfo',
     defaultMessage:
-      'Restart the board to have your peripherals working properly',
+      'Restart the board to have your extensions managed properly',
     description:
       'Message providing information about carriers in the settings page',
   },
-  carrierButton: {
-    id: 'appLabSettings.carrier.button',
-    defaultMessage: 'Apply and reboot',
+  applyButton: {
+    id: 'appLabSettings.boardExtensions.applyButton',
+    defaultMessage: 'Reboot and apply',
     description: 'Button text to restart the board after enabling a carrier',
+  },
+});
+
+export const csiCameraMessages = defineMessages({
+  title: {
+    id: 'appLabSettings.csiCamera.title',
+    defaultMessage: 'CSI Camera',
+    description: 'Title for the CSI camera section in the settings page',
+  },
+  description: {
+    id: 'appLabSettings.csiCamera.description',
+    defaultMessage: 'Manually install cam-server to use CSI camera on Ubuntu',
+    description: 'Label for the connect camera row in the settings page',
+  },
+  link: {
+    id: 'appLabSettings.csiCamera.link',
+    defaultMessage: 'Open setup guide',
+    description: 'Link text to open setup guide for the CSI camera on Ubuntu',
   },
 });
 
 export const systemMessages = defineMessages({
   title: {
     id: 'appLabSettings.system.title',
-    defaultMessage: 'System Info',
+    defaultMessage: 'System info',
     description: 'Title for the system info section',
   },
   systemVersion: {
@@ -211,17 +278,17 @@ export const osMessages = defineMessages({
   },
   buildVersion: {
     id: 'appLabSettings.os.buildVersion',
-    defaultMessage: 'Build Version',
+    defaultMessage: 'Build version',
     description: 'Label for the build version row',
   },
   linuxDistribution: {
     id: 'appLabSettings.os.linuxDistribution',
-    defaultMessage: 'Linux Distribution',
+    defaultMessage: 'Linux distribution',
     description: 'Label for the Linux distribution row',
   },
   kernelVersion: {
     id: 'appLabSettings.os.kernelVersion',
-    defaultMessage: 'Kernel Version',
+    defaultMessage: 'Kernel version',
     description: 'Label for the kernel version row',
   },
   releaseDate: {
@@ -231,7 +298,7 @@ export const osMessages = defineMessages({
   },
   installOsImage: {
     id: 'appLabSettings.os.installOsImage',
-    defaultMessage: 'Install another OS version (Flash)',
+    defaultMessage: 'Install another OS version (flash)',
     description: 'Label to install a different OS image or reset the board',
   },
   installOsImageInfo: {
@@ -243,7 +310,7 @@ export const osMessages = defineMessages({
   },
   flashBoard: {
     id: 'appLabSettings.os.flashBoard',
-    defaultMessage: 'Flash Board',
+    defaultMessage: 'Flash board',
     description: 'Button text to flash the board with a new OS image',
   },
 });
@@ -251,7 +318,7 @@ export const osMessages = defineMessages({
 export const networkMessages = defineMessages({
   title: {
     id: 'appLabSettings.network.title',
-    defaultMessage: 'Network Connections',
+    defaultMessage: 'Network connections',
     description: 'Title for the network connections section',
   },
   ssid: {
@@ -284,7 +351,7 @@ export const networkMessages = defineMessages({
 export const cloudConnectorMessages = defineMessages({
   title: {
     id: 'appLabSettings.cloudConnector.title',
-    defaultMessage: 'Arduino Cloud',
+    defaultMessage: 'Arduino App-Cloud connector',
     description: 'Title for the App Cloud section',
   },
   connectTitle: {
@@ -294,7 +361,7 @@ export const cloudConnectorMessages = defineMessages({
   },
   connectDescription: {
     id: 'appLabSettings.cloudConnector.connectDescription',
-    defaultMessage: 'Remote monitoring, dashboards and OTA updates.',
+    defaultMessage: 'Manage your device on Arduino Cloud',
     description: 'Subtitle for the App Cloud section',
   },
   moreInfoButton: {
@@ -320,7 +387,7 @@ export const cloudConnectorMessages = defineMessages({
   },
   connectedTitle: {
     id: 'appLabSettings.cloudConnector.connectedTitle',
-    defaultMessage: 'Arduino Cloud status',
+    defaultMessage: 'Device Arduino Cloud status',
     description: 'Subtitle for the App Cloud section when connected',
   },
   connectedDescription: {

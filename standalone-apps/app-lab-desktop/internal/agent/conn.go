@@ -9,10 +9,10 @@ import (
 type AgentConn interface {
 	Initialize(ctx context.Context) ([]AuthMethod, error) // returns the agent's advertised auth methods
 	Authenticate(ctx context.Context, methodID string) error
-	NewSession(ctx context.Context, cwd string) (NewSessionResult, error)                 // also returns the advertised models
-	ListSessions(ctx context.Context, cwd string) ([]SessionSummary, error)               // persisted sessions for a workspace
-	LoadSession(ctx context.Context, sid SessionID, cwd string) (NewSessionResult, error) // re-establish a session (replays history); returns its models/modes
-	Prompt(ctx context.Context, sid SessionID, text string) error                         // blocks until the turn ends
+	NewSession(ctx context.Context, cwd string, ws SessionWorkspace) (NewSessionResult, error)                 // also returns the advertised models
+	ListSessions(ctx context.Context, cwd string) ([]SessionSummary, error)                                    // persisted sessions for a workspace
+	LoadSession(ctx context.Context, sid SessionID, cwd string, ws SessionWorkspace) (NewSessionResult, error) // re-establish a session (replays history); returns its models/modes
+	Prompt(ctx context.Context, sid SessionID, text string, before []string) error                             // blocks until the turn ends; before goes ahead of the text, a block each
 	Cancel(ctx context.Context, sid SessionID) error
 	CloseSession(ctx context.Context, sid SessionID) error             // best-effort; frees the session on the agent
 	DeleteSession(ctx context.Context, sid SessionID) error            // permanently removes a persisted session (UNSTABLE)

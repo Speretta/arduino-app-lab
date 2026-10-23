@@ -5,18 +5,9 @@ export let getNetworkList: SettingsService['getNetworkList'] =
     throw new Error('getNetworkList service not implemented');
   };
 
-export let getWiFiStatus: SettingsService['getWiFiStatus'] = async function () {
-  throw new Error('isWiFiConnected service not implemented');
-};
-
-export let getEthernetStatus: SettingsService['getEthernetStatus'] =
+export let getNetworkStatus: SettingsService['getNetworkStatus'] =
   async function () {
-    throw new Error('getEthernetStatus service not implemented');
-  };
-
-export let getInternetStatus: SettingsService['getInternetStatus'] =
-  async function () {
-    throw new Error('getInternetStatus service not implemented');
+    throw new Error('getNetworkStatus service not implemented');
   };
 
 export let connectToWiFi: SettingsService['connectToWiFi'] = async function (
@@ -42,11 +33,9 @@ export let getIPAddress: SettingsService['getIPAddress'] = async function () {
 
 export const setSettingsService = (service: SettingsService): void => {
   getNetworkList = service.getNetworkList;
-  getEthernetStatus = service.getEthernetStatus;
-  getWiFiStatus = service.getWiFiStatus;
+  getNetworkStatus = service.getNetworkStatus;
   connectToWiFi = service.connectToWiFi;
   disconnectWiFi = service.disconnectWiFi;
-  getInternetStatus = service.getInternetStatus;
   getConnectionName = service.getConnectionName;
   getIPAddress = service.getIPAddress;
 };

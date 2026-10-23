@@ -19,6 +19,53 @@ export const messages = defineMessages({
     description:
       'Explanation shown with the reconnect action after a board change',
   },
+  agentBoardFlashedTitle: {
+    id: 'aiAssistant.panel.boardFlashed.title',
+    defaultMessage: 'The assistant was restarted',
+    description:
+      'Title shown when the agent was torn down because the board was reflashed',
+  },
+  agentBoardFlashedBody: {
+    id: 'aiAssistant.panel.boardFlashed.body',
+    defaultMessage:
+      'The board was reflashed, so the apps it was working on are gone. Your chats are saved. Reconnect once the board has finished restarting.',
+    description:
+      'Explanation shown with the reconnect action after the board was reflashed',
+  },
+  switchBoardReviving: {
+    id: 'aiAssistant.switchBoard.reviving',
+    defaultMessage: 'Restarting the assistant on the new board…',
+    description:
+      'Shown while the agent restarts itself after a board switch the user confirmed',
+  },
+  switchBoardDialogTitle: {
+    id: 'aiAssistant.switchBoard.title',
+    defaultMessage: 'Switch board',
+    description: 'Title of the dialog asking to confirm a board switch',
+  },
+  switchBoardDialogHeading: {
+    id: 'aiAssistant.switchBoard.heading',
+    defaultMessage: 'Switch board while the agent is working?',
+    description:
+      'Confirmation question shown before a board switch stops the agent',
+  },
+  switchBoardDialogBody: {
+    id: 'aiAssistant.switchBoard.body',
+    defaultMessage:
+      'The agent is working on {boardName}. If you switch board now, the current work is interrupted.',
+    description:
+      'Explanation of what a board switch costs while a turn is running',
+  },
+  switchBoardDialogBoardFallback: {
+    id: 'aiAssistant.switchBoard.boardFallback',
+    defaultMessage: 'the current board',
+    description: 'Stands in for the board name when it is unknown',
+  },
+  switchBoardDialogConfirm: {
+    id: 'aiAssistant.switchBoard.confirm',
+    defaultMessage: 'Switch anyway',
+    description: 'Button that switches board and stops the agent',
+  },
   agentStoppedTitle: {
     id: 'aiAssistant.panel.agentStopped.title',
     defaultMessage: 'The agent stopped unexpectedly',
@@ -122,12 +169,6 @@ export const messages = defineMessages({
     defaultMessage: 'Waiting for confirmation…',
     description: 'Status shown while waiting for the sign-in to be confirmed',
   },
-  signInPreparingLink: {
-    id: 'aiAssistant.connect.signInPreparingLink',
-    defaultMessage: 'Preparing sign-in link…',
-    description:
-      'Placeholder in the link row while the agent CLI generates the auth URL',
-  },
   signInPasteTokenHint: {
     id: 'aiAssistant.connect.signInPasteTokenHint',
     defaultMessage: "In case your browser doesn't open",
@@ -213,29 +254,14 @@ export const messages = defineMessages({
   },
   chatEmptyTitle: {
     id: 'aiAssistant.chat.empty.title',
-    defaultMessage: 'Hi, What do you want to build today?',
+    defaultMessage: 'Hi, what do you want to build today?',
     description: 'Title of the empty chat state',
   },
-  chatEmptySubtitle: {
-    id: 'aiAssistant.chat.empty.subtitle',
+  chatEmptyTitleCompact: {
+    id: 'aiAssistant.chat.empty.titleCompact',
     defaultMessage:
-      'Describe an app and the assistant will help you create it on your UNO Q.',
-    description: 'Subtitle of the empty chat state',
-  },
-  chatSuggestionBlink: {
-    id: 'aiAssistant.chat.suggestion.blink',
-    defaultMessage: 'Blink an LED',
-    description: 'Suggested prompt shown as a pill in the empty chat state',
-  },
-  chatSuggestionSensor: {
-    id: 'aiAssistant.chat.suggestion.sensor',
-    defaultMessage: 'Read a sensor',
-    description: 'Suggested prompt shown as a pill in the empty chat state',
-  },
-  chatSuggestionComments: {
-    id: 'aiAssistant.chat.suggestion.comments',
-    defaultMessage: 'Add comments',
-    description: 'Suggested prompt shown as a pill in the empty chat state',
+      'Ask about this app — the agent already sees the file you have open.',
+    description: 'Title of the empty chat state in the docked agent side panel',
   },
   chatPlaceholder: {
     id: 'aiAssistant.chat.placeholder',
@@ -265,6 +291,20 @@ export const messages = defineMessages({
     description:
       'Action that abandons a session that cannot be reopened and starts a fresh one',
   },
+  offlineToast: {
+    id: 'aiAssistant.chat.offlineToast',
+    defaultMessage:
+      "You're offline. The assistant needs a connection to reply.",
+    description:
+      'Toast shown for as long as the computer has no network connection; it clears itself once the connection is back',
+  },
+  offlineRequestError: {
+    id: 'aiAssistant.chat.offlineRequestError',
+    defaultMessage:
+      "The request couldn't reach the assistant. Check your connection and try again.",
+    description:
+      'Reason shown in the failed-turn banner when the request never reached the provider',
+  },
   connectedToast: {
     id: 'aiAssistant.connectedToast',
     defaultMessage: '{agent} connected.',
@@ -284,16 +324,6 @@ export const messages = defineMessages({
     id: 'aiAssistant.chat.stop',
     defaultMessage: 'Stop',
     description: 'Label of the chat stop button that aborts the current turn',
-  },
-  codeApply: {
-    id: 'aiAssistant.code.apply',
-    defaultMessage: 'Apply to editor',
-    description: 'Apply a code block to the App Lab editor',
-  },
-  codeApplied: {
-    id: 'aiAssistant.code.applied',
-    defaultMessage: 'Applied',
-    description: 'Confirmation after applying a code block',
   },
   toolStatusPending: {
     id: 'aiAssistant.tool.status.pending',
@@ -320,10 +350,26 @@ export const messages = defineMessages({
     defaultMessage: 'Output',
     description: 'Label for the tool call output section',
   },
+  workspacePickerPrefix: {
+    id: 'aiAssistant.workspace.prefix',
+    defaultMessage: 'New session in',
+    description: 'Label before the workspace picker, shown on an empty chat',
+  },
+  workspacePicker: {
+    id: 'aiAssistant.workspace.picker',
+    defaultMessage: 'Workspace',
+    description: 'Accessible name of the workspace picker',
+  },
   permDescription: {
     id: 'aiAssistant.permission.description',
     defaultMessage: 'Allow the agent to do this?',
     description: 'Body of the tool permission dialog',
+  },
+  permOutsideWorkspace: {
+    id: 'aiAssistant.permission.outsideWorkspace',
+    defaultMessage: 'Outside this app',
+    description:
+      'Badge on a permission prompt whose action writes into an app other than the session workspace',
   },
   permAllowOnce: {
     id: 'aiAssistant.permission.allowOnce',
@@ -349,11 +395,6 @@ export const messages = defineMessages({
     id: 'aiAssistant.plan.description',
     defaultMessage: 'Review the plan, then choose how to proceed.',
     description: 'Body of the plan-mode approval card',
-  },
-  headerTitle: {
-    id: 'aiAssistant.header.title',
-    defaultMessage: 'Agent Builder',
-    description: 'Title shown on the left of the chat header',
   },
   sessionsTitle: {
     id: 'aiAssistant.sessions.title',
@@ -431,6 +472,12 @@ export const messages = defineMessages({
     id: 'aiAssistant.sessions.pinnedHeading',
     defaultMessage: 'Pinned',
     description: 'Side panel section heading for pinned sessions',
+  },
+  sessionsGeneralFolder: {
+    id: 'aiAssistant.sessions.generalFolder',
+    defaultMessage: 'Arduino Apps',
+    description:
+      'Side panel folder holding the sessions started outside an app',
   },
   modelPicker: {
     id: 'aiAssistant.chat.modelPicker',

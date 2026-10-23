@@ -11,7 +11,7 @@ import {
   ReferencePath,
   ReferenceSearchItem,
   ReferenceSearchResult,
-} from '@cloud-editor-mono/ui-components';
+} from '@cloud-editor-mono/ui-components/lib/sidenav/sections/reference/reference.type';
 import { get, set } from 'lodash-es';
 
 import { cleanReferenceItemTemplate, isReferenceCategory } from './utils';

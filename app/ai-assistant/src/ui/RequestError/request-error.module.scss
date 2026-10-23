@@ -8,7 +8,7 @@
   padding: 12px 14px;
   border-radius: 8px;
   border: 1px solid var(--feedback-error-default, #ff6b6b);
-  background: var(--feedback-error-background, rgba(255, 107, 107, 0.12));
+  background: var(--feedback-error-flexible, rgba(255, 136, 120, 0.2));
 }
 
 .request-error-title {

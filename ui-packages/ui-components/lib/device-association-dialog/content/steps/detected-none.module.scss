@@ -15,13 +15,13 @@
 }
 
 .message {
-    color: shared.theme-var(--associate-dialog-foreground);
+    color: var(--text-default);
     padding-top: 20px;
     width: 100%;
 }
 
 .agent-not-found-message {
-    color: shared.theme-var(--associate-dialog-foreground);
+    color: var(--text-default);
 
     display: flex;
     flex-direction: column;

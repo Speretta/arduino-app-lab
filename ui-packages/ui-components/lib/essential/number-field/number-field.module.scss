@@ -1,17 +1,30 @@
 @use "../../../public/shared.module.scss";
 
-// TODO: Use correct variables when available
-$buttonHover: #00979d;
-
+// The +/- icons (increment.svg / decrement.svg) ship with hardcoded teal fills
+// (#00979D glyph, #005C5F circle). Override them via CSS so the stepper follows
+// the palette accent like the rest of the buttons. Author `fill` wins over the
+// SVG presentation attribute for inline SVGs.
 .button {
+  & > svg {
+    // Circle background: keep the SVG's fill-opacity (0.1) -> subtle accent wash.
+    & > rect {
+      fill: var(--accent-default);
+    }
+
+    // Glyph: solid accent.
+    & > path {
+      fill: var(--accent-default);
+    }
+  }
+
   &:hover > svg {
     & > rect {
-      fill: $buttonHover;
+      fill: var(--accent-default);
       fill-opacity: unset;
     }
-  
+
     & > path {
-      fill: shared.theme-var(--button-primary-label);   
+      fill: var(--icon-on-accent);
     }
   }
 }

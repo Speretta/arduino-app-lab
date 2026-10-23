@@ -35,17 +35,9 @@ export type BoardResources = {
   };
 };
 
-export type BoardResourcesValue = {
-  resources: BoardResources | undefined;
-  ramUsedGB: string;
-  ramTotalGB: string;
-  homeDiskUsedGB: string;
-  homeDiskTotalGB: string;
-  rootDiskUsedGB: string;
-  rootDiskTotalGB: string;
-};
-
 export interface Notification {
+  // An entry with an id can be removed while the job it stands for runs.
+  id?: string;
   label: string;
   tooltip?: string;
   icon?: React.ReactNode;

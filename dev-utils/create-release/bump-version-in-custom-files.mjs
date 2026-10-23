@@ -4,8 +4,6 @@
  * Script to bump the version of Cloud Editor (standalone)
  * and component
  ******************************************************************/
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { exit } from 'node:process';
 
 import glob from 'glob';
@@ -30,51 +28,12 @@ function run(prevVersion, newVersion) {
 
     console.log(`Custom replacement from ${prevVersion} to ${newVersion}`);
 
-    const packageFile = fs.readFileSync(
-      path.join(process.cwd(), './package.json'),
-    );
-    const packageContent = JSON.parse(packageFile);
-    const deps = packageContent.dependencies;
-    const devDeps = packageContent.devDependencies;
-
-    packageContent.dependencies = replaceAliasesInPackage(deps, newVersion);
-    packageContent.devDependencies = replaceAliasesInPackage(
-      devDeps,
-      newVersion,
-    );
-
-    savePackageFile(packageContent);
-
     const files = findEnvFiles();
     replaceVersionInEnvFiles(files, newVersion);
     console.log('Custom version replacement succeded');
   } catch (error) {
     console.error('Error occurred: ', error);
   }
-}
-
-/**
- *
- * E.g. "@cloud-editor-mono/common": "npm:@bcmi-labs/cloud-editor-common@^1.3.18",
- * @param {*} deps
- */
-function replaceAliasesInPackage(deps, newVersion) {
-  const newDeps = deps;
-  for (const dep in deps) {
-    const currentDep = deps[dep];
-    if (currentDep.startsWith('npm:@bcmi-labs')) {
-      const updatedVersion = currentDep.replace(/\^.*$/, `^${newVersion}`);
-      newDeps[dep] = updatedVersion;
-    }
-  }
-  return newDeps;
-}
-
-function savePackageFile(packageContent) {
-  fs.writeFileSync(
-    path.join(process.cwd(), './package.json'),
-    JSON.stringify(packageContent, null, 2) + '\n',
-  );
 }
 
 function findEnvFiles() {

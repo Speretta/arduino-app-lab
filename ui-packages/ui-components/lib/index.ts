@@ -1,7 +1,7 @@
-export { Themes } from '../themes/theme.type';
 export { default as CodeBlock } from './code-block/CodeBlock';
 export * from './code-editor';
 export * from './code-mirror';
+export { getInitials } from './common/utils';
 export { default as ConsolePanel } from './console-panel/ConsolePanel';
 export {
   type ConsolePanelLogic,
@@ -34,19 +34,25 @@ export {
   EditorPanel,
 } from './editor-panel';
 export {
+  type AddFileHandler,
   type DeleteFileDialogData,
   type DeleteFileDialogLogic,
+  type DeleteFileHandler,
   type FileNameValidationItem,
   type FileNameValidationResult,
+  type MakeUniqueFileName,
+  type OnBeforeFileAction,
+  type RenameFileHandler,
   type SelectableFileData,
   type TabsBarLogic,
+  type ValidateFileName,
   DeleteFileDialog,
   EditorTabsBar,
   FileNameValidation,
   NewTabMenuItemIds,
+  SUPPORTED_IMAGE_TYPES,
   TabMenuItemIds,
 } from './editor-tabs-bar';
-export { SUPPORTED_IMAGE_TYPES } from './editor-tabs-bar';
 export * from './essential/button';
 export {
   type ConfirmActionDialogLogic,
@@ -95,8 +101,8 @@ export {
   type ContentUpdateLogic,
   type SerialMonitorLogic,
   SerialMonitor,
+  SerialMonitorStatus,
 } from './serial-monitor';
-export { SerialMonitorStatus } from './serial-monitor';
 export * from './sidenav';
 export { Skeleton } from './skeleton';
 export * from './snackbar';

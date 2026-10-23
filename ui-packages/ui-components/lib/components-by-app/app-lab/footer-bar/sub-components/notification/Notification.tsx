@@ -1,8 +1,17 @@
 import { Bell, BellWithDot } from '@cloud-editor-mono/images/assets/icons';
+import {
+  Button,
+  ButtonAppearance,
+  ButtonSize,
+  ButtonVariant,
+  useI18n,
+  useTooltip,
+} from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
 
 import { Notification as NotificationItem } from '../../FooterBar.type';
+import { messages } from '../../messages';
 import NotificationPanel from '../notification-panel/NotificationPanel';
 import styles from './notification.module.scss';
 
@@ -20,6 +29,12 @@ export const Notification: React.FC<NotificationProps> = ({
   const [isMenuVisible, setMenuVisible] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuTriggerRef = useRef<HTMLDivElement>(null);
+  const { formatMessage } = useI18n();
+
+  const { props: tooltipProps, renderTooltip } = useTooltip({
+    content: formatMessage(messages.notifications),
+    timeout: 0,
+  });
 
   // This effect handles clicks outside of the menu
   useEffect(() => {
@@ -50,26 +65,34 @@ export const Notification: React.FC<NotificationProps> = ({
   }
 
   return (
-    <div
-      ref={menuTriggerRef}
-      role="button"
-      tabIndex={0}
-      className={styles['notification-container']}
-      onClick={clickHandlerNotifications}
-      onKeyUp={clickHandlerNotifications}
-    >
-      <div
-        className={clsx(styles['notification-icon-container'], {
-          [styles['active']]: isMenuVisible,
-          [styles['empty']]: newNotifications === 0,
-        })}
-      >
-        {newNotifications === 0 ? <Bell /> : <BellWithDot />}
-        {newNotifications > 0 && (
-          <span className={clsx(styles['notification-label'])}>
-            {newNotifications}
-          </span>
-        )}
+    <>
+      <div {...tooltipProps}>
+        <Button
+          ref={menuTriggerRef as unknown as React.RefObject<HTMLButtonElement>}
+          variant={ButtonVariant.Tertiary}
+          appearance={ButtonAppearance.LowContrast}
+          size={ButtonSize.XXSmall}
+          onClick={clickHandlerNotifications}
+          classes={{
+            button: clsx(styles['notification-button'], {
+              [styles['active']]: isMenuVisible,
+            }),
+          }}
+        >
+          <div
+            className={clsx(styles['notification-icon-container'], {
+              [styles['empty']]: newNotifications === 0,
+            })}
+          >
+            {newNotifications === 0 ? <Bell /> : <BellWithDot />}
+            {newNotifications > 0 && (
+              <span className={clsx(styles['notification-label'])}>
+                {newNotifications}
+              </span>
+            )}
+          </div>
+        </Button>
+        {renderTooltip()}
       </div>
       {isMenuVisible && (
         <NotificationPanel
@@ -78,6 +101,6 @@ export const Notification: React.FC<NotificationProps> = ({
           items={notifications || []}
         />
       )}
-    </div>
+    </>
   );
 };

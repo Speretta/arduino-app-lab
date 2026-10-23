@@ -35,7 +35,7 @@
     fill: currentColor;
   }
 
-  &--destructive {
+  &--error {
     color: var(--feedback-error-default, #da5b4a);
   }
 }

@@ -1,15 +1,19 @@
 .icon-button {
+
+  &.icon-button > svg {
+    height: 16px;
+    width: 16px;
+  }
+
   &.xx-small {
-    padding: 0;
+    border-radius: 4px;
     height: 20px;
     width: 20px;
 
-    svg {
+    &.icon-button > svg {
       height: 12px;
       width: 12px;
     }
-
-    border-radius: 4px;
   }
 
   &.x-small {
@@ -19,7 +23,6 @@
   }
 
   &.small {
-    padding: 10px;
     border-radius: 8px;
     height: 36px;
     width: 36px;

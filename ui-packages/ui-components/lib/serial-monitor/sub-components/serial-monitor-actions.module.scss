@@ -31,11 +31,10 @@ $serialMonitorSendButtonGutter: 4px;
         top: 0;
     }
 
-    
     .serial-monitor-send {
         display: flex;
         width: 100%;
-    
+
         .serial-monitor-send-input-wrapper {
             position: relative;
             width: 100%;
@@ -53,10 +52,11 @@ $serialMonitorSendButtonGutter: 4px;
                 letter-spacing: 0.01em;
                 border: 1px solid #bdc7c7;
                 padding-left: 16px;
+                background-color: transparent;
 
                 &:focus-visible {
                     outline: none;
-                    border: 1px solid #7fcbcd;
+                    border: 1px solid var(--border-accent);
                 }
             }
 
@@ -68,5 +68,9 @@ $serialMonitorSendButtonGutter: 4px;
                 transform: translateY(-50%);
             }
         }
+    }
+
+    .menu-popover {
+        position: relative !important;
     }
 }

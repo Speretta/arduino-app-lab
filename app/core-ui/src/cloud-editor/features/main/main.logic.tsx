@@ -175,7 +175,6 @@ import { useUIVisibilityFromUrl } from './hooks/visibility';
 import { UseMainLogic } from './main.type';
 import { messages } from './messages';
 import {
-  getDeviceSetupLink,
   isCustomLibAccessedFromSharedSpaceError,
   sketchNameValidation,
 } from './utils';
@@ -215,7 +214,7 @@ export const useMainLogic: UseMainLogic =
 
     useTranslateHashToHighlightParam(!!viewMode);
 
-    useMobileWarning(!viewMode);
+    useMobileWarning(!viewMode && !isIotComponent);
 
     const {
       sketchData: _sketchData,
@@ -621,7 +620,7 @@ export const useMainLogic: UseMainLogic =
             }
           },
           targetUrl: String(targetUrl),
-          embedMarkup: `<iframe src="${embedSrc}" style="height:510px;width:100%;margin:10px 0" frameborder=0></iframe>`,
+          embedMarkup: `<iframe src="${embedSrc}" style="height:510px;width:100%;margin:10px 0" border=0></iframe>`,
           ...(!isCreatedSketch
             ? { isOwned: false, isPublic: true }
             : { isOwned: true, isPublic: sketchData.isPublic }),
@@ -824,9 +823,6 @@ export const useMainLogic: UseMainLogic =
         switchToAltPort,
         notificationElement,
         useChromeOsDeviceAssociation: isChromeOs,
-        deviceSetupLink: isCreatedSketch
-          ? getDeviceSetupLink(sketchData.thingId)
-          : undefined,
         shareSketchLogic,
         shareToClassroomLogic,
       };
@@ -1435,7 +1431,6 @@ export const useMainLogic: UseMainLogic =
         canUseGenAi: !!canUseGenAi,
         aiUserPlan,
         genAiMessageUsageExceeded:
-          Config.MODE !== 'production' &&
           genAiInteractions &&
           genAiInteractions?.usage >= genAiInteractions?.limit,
         upgradePlanLinkEnabled: !isPlayStoreApp(),
@@ -1581,7 +1576,6 @@ export const useMainLogic: UseMainLogic =
         isErrorExplanationStreamSending,
         stopErrorExplanationGeneration,
         errorFiles,
-        isAiRestrictionsEnabled: Config.MODE !== 'production',
         openGenAIPolicyTermsDialog,
         hydrateByPaths,
       };
@@ -1728,6 +1722,7 @@ export const useMainLogic: UseMainLogic =
           sketchData: isCreatedSketch ? sketchData : undefined,
           customLibrary,
           example,
+          inoFile: mainInoData,
           files: allFiles,
         });
 
@@ -1834,6 +1829,7 @@ export const useMainLogic: UseMainLogic =
       isPrivateSketchViewedFromOrg,
       isSketchQueried,
       itemName,
+      mainInoData,
       sketchBoardData?.name,
       sketchData,
       sketchID,

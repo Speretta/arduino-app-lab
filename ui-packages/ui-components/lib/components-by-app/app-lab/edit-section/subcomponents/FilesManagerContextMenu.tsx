@@ -1,7 +1,8 @@
-import { AddBrick, AddLibrary } from '@cloud-editor-mono/images/assets/icons';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 
+import { useI18n } from '../../../../i18n/useI18n';
 import styles from '../app-lab-edit-section.module.scss';
+import { messages } from '../messages';
 
 type FilesManagerContextMenuProps = {
   onAddBrick?: () => void;
@@ -12,6 +13,8 @@ const FilesManagerContextMenu: React.FC<FilesManagerContextMenuProps> = ({
   onAddBrick,
   onAddSketchLibrary,
 }: FilesManagerContextMenuProps) => {
+  const { formatMessage } = useI18n();
+
   return (
     <ContextMenu.Portal>
       <ContextMenu.Content className={styles['files-manager-context-menu']}>
@@ -20,10 +23,7 @@ const FilesManagerContextMenu: React.FC<FilesManagerContextMenuProps> = ({
             className={styles['files-manager-context-menu-item']}
             onSelect={onAddBrick}
           >
-            <span className={styles['files-manager-context-icon-container']}>
-              <AddBrick />
-            </span>
-            Add Brick
+            {formatMessage(messages.addBrickButton)}
           </ContextMenu.Item>
         )}
         {onAddSketchLibrary && (
@@ -31,10 +31,7 @@ const FilesManagerContextMenu: React.FC<FilesManagerContextMenuProps> = ({
             className={styles['files-manager-context-menu-item']}
             onSelect={onAddSketchLibrary}
           >
-            <span className={styles['files-manager-context-icon-container']}>
-              <AddLibrary />
-            </span>
-            Add Sketch library
+            {formatMessage(messages.addSketchLibraryButton)}
           </ContextMenu.Item>
         )}
       </ContextMenu.Content>

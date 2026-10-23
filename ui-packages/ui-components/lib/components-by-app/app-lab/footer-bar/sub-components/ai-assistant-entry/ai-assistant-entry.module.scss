@@ -62,7 +62,10 @@
             rgba(255, 255, 255, 0.12) 50%,
             transparent 100%
         );
-        animation: entry-shine 2.3s linear infinite;
+        // Bounded, not infinite: an unbounded sweep costs ~48 points of a core at idle on the
+        // UNO Q, and three passes is enough for a hint. `forwards` is required — with the default
+        // fill mode the ::after parks visible over 58% of the button instead of off its edge.
+        animation: entry-shine 2.3s linear 3 forwards;
         pointer-events: none;
     }
 }

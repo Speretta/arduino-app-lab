@@ -17,23 +17,15 @@
   overflow: unset;
   box-sizing: border-box;
   color: var(--text-subtle, #c9d2d2);
-  padding-bottom: 50px;
-  &::-webkit-scrollbar-thumb {
-    border: 4px solid #171e21;
-  }
-  &::-webkit-scrollbar-track {
-    background-color: transparent;
-  }
 }
 
 .tree-row-container {
   margin-top: 1px; // small correction not to hide the border top of selected items
-  padding: 0;
+  padding: 0 12px;
   box-sizing: border-box;
 
-  &--drag-over {
-    border-radius: 6px;
-    background-color: var(--component-bg-flexible, #aeb8b826);
+  &--drag-over .tree-row:not(.tree-row-selected) {
+    background-color: var(--component-bg-flexible);
   }
 }
 .tree-container,
@@ -139,16 +131,8 @@
 
     &:focus {
       outline: 1px solid var(--border-accent, #25c2c7);
+      outline-offset: -1px;
       border-radius: 4px;
-    }
-
-    &--error {
-      outline: 1px solid var(--feedback-error-default, #ff8878);
-      border-radius: 4px;
-
-      &:focus {
-        outline: 1px solid var(--feedback-error-default, #ff8878);
-      }
     }
   }
 }
@@ -164,6 +148,7 @@
 .tree-row-context-menu {
   background: var(--component-bg-above, #374146);
   border-radius: 8px;
+  box-shadow: 0px 4px 20px var(--shadow-overlay);
   min-width: 180px;
   padding: 4px;
   
@@ -178,7 +163,7 @@
   align-items: center;
   color: var(--text-default, #fff);
   height: 28px;
-  gap: 4px;
+  gap: 8px;
   border-radius: 4px;
   padding: 0 12px;
   background-color: transparent;
@@ -202,15 +187,15 @@
 }
 
 .tree-row-context-icon-container {
-  width: 18px;
+  width: 20px;
   text-align: center;
   display: flex;
   align-items: center;
   justify-content: center;
 
   svg {
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
 
     path {
       fill: var(--text-default, #ffffff);

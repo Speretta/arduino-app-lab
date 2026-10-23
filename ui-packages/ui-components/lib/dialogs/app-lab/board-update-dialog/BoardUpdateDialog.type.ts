@@ -26,6 +26,9 @@ export type BoardUpdateDialogLogic = () => {
   appUpdateSucceeded?: boolean;
   boardUpdates?: Array<{ name: string; toVersion: string }> | null;
   boardLogs?: string[];
+  // 0-100. Undefined while the update reports no progress yet: the bar stays
+  // indeterminate and no percentage is shown.
+  boardUpdateProgress?: number;
   startUpdate: () => void;
   reloadApp: () => void;
   openFlasherTool: () => Promise<void>;

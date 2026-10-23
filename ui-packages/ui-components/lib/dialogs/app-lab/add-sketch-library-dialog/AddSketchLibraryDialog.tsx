@@ -5,10 +5,17 @@ import {
 import { useEffect, useState } from 'react';
 import { useDebounce } from 'react-use';
 
-import { Board, SketchLibraryCard } from '../../../components-by-app/app-lab';
+import {
+  Board,
+  Button,
+  ButtonSize,
+  ButtonVariant,
+  SketchLibraryCard,
+} from '../../../components-by-app/app-lab';
 import { SearchField } from '../../../essential/search-field';
 import { useI18n } from '../../../i18n/useI18n';
 import { Skeleton } from '../../../skeleton';
+import { XSmall } from '../../../typography';
 import { AppLabDialog } from '../app-lab-dialog/AppLabDialog';
 import { addSketchLibraryDialogMessages as messages } from '../messages';
 import styles from './add-sketch-library-dialog.module.scss';
@@ -19,6 +26,8 @@ export type AddSketchLibraryDialogLogic = () => {
   onOpenChange: (open: boolean) => void;
   libraries?: SketchLibrary[];
   librarySearchIsLoading: boolean;
+  librarySearchError: boolean;
+  retryLibrarySearch: () => void;
   searchSketchLibraries: (query: ListLibrariesParams['query']) => void;
   appLibrariesById: Record<string, string>;
   installingLibraryId?: string;
@@ -40,6 +49,8 @@ export const AddSketchLibraryDialog: React.FC<AddSketchDialogProps> = ({
     onOpenChange,
     libraries = [],
     librarySearchIsLoading,
+    librarySearchError,
+    retryLibrarySearch,
     searchSketchLibraries,
     appLibrariesById,
     installingLibraryId,
@@ -52,6 +63,8 @@ export const AddSketchLibraryDialog: React.FC<AddSketchDialogProps> = ({
   const { formatMessage } = useI18n();
 
   const [searchQuery, setSearchQuery] = useState('');
+
+  const showError = !librarySearchIsLoading && librarySearchError;
 
   useEffect(() => {
     if (open) {
@@ -93,7 +106,7 @@ export const AddSketchLibraryDialog: React.FC<AddSketchDialogProps> = ({
           input: styles['search-input'],
         }}
       />
-      {!librarySearchIsLoading && libraries.length > 0 && (
+      {!librarySearchIsLoading && !showError && libraries.length > 0 && (
         <div className={styles['library-list']}>
           {libraries.map((library) => (
             <SketchLibraryCard
@@ -116,8 +129,22 @@ export const AddSketchLibraryDialog: React.FC<AddSketchDialogProps> = ({
           <Skeleton variant="rect" count={5} />
         </div>
       )}
-      {!librarySearchIsLoading && libraries.length === 0 && (
-        <div className={styles['library-empty']}>No libraries found</div>
+      {showError && (
+        <div className={styles['library-error']} role="alert">
+          <XSmall>{formatMessage(messages.searchError)}</XSmall>
+          <Button
+            variant={ButtonVariant.Secondary}
+            size={ButtonSize.XSmall}
+            onClick={retryLibrarySearch}
+          >
+            {formatMessage(messages.retryButton)}
+          </Button>
+        </div>
+      )}
+      {!librarySearchIsLoading && !showError && libraries.length === 0 && (
+        <div className={styles['library-empty']}>
+          {formatMessage(messages.noLibrariesFound)}
+        </div>
       )}
     </AppLabDialog>
   );

@@ -1,0 +1,206 @@
+// Cloud Editor design tokens with no colorino (design-system) equivalent.
+// Delivered via [data-art-theme] like colorino, but owned and maintained by the
+// Cloud Editor team. App Lab is always dark, so only the dark block applies there
+// (App Lab imports this file too).
+// Tokens that track the space's custom palette read --accent-*; the hex fallback is the Arduino default.
+
+// Identical across themes
+[data-art-theme="dark"],
+[data-art-theme="light"] {
+  --button-destructive-border-active: #df7365;
+  --code-block-changed-line: #f1c40f66;
+  --code-block-deleted-chunk: #da5b4a66;
+  --console-bar-foreground-success: #1da086;
+  --console-content-background: #000000;
+  --console-content-foreground: #dae3e3;
+  --console-content-foreground-error: #df7365;
+  --console-content-foreground-success: #3fae98;
+  --console-divider-drag: #f1c40f;
+  --console-progress-bar-background: #0ca1a633;
+  --console-progress-bar-foreground: #0ca1a6;
+  --editor-notification: #3fae981a;
+  --editor-selection-match: #485942;
+  --editor-syntax-highlight-comments: #7f8c8d;
+  --editor-syntax-highlight-error: #facbcb;
+  --editor-syntax-highlight-inline-code: #01ab75;
+  --sidebar-item-label: #dae3e3;
+  --sidebar-tab-label: #dae3e3;
+  --tooltip-background: #4e5b61;
+  --tooltip-background-error: #da5b4a;
+  --tooltip-foreground: #ffffff;
+}
+
+[data-art-theme="dark"] {
+  --associate-dialog-card-board-name: #dae3e3;
+  --associate-dialog-card-border-hover: #95a5a6;
+  --associate-dialog-card-device-type-background: color-mix(in srgb, var(--surface-bg-above, #374146) 45%, var(--surface-bg-baseline, #232b2e));
+  --associate-dialog-card-device-type-foreground: #f7f9f9;
+  --associate-dialog-card-divider: #4e5b61;
+  --associate-dialog-card-icon: #95a5a6;
+  --associate-dialog-card-label: #dae3e3;
+  --associate-dialog-card-picture-background: color-mix(in srgb, var(--surface-bg-baseline, #232b2e) 70%, var(--surface-bg-below-1, #171e21));
+  --associate-dialog-card-picture-background-hover: color-mix(in srgb, var(--surface-bg-above, #374146) 45%, var(--surface-bg-baseline, #232b2e));
+  --associate-dialog-card-picture-device: #95a5a6;
+  --bg-baseline: #232b2e;
+  --button-destructive-background: #df7365;
+  --button-destructive-background-hover: #da5b4a;
+  --button-destructive-label: #1f272a;
+  --button-tertiary-label-active: var(--accent-default-strong, #7fcbcd);
+  --code-block-background: #101618;
+  --console-bar-background: color-mix(in srgb, var(--surface-bg-baseline, #232b2e) 70%, var(--surface-bg-below-1, #171e21));
+  --console-bar-foreground: #dae3e3;
+  --console-bar-foreground-error: #da5b4a;
+  --console-bar-foreground-on-color: #1f272a;
+  --counter-button-background: #ffffff1a;
+  --counter-button-foreground-hover: #f7f9f9;
+  --dropdown-divider: #434f54;
+  --dropdown-item-background-hover: #2c353a;
+  --dropdown-item-background-selected: #ffffff1a;
+  --dropdown-item-label2: #95a5a6;
+  // Cloud Editor marks the active line on the gutter number, not with a line band.
+  --editor-active-line-background: transparent;
+  --editor-active-line-gutter-background: #374146;
+  --editor-background: #2c353a;
+  --editor-background-selection: #ffcc0066;
+  --editor-border-color: #232b2e;
+  // Tab separators: visible in dark (matches the canvas border), transparent in
+  // light where tabs are distinguished by background alone.
+  --editor-tab-border-color: #232b2e;
+  --editor-cursor-color: #95a5a6;
+  --editor-lines-background: #101618;
+  --editor-lines-background-selected: #374146;
+  --editor-lines-foreground: #95a5a6;
+  --editor-lines-foreground-active: #ffffff;
+  --editor-search-match-background: var(--accent-alpha, #25c2c733);
+  --editor-search-match-background-active: color-mix(in srgb, var(--accent-default, #25c2c7) 60%, transparent);
+  --editor-syntax-highlight-constants: #5beff4;
+  --editor-syntax-highlight-datatypes: #ff7519;
+  --editor-syntax-highlight-error-background: #da5b4a66;
+  --editor-syntax-highlight-functions: #ff7519;
+  --editor-syntax-highlight-line-background: #ffffff1a;
+  --editor-syntax-highlight-neutral: #dae3e3;
+  --editor-syntax-highlight-numeric: #f1d78f;
+  --editor-syntax-highlight-string: #00ab75;
+  --editor-syntax-highlight-structures: #afda00;
+  --editor-syntax-highlight-variables: #5beff4;
+  --editor-tab-background-active: #171e21;
+  --editor-tab-foreground: #c9d2d2;
+  --editor-tab-foreground-active: #ffffff;
+  --editor-tab-unsaved-icon-color: #5d6a6b;
+  --editor-tab-unsaved-icon-color-active: #5d6a6b;
+  --filetype-generic: #95a5a6;
+  --filetype-h: #f39c12;
+  --header-background: #2c353a;
+  --header-divider: #434f54;
+  --header-drawer-button-background-hover: #ffffff1a;
+  --input-field-label-placeholder: #95a5a6;
+  --sidebar-background: var(--surface-bg-baseline, #232b2e);
+  --sidebar-divider: #434f54;
+  --sidebar-item-background-hover: #434f54;
+  --sidebar-panel-background: color-mix(in srgb, var(--surface-bg-baseline, #232b2e) 70%, var(--surface-bg-below-1, #171e21));
+  --sidebar-panel-callout: #dae3e3;
+  --sidebar-panel-code-container: color-mix(in srgb, var(--surface-bg-below-1, #171e21) 45%, var(--surface-bg-below-2, #090f11));
+  --sidebar-panel-item-background-hover: #434f54;
+  --sidebar-tab-background-hover: #ffffff1a;
+  --tab-list-border-active: #dae3e3;
+  --text-icon-primary: #dae3e3;
+  --toggle-background-unchecked: #374146;
+  --toggle-foreground: #f7f9f9;
+  --toolbar-button-primary-background-disabled: color-mix(in srgb, var(--accent-default, #25c2c7) 50%, transparent);
+  --toolbar-button-primary-background-hover: var(--accent-default-strong, #7fcbcd);
+  --toolbar-button-primary-label: #1f272a;
+  --toolbar-button-secondary-background-hover: #374146;
+  --toolbar-button-secondary-label: #dae3e3;
+  --toolbar-button-secondary-label-disabled: #dae3e380;
+  --toolbar-device-selector-background: color-mix(in srgb, var(--surface-bg-baseline, #232b2e) 70%, var(--surface-bg-below-1, #171e21));
+  --toolbar-device-selector-unselected-background-hover: #ffffff1a;
+  --toolbar-device-selector-unselected-border: #dae3e3;
+  --toolbar-device-selector-unselected-label: #dae3e3;
+  --toolbar-divider: #95a5a6;
+}
+
+[data-art-theme="light"] {
+  --associate-dialog-card-board-name: #374146;
+  --associate-dialog-card-border-hover: #bdc7c7;
+  --associate-dialog-card-device-type-background: color-mix(in srgb, var(--surface-bg-baseline, #ffffff) 56%, var(--surface-bg-below-1, #ecf1f1));
+  --associate-dialog-card-device-type-foreground: #171e21;
+  --associate-dialog-card-divider: #dae3e3;
+  --associate-dialog-card-icon: #374146;
+  --associate-dialog-card-label: #4e5b61;
+  --associate-dialog-card-picture-background: color-mix(in srgb, var(--surface-bg-baseline, #ffffff) 56%, var(--surface-bg-below-1, #ecf1f1));
+  --associate-dialog-card-picture-background-hover: color-mix(in srgb, var(--surface-bg-baseline, #ffffff) 56%, var(--surface-bg-below-1, #ecf1f1));
+  --associate-dialog-card-picture-device: #4e5b61;
+  --bg-baseline: #7fcbcd;
+  --button-destructive-background: #da5b4a;
+  --button-destructive-background-hover: #c11f09;
+  --button-destructive-label: #dae3e3;
+  --button-tertiary-label-active: var(--accent-default, #008184);
+  --code-block-background: #2c353a;
+  --console-bar-background: var(--surface-bg-below-1, #ecf1f1);
+  --console-bar-foreground: #374146;
+  --console-bar-foreground-error: #c11f09;
+  --console-bar-foreground-on-color: #dae3e3;
+  --counter-button-background: color-mix(in srgb, var(--accent-default-strong, #005c5f) 10%, transparent);
+  --counter-button-foreground-hover: #ffffff;
+  --dropdown-divider: #bdc7c7;
+  --dropdown-item-background-hover: #f7f9f9;
+  --dropdown-item-background-selected: color-mix(in srgb, var(--accent-default-strong, #005c5f) 10%, transparent);
+  --dropdown-item-label2: #4e5b61;
+  --editor-active-line-background: transparent;
+  --editor-active-line-gutter-background: #dae3e3;
+  --editor-background: #ffffff;
+  --editor-background-selection: #ffcc0066;
+  --editor-border-color: #c9d2d2;
+  --editor-tab-border-color: transparent;
+  --editor-cursor-color: #4e5b61;
+  --editor-lines-background: #ffffff;
+  --editor-lines-background-selected: #dae3e3;
+  --editor-lines-foreground: #4e5b61;
+  --editor-lines-foreground-active: #374146;
+  --editor-search-match-background: #ffcc0066;
+  --editor-search-match-background-active: #ffcc0099;
+  --editor-syntax-highlight-constants: #00979d;
+  --editor-syntax-highlight-datatypes: #d35400;
+  --editor-syntax-highlight-error-background: #facbcb66;
+  --editor-syntax-highlight-functions: #d35400;
+  --editor-syntax-highlight-line-background: #dae3e3;
+  --editor-syntax-highlight-neutral: #171e21;
+  --editor-syntax-highlight-numeric: #8a7b52;
+  --editor-syntax-highlight-string: #005c5f;
+  --editor-syntax-highlight-structures: #728e00;
+  --editor-syntax-highlight-variables: #00979d;
+  --editor-tab-background-active: #ffffff;
+  --editor-tab-foreground: #171e21;
+  --editor-tab-foreground-active: #171e21;
+  --editor-tab-unsaved-icon-color: #7f8c8d;
+  --editor-tab-unsaved-icon-color-active: #7f8c8d;
+  --filetype-generic: #374146;
+  --filetype-h: #f26727;
+  --header-background: #ffffff;
+  --header-divider: #bdc7c7;
+  --header-drawer-button-background-hover: color-mix(in srgb, var(--accent-default-strong, #005c5f) 10%, transparent);
+  --input-field-label-placeholder: #4e5b61;
+  --sidebar-background: var(--accent-default, #008184);
+  --sidebar-divider: #bdc7c7;
+  --sidebar-item-background-hover: #ffffff33;
+  --sidebar-panel-background: color-mix(in srgb, var(--surface-bg-baseline, #ffffff) 56%, var(--surface-bg-below-1, #ecf1f1));
+  --sidebar-panel-callout: #ffffff;
+  --sidebar-panel-code-container: var(--surface-bg-below-1, #ecf1f1);
+  --sidebar-panel-item-background-hover: #ecf1f1;
+  --sidebar-tab-background-hover: #ffffff33;
+  --tab-list-border-active: #374146;
+  --text-icon-primary: #374146;
+  --toggle-background-unchecked: #bdc7c7;
+  --toggle-foreground: #ffffff;
+  --toolbar-button-primary-background-disabled: #0ca1a680;
+  --toolbar-button-primary-background-hover: #0ca1a6;
+  --toolbar-button-primary-label: #ffffff;
+  --toolbar-button-secondary-background-hover: #ffffff;
+  --toolbar-button-secondary-label: #374146;
+  --toolbar-button-secondary-label-disabled: #37414680;
+  --toolbar-device-selector-background: color-mix(in srgb, var(--surface-bg-baseline, #ffffff) 56%, var(--surface-bg-below-1, #ecf1f1));
+  --toolbar-device-selector-unselected-background-hover: color-mix(in srgb, var(--accent-default-strong, #005c5f) 10%, transparent);
+  --toolbar-device-selector-unselected-border: var(--accent-default, #008184);
+  --toolbar-device-selector-unselected-label: var(--accent-default, #008184);
+  --toolbar-divider: #4e5b61;
+}

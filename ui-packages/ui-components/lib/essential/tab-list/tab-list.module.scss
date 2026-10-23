@@ -1,3 +1,5 @@
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
+
 $tabsHeight: 37px;
 
 .tabs {
@@ -14,7 +16,8 @@ $tabsHeight: 37px;
   grid-auto-flow: column;
   justify-content: center;
   align-items: end;
-  border-bottom: 1px solid #dae3e3; //correct variable needed
+  color: var(--text-default);
+  border-bottom: 1px solid var(--tab-list-border-active); //correct variable needed
   height: $tabsHeight;
 
   &.hidden {
@@ -40,8 +43,7 @@ $tabsHeight: 37px;
 }
 
 .tab-selected {
-  border-bottom: 2px solid #4e5b61; //correct variable needed
-  height: calc(100% - 4px);
+  border-bottom: 2px solid var(--tab-list-border-active);
 
   &:focus-visible {
     outline: none;

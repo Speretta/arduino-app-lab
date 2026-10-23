@@ -1,7 +1,7 @@
 import {
+  AppBrickDetails,
   BrickConfigVariable,
   BrickCreateUpdateRequest,
-  BrickInstance,
 } from '@cloud-editor-mono/infrastructure';
 import { capitalize } from 'lodash-es';
 import { useEffect, useState } from 'react';
@@ -24,7 +24,7 @@ export type ConfigureAppBrickDialogLogic = (params: {
   brickId?: string;
   open: boolean;
 }) => {
-  brickInstance?: BrickInstance;
+  brickInstance?: AppBrickDetails;
   confirmAction: (params: BrickCreateUpdateRequest) => Promise<boolean>;
 };
 
@@ -132,7 +132,6 @@ export const ConfigureAppBrickDialog: React.FC<
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck="false"
-                /* eslint-disable-next-line jsx-a11y/no-autofocus */
                 autoFocus={index === 0}
                 onChange={(value: string): void =>
                   setVariables((prev) =>

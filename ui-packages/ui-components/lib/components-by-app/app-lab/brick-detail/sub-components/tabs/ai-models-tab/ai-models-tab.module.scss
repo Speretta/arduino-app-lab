@@ -1,0 +1,9 @@
+.ai-models-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .suggested-models-title {
+    color: var(--text-subtle);
+  }
+}

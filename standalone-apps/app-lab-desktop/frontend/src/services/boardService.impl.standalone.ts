@@ -1,7 +1,10 @@
 import { BoardService } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import {
-  Carrier,
-  CarriersStatus,
+  HwError,
+  HwErrorCode,
+  HwList as HwListType,
+  HwStatus,
+  HwStatusDevice,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 
 import {
@@ -18,6 +21,12 @@ import {
   GetLinuxDistribution,
   GetNetworkModeStatus,
   GetOSImageVersion,
+  HwAvailable,
+  HwDisable,
+  HwEnable,
+  HwList,
+  HwShow,
+  HwSupported,
   IsBoard,
   IsUserPasswordSet,
   ListKeyboardLayouts,
@@ -30,9 +39,11 @@ import {
   SetUserPassword,
 } from '../../wailsjs/go/app/App';
 import {
-  mapCarrier,
+  mapCarriers,
   mapCarriersStatus,
   mapGetBoards,
+  mapHwList,
+  mapHwShow,
 } from './boardService.mapper';
 import { filterBoards } from './boardService.utils';
 
@@ -171,8 +182,18 @@ export const setNetworkMode: BoardService['setNetworkMode'] = async function (
   enabled: boolean,
   password: string,
 ) {
-  await (enabled ? EnableNetworkMode(password) : DisableNetworkMode(password));
-  return enabled;
+  try {
+    await (enabled
+      ? EnableNetworkMode(password)
+      : DisableNetworkMode(password));
+
+    // Verify the state actually changed to confirm success
+    const newState = await GetNetworkModeStatus();
+
+    return newState === enabled;
+  } catch (error) {
+    return false;
+  }
 };
 
 export const getKernelVersion: BoardService['getKernelVersion'] =
@@ -195,57 +216,126 @@ export const getLinuxDistribution: BoardService['getLinuxDistribution'] =
     return '';
   };
 
-export const getCarriers: BoardService['getCarriers'] = async function () {
+export const isHwSupported: BoardService['isHwSupported'] = async function () {
   try {
-    const result = await CarrierList();
-    return result.map(mapCarrier);
+    const result = await HwSupported();
+    return result;
   } catch (e) {
-    throw new Error(`${e}`);
+    console.error('Error checking if hardware is supported:', e);
   }
+  return false;
 };
 
-export const getCarriersStatus: BoardService['getCarriersStatus'] =
-  async function () {
-    try {
-      const result = await CarrierShow('');
-      return mapCarriersStatus(result);
-    } catch (e) {
-      throw new Error(`${e}`);
+export const getHwList: BoardService['getHwList'] = async function () {
+  const fetch = async (): Promise<HwListType> => {
+    if (await HwAvailable()) {
+      const result = await HwList();
+      return mapHwList(result);
     }
+
+    const result = await CarrierList();
+    return mapCarriers(result);
   };
 
-export const enableCarriers: BoardService['enableCarriers'] = async function (
-  status: CarriersStatus,
-  password: string,
-) {
   try {
-    await Promise.all(
-      status.carriers.map((carrier) =>
-        CarrierEnable(
-          password,
-          carrier.carrierName,
-          carrier.next.map((it) => ({
-            Device: it.device,
-            Option: it.option,
-          })),
-        ),
-      ),
-    );
+    const result = await fetch();
+    return result;
   } catch (e) {
+    console.error('Error getting hardware list:', e);
     throw new Error(`${e}`);
   }
 };
 
-export const disableCarriers: BoardService['disableCarriers'] = async function (
-  carriers: Carrier[],
+export const getHwStatus: BoardService['getHwStatus'] = async function () {
+  const fetch = async (): Promise<HwStatus> => {
+    if (await HwAvailable()) {
+      const result = await HwShow();
+      return mapHwShow(result);
+    }
+
+    const result = await CarrierShow();
+    return mapCarriersStatus(result);
+  };
+
+  try {
+    const result = await fetch();
+    return result;
+  } catch (e) {
+    console.error('Error getting hardware status:', e);
+    throw new Error(`${e}`);
+  }
+};
+
+// Go sends a hardware error as a JSON string: {"code": "...", "message": "..."}.
+const toHwError = (e: unknown): HwError | undefined => {
+  try {
+    const { code, message } = JSON.parse(
+      e instanceof Error ? e.message : String(e),
+    );
+    if (
+      Object.values(HwErrorCode).includes(code) &&
+      typeof message === 'string'
+    ) {
+      return new HwError(code, message);
+    }
+  } catch {
+    // Not JSON: the error is not a hardware error.
+  }
+  return undefined;
+};
+
+export const setHwStatus: BoardService['setHwStatus'] = async function (
+  status: HwStatus,
   password: string,
 ) {
   try {
-    await Promise.all(
-      carriers.map((carrier) => CarrierDisable(password, carrier.name)),
+    const available = await HwAvailable();
+
+    const disable = (name: string): Promise<void> =>
+      available ? HwDisable(password, name) : CarrierDisable(password, name);
+
+    const enable = (name: string, devices: HwStatusDevice[]): Promise<void> => {
+      const config = devices.map((it) => ({
+        Device: it.device,
+        Option: it.option,
+      }));
+
+      return available
+        ? HwEnable(password, name, config)
+        : CarrierEnable(password, name, config);
+    };
+
+    const disabled = status.mounts.filter(
+      (mount) =>
+        mount.currentEnabled &&
+        (mount.kind === 'hat'
+          ? !status.mounts.some((m) => m.kind === 'hat' && m.nextEnabled)
+          : mount.nextDevices.every((device) => device.option === 'none')),
     );
+
+    for (const mount of disabled) {
+      await disable(mount.name);
+    }
+
+    const enabled = status.mounts.filter(
+      (mount) =>
+        (mount.nextEnabled && !mount.currentEnabled) ||
+        (mount.kind === 'carrier' &&
+          mount.nextDevices.some((device) => device.option !== 'none') &&
+          mount.nextDevices.some(
+            (device) =>
+              mount.currentDevices.find(
+                (current) => current.device === device.device,
+              )?.option !== device.option,
+          )),
+    );
+
+    for (const mount of enabled) {
+      await enable(mount.name, mount.kind === 'hat' ? [] : mount.nextDevices);
+    }
   } catch (e) {
-    throw new Error(`${e}`);
+    console.error('Error setting hardware status:', e);
+    throw toHwError(e) ?? new Error(`${e}`);
   }
 };
 

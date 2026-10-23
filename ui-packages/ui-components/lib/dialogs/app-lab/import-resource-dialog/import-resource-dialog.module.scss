@@ -1,5 +1,16 @@
+.dialog-content {
+  --modal-min-width: 500px;
+}
+
+// The base modal animates padding. The steps use different paddings, so without
+// this the height moves for 0.25s each time the step changes.
+.dialog-body,
+.release-body {
+  transition: none !important;
+}
+
 .dialog-body {
-  padding: 32px 40px !important;
+  padding: 24px !important;
   box-sizing: border-box;
 }
 
@@ -13,7 +24,7 @@
   .dialog-header {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 16px;
     text-align: left;
   }
 
@@ -22,7 +33,7 @@
     font-weight: 700;
     line-height: 28px;
     margin: 0;
-    color: var(--text-primary, #ffffff);
+    color: var(--text-default);
     text-align: left;
   }
 
@@ -35,8 +46,8 @@
     p {
       margin: 0;
       font-size: 14px;
-      line-height: 20px;
-      color: var(--text-primary, #ffffff);
+      line-height: 1.6;
+      color: var(--text-default);
       text-align: left;
     }
   }
@@ -48,8 +59,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 32px 24px;
-    border: 2px dashed var(--grayscale-dust, #434f54);
+    padding: 24px 16px;
+    border: 1px dashed var(--border-strong);
     border-radius: 8px;
     background: transparent;
     transition: all 0.2s ease;
@@ -74,13 +85,20 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: 16px;
     width: 100%;
     transition: opacity 0.2s ease;
 
     &.is-dragging {
       opacity: 0;
     }
+  }
+
+  .upload-prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
   }
 
   .upload-content-overlay {
@@ -111,20 +129,20 @@
 
   .upload-icon {
     svg {
-      fill: var(--text-primary, #ffffff) !important;
+      fill: var(--text-default) !important;
     }
 
     path {
-      fill: var(--text-primary, #ffffff) !important;
+      fill: var(--text-default) !important;
     }
   }
 
   .upload-text {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 600;
-    line-height: 24px;
+    line-height: 1.6;
     margin: 0;
-    color: var(--text-primary, #ffffff);
+    color: var(--text-default);
   }
 
   .upload-or {
@@ -137,19 +155,8 @@
   .upload-support {
     font-size: 12px;
     line-height: 16px;
-    color: var(--text-subtle, #c9d2d2);
+    color: var(--text-inverted-subtle);
     margin: 0;
-  }
-
-  .white-icon-button {
-    svg {
-      fill: var(--component-bg-accent, #25c2c7);
-      color: var(--component-bg-accent, #25c2c7);
-    }
-
-    path {
-      fill: var(--component-bg-accent, #25c2c7);
-    }
   }
 
   // Loading state
@@ -185,7 +192,9 @@
     }
   }
 
-  h3 {
+  // Scoped to the status steps: the release note renders markdown headings inside this dialog.
+  .loading-state h3,
+  .upload-failed h3 {
     font-size: 20px;
     font-weight: 700;
     line-height: 28px;
@@ -235,8 +244,87 @@
       font-size: 14px;
       line-height: 20px;
       text-align: center;
-      color: var(--text-primary, #ffffff);
+      color: var(--text-default);
       width: 100%;
     }
   }
+}
+
+.release-body {
+  padding: 16px !important;
+}
+
+.release-step {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.release-summary {
+  // The values line up in one column, as in the design.
+  --release-summary-value-width: 50%;
+  --release-summary-note-max-height: 160px;
+}
+
+.preparation-label {
+  color: var(--text-default);
+}
+
+.preparation {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.preparation-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.preparation-description {
+  color: var(--text-default);
+}
+
+.trust-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background-color: var(--component-bg-flexible);
+  color: var(--text-default);
+}
+
+.trust-warning-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.upload-formats {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.upload-format-list {
+  display: flex;
+  gap: 8px;
+}
+
+.upload-format {
+  padding: 2px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 200px;
+  background: var(--component-bg-baseline);
+  color: var(--text-default);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
 }

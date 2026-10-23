@@ -1,18 +1,18 @@
 import {
+  AiModelImpulse,
   BrickDetailModel,
-  BrickDetailModelImpulse,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useEffect, useMemo, useState } from 'react';
 
 export interface EdgeImpulseModelState {
   /** All impulses for the model (empty array for non-EI models). */
-  impulses: BrickDetailModelImpulse[];
+  impulses: AiModelImpulse[];
   selectedImpulseId: string | undefined;
   setSelectedImpulseId: (impulseId: string | undefined) => void;
   /** Impulse matching `selectedImpulseId`, if any. */
-  selectedImpulse: BrickDetailModelImpulse | undefined;
+  selectedImpulse: AiModelImpulse | undefined;
   /** Impulse whose installed model is the one currently in use, if any. */
-  impulseInUse: BrickDetailModelImpulse | undefined;
+  impulseInUse: AiModelImpulse | undefined;
 }
 
 /**

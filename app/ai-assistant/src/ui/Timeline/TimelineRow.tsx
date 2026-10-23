@@ -68,6 +68,9 @@ export const TimelineRow: React.FC<TimelineRowProps> = ({
           </Link>
         </>
       )}
+      {item.outsideLabel && (
+        <span className={styles['timeline-outside']}>{item.outsideLabel}</span>
+      )}
     </span>
   );
 

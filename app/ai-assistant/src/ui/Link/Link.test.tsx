@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FileOpenProvider } from './FileOpenContext';
 import { Link } from './Link';
 
-const openFile = vi.fn<[string], void>();
+const openFile = vi.fn<(path: string) => void>();
 
 // Links live in the chat thread, which provides the file-open handler.
 const renderInChat = (ui: ReactNode): void => {

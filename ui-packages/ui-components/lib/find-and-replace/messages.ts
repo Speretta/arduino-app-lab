@@ -16,21 +16,6 @@ export const messages = defineMessages({
     defaultMessage: 'Select All',
     description: 'Select All',
   },
-  prev: {
-    id: 'findAndReplace.prev',
-    defaultMessage: 'Previous',
-    description: 'Previous',
-  },
-  next: {
-    id: 'findAndReplace.next',
-    defaultMessage: 'Next',
-    description: 'Next',
-  },
-  occurrences: {
-    id: 'findAndReplace.occurrences',
-    defaultMessage: '{currentMatch} of {totalOccurrences}',
-    description: '{currentMatch} of {totalOccurrences}',
-  },
   noResults: {
     id: 'findAndReplace.noResults',
     defaultMessage: 'No results',

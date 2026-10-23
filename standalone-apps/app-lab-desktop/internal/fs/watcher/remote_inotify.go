@@ -87,11 +87,8 @@ func (m *WatchManager) runRemoteInotify(ctx context.Context, conn remote.RemoteC
 		if recursive {
 			args = append(args, "-r")
 			if len(excludedDirs) > 0 {
-				// Single-quote the regex so its metacharacters survive the SSH/ADB
-				// transports: both hand a no-space, quoted token to the board shell,
-				// which strips the quotes and passes the regex to inotifywait. Skips
-				// watching (and reporting) excluded subtrees — the point on the board.
-				args = append(args, "--exclude", "'"+excludeInotifyRegex()+"'")
+				// Skips watching (and reporting) excluded subtrees — the point on the board.
+				args = append(args, "--exclude", excludeInotifyRegex())
 			}
 		}
 		// "%w/%f" + path.Clean tolerates inotifywait's trailing-slash quirk on %w

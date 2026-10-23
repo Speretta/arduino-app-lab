@@ -2,6 +2,8 @@ export interface OSImageRelease {
   version_label?: string;
   id?: string;
   latest?: boolean;
+  board?: string;
+  os?: string;
 }
 
 export interface FlashEvent {

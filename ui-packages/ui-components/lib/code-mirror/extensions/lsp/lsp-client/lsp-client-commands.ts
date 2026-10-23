@@ -6,21 +6,25 @@ import {
   jumpToTypeDefinition,
   LSPPlugin,
 } from '@codemirror/lsp-client';
-import { Text } from '@codemirror/state';
 import { Command, EditorView } from '@codemirror/view';
 import { MessageDescriptor } from 'react-intl';
 
 import { FormatMessage } from '../../../../i18n/useI18n';
+import {
+  viewInstanceIdOf,
+  ViewInstances,
+} from '../../../codeMirrorViewInstances';
 import { showLspFeedbackTooltip } from '../lsp-extensions/extensions/lsp-feedback-tooltip-extension';
-import { openReferencesPanel } from '../lsp-extensions/extensions/lsp-panel-helpers';
 import { openLspRenamePanel } from '../lsp-extensions/extensions/lsp-rename-panel/lsp-rename-panel';
 import { validateRenameName } from '../lsp-extensions/extensions/lsp-rename-panel/lsp-rename-validation';
+import { toDocOffset } from '../lsp-positions';
+import { resolveLspReferencesResult } from '../lsp-references/lsp-references';
+import { LspReferencesResult } from '../lsp-references/lsp-references-types';
 import {
   LspDefinitionParams,
   LspDocumentFormattingParams,
   LspDocumentRangeFormattingParams,
   LspLocation,
-  LspPosition,
   LspRange,
   LspReferenceParams,
   LspRenameParams,
@@ -57,12 +61,49 @@ const hasServerCapability = (
 ): boolean => !!plugin.client.serverCapabilities?.[capability];
 
 /**
+ * Where feedback about a finished request goes. Clamped: the response arrives
+ * with the editor live again, so the position the request was made at may no
+ * longer be inside the document.
+ */
+const feedbackPos = (view: EditorView, posAtRequest: number): number =>
+  Math.min(posAtRequest, view.state.doc.length);
+
+/**
+ * A reporter bound to one in-flight request, for the feedback that has to
+ * explain why it came back with nothing usable. The server sends its reason
+ * separately, as a window message, and that reason says more than any wording
+ * of ours can — so it wins wherever there is one.
+ */
+const createServerMessageReporter =
+  ({
+    view,
+    client,
+    requestedAt,
+    posAtRequest,
+    formatMessage,
+  }: {
+    view: EditorView;
+    client: CustomLspClient;
+    requestedAt: number;
+    posAtRequest: number;
+    formatMessage: FormatMessage;
+  }) =>
+  (fallback: MessageDescriptor): void => {
+    showLspFeedbackTooltip({
+      view,
+      message: client.takeServerMessage(requestedAt) ?? formatMessage(fallback),
+      pos: feedbackPos(view, posAtRequest),
+    });
+  };
+
+/**
  * Find all references
  */
 
 export const lspFindAllReferences = (
   view: EditorView,
   formatMessage: FormatMessage,
+  showLspReferences?: (result: LspReferencesResult) => void,
 ): boolean => {
   const plugin = LSPPlugin.get(view);
   if (!plugin) {
@@ -78,31 +119,65 @@ export const lspFindAllReferences = (
     });
     return true;
   }
-  plugin.client.sync();
+  const client = plugin.client as CustomLspClient;
   const posAtRequest = view.state.selection.main.head;
-  plugin.client
-    .request<LspReferenceParams, LspLocation[] | null>(
-      'textDocument/references',
-      {
-        textDocument: { uri: plugin.uri },
-        position: plugin.toPosition(posAtRequest),
-        context: { includeDeclaration: true },
-      },
-    )
-    .then((response) => {
-      if (!response || response.length === 0) {
-        showLspFeedbackTooltip({
-          view,
-          message: formatMessage(messages.noReferencesFound),
-          pos: posAtRequest,
-        });
-      } else {
-        openReferencesPanel(view);
-      }
-    })
-    .catch(() => {
-      // errors handled in `lsp-client-transport.ts`
+  const word = view.state.wordAt(posAtRequest);
+  const symbol = word ? view.state.sliceDoc(word.from, word.to) : '';
+
+  client.sync();
+
+  void client.withMapping(async (mapping) => {
+    const requestedAt = Date.now();
+    const report = createServerMessageReporter({
+      view,
+      client,
+      requestedAt,
+      posAtRequest,
+      formatMessage,
     });
+
+    let response: LspLocation[] | null;
+    try {
+      response = await client.request<LspReferenceParams, LspLocation[] | null>(
+        'textDocument/references',
+        {
+          textDocument: { uri: plugin.uri },
+          position: plugin.toPosition(posAtRequest),
+          context: { includeDeclaration: true },
+        },
+      );
+    } catch {
+      // errors handled in `lsp-client-transport.ts`
+      return;
+    }
+
+    if (!response || response.length === 0) {
+      report(messages.noReferencesFound);
+      return;
+    }
+
+    try {
+      const result = await resolveLspReferencesResult({
+        plugin,
+        locations: response,
+        mapping,
+        symbol,
+        // Closing the panel hands focus back here. Every LSP-enabled view is
+        // registered, so the fallback is only ever a guess about a panel that
+        // cannot be the one the search ran in.
+        originViewInstanceId: viewInstanceIdOf(view) ?? ViewInstances.Editor,
+      });
+
+      if (result.totalCount === 0) {
+        report(messages.noReferencesFound);
+        return;
+      }
+
+      showLspReferences?.(result);
+    } catch {
+      report(messages.findReferencesFailed);
+    }
+  });
   return true;
 };
 
@@ -175,17 +250,14 @@ const renameSymbol = (
     // response), with the reason sent separately as a window message — so
     // report that reason instead of leaving the rename looking like a no-op.
     const requestedAt = Date.now();
-    const reportFailure = (): void => {
-      showLspFeedbackTooltip({
-        view,
-        message:
-          client.takeServerMessage(requestedAt) ??
-          formatMessage(messages.renameFailed),
-        // Clamped: the response arrives with the editor live again, so the
-        // symbol's position may no longer be inside the document.
-        pos: Math.min(posAtRequest, view.state.doc.length),
-      });
-    };
+    const report = createServerMessageReporter({
+      view,
+      client,
+      requestedAt,
+      posAtRequest,
+      formatMessage,
+    });
+    const reportFailure = (): void => report(messages.renameFailed);
 
     try {
       const edit = await client.request<
@@ -228,7 +300,7 @@ const renameSymbol = (
         showLspFeedbackTooltip({
           view,
           message: formatMessage(messages.renamePartiallyApplied),
-          pos: Math.min(posAtRequest, view.state.doc.length),
+          pos: feedbackPos(view, posAtRequest),
         });
       } else if (applied.length > 1) {
         // Files other than this one are edited in place and never opened, so
@@ -239,7 +311,7 @@ const renameSymbol = (
           message: formatMessage(messages.renamedOtherFiles, {
             count: applied.length - 1,
           }),
-          pos: Math.min(posAtRequest, view.state.doc.length),
+          pos: feedbackPos(view, posAtRequest),
         });
       }
     } catch (error) {
@@ -383,35 +455,6 @@ const requestFormatting = ({
       });
   });
   return true;
-};
-
-/**
- * The offset in `doc` that an LSP position points at, clamped to the document
- * instead of trusting the server to stay inside it.
- *
- * The Arduino LS maps clang-format's edits back from the preprocessed .cpp,
- * which carries the sketch plus the lines the preprocessor added. An edit whose
- * end falls on the first of those added lines — which is what clang-format
- * sends for the sketch's final newline — is reported as the start of the line
- * *after* the sketch's last one (the sketch mapper's "END LINE ADJUSTED" case,
- * `CppToInoRangeOk`), one line past the end of the .ino. @codemirror/lsp-client
- * converts positions with `doc.line()`, which throws a RangeError on that, and
- * the throw took the whole response with it: formatting a sketch raised an
- * unhandled rejection and applied nothing at all, not even the edits that were
- * in range.
- *
- * A position past the last line therefore means the end of the document, which
- * is exactly what the server was describing.
- */
-const toDocOffset = (doc: Text, pos: LspPosition): number => {
-  if (pos.line < 0) {
-    return 0;
-  }
-  if (pos.line >= doc.lines) {
-    return doc.length;
-  }
-  const line = doc.line(pos.line + 1);
-  return line.from + Math.min(Math.max(pos.character, 0), line.length);
 };
 
 /**

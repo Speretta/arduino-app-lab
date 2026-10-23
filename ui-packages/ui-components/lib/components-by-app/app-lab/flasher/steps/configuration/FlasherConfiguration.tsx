@@ -24,24 +24,37 @@ import stepStyles from './flasher-configuration.module.scss';
 interface FlasherConfigurationProps {
   flashEvent: FlashEvent | null;
   loading: boolean;
+  getCurrentImage: () => Promise<OSImageRelease>;
   listAvailableImages: () => Promise<OSImageRelease[]>;
   getAvailableFreeSpace: () => Promise<number>;
   getUserPartitionPreservationSupported: (id: string) => Promise<boolean>;
+  // False when the board has no user partition to keep: the option is not
+  // offered and the per-image support check is skipped.
+  preserveDataSupported: boolean;
   onConfirm: (imageVersion: OSImageRelease, preserveData: boolean) => void;
 }
 
 const REQUIRED_FREE_SPACE_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB
 
+// The backend reports the installed version as a plain string and an empty one
+// when it could not read it, so an empty label means "unknown", not an image.
+const knownImage = (image?: OSImageRelease): OSImageRelease | undefined =>
+  image?.version_label ? image : undefined;
+
 export const FlasherConfiguration: React.FC<FlasherConfigurationProps> = ({
   flashEvent,
   loading,
+  getCurrentImage,
   listAvailableImages,
   getAvailableFreeSpace,
   getUserPartitionPreservationSupported,
+  preserveDataSupported,
   onConfirm,
 }: FlasherConfigurationProps) => {
   const { formatMessage } = useI18n();
   const [disabled, setDisabled] = useState(true);
+  const [imagesLoaded, setImagesLoaded] = useState(false);
+  const [imagesUnavailable, setImagesUnavailable] = useState(false);
   const [imageVersions, setImageVersions] = useState<OSImageRelease[]>([]);
   const [imageVersion, setImageVersion] = useState<OSImageRelease>();
   const [preserve, setPreserve] = useState(true);
@@ -50,28 +63,64 @@ export const FlasherConfiguration: React.FC<FlasherConfigurationProps> = ({
 
   useEffect(() => {
     const loadResources = async (): Promise<void> => {
+      // The installed version comes from the board and the list from the
+      // network; either can be slow, so both requests start at once.
+      const currentImage = getCurrentImage().then(knownImage, () => undefined);
+      const available = Promise.all([
+        listAvailableImages(),
+        getAvailableFreeSpace(),
+      ]);
+
+      // Show the installed version as soon as it resolves, so the field is
+      // never empty while the list loads. Once the list has picked a version
+      // it wins, whichever request finished first. While the list loads the
+      // "Change" button stays hidden and the flash action stays disabled (see
+      // `imagesLoaded`).
+      let listed = false;
+      currentImage.then((image) => {
+        if (!listed && image) setImageVersion(image);
+      });
+
       try {
-        const [availableImages, freeSpace] = await Promise.all([
-          listAvailableImages(),
-          getAvailableFreeSpace(),
-        ]);
+        const [availableImages, freeSpace] = await available;
+        listed = true;
         setImageVersions(availableImages);
-        const latest = availableImages.find((v) => v.latest);
-        setImageVersion(latest);
         setHasEnoughSpace(freeSpace > REQUIRED_FREE_SPACE_BYTES);
+        // The flash action becomes available only when the fetch succeeds and
+        // there is at least one image to flash. Otherwise flag it so the flash
+        // button can explain why it stays disabled.
+        setImagesLoaded(availableImages.length > 0);
+        setImagesUnavailable(availableImages.length === 0);
+        // Default to the latest available image, then to the only one offered.
+        // With nothing to flash, show the installed one.
+        const preferred =
+          availableImages.find((v) => v.latest) ?? availableImages[0];
+        setImageVersion(preferred ?? (await currentImage));
       } catch {
+        listed = true;
         setImageVersions([]);
-        setImageVersion(undefined);
+        setImagesUnavailable(true);
+        setImageVersion(await currentImage);
       }
     };
 
-    if (!loading) {
+    // Only load while still configuring. Once flashing has started, progress
+    // events re-render this component; reloading here would reset the user's
+    // selected image back to the currently installed one on every tick.
+    if (!loading && flashEvent === null) {
       loadResources();
     }
-  }, [getAvailableFreeSpace, listAvailableImages, loading]);
+  }, [
+    getCurrentImage,
+    getAvailableFreeSpace,
+    listAvailableImages,
+    loading,
+    flashEvent,
+  ]);
 
   useEffect(() => {
     const checkPreserveSupported = async (): Promise<void> => {
+      if (!preserveDataSupported) return;
       if (!imageVersion?.version_label) return;
       try {
         const isPreserveSupported = await getUserPartitionPreservationSupported(
@@ -85,7 +134,11 @@ export const FlasherConfiguration: React.FC<FlasherConfigurationProps> = ({
       }
     };
     checkPreserveSupported();
-  }, [getUserPartitionPreservationSupported, imageVersion]);
+  }, [
+    getUserPartitionPreservationSupported,
+    preserveDataSupported,
+    imageVersion,
+  ]);
 
   const { props: tooltipProps, renderTooltip } = useTooltip({
     content: formatMessage(messages.configurationStepPreserveDataTooltip, {
@@ -95,9 +148,15 @@ export const FlasherConfiguration: React.FC<FlasherConfigurationProps> = ({
     timeout: 0,
   });
 
+  const { props: noImagesTooltipProps, renderTooltip: renderNoImagesTooltip } =
+    useTooltip({
+      content: formatMessage(messages.configurationStepNoImagesTooltip),
+      timeout: 0,
+    });
+
   const handleConfirm = (): void => {
     if (imageVersion) {
-      onConfirm(imageVersion, preserve);
+      onConfirm(imageVersion, preserveDataSupported && preserve);
     }
   };
 
@@ -166,13 +225,18 @@ export const FlasherConfiguration: React.FC<FlasherConfigurationProps> = ({
                 sections={[
                   {
                     name: 'Image Versions',
-                    items: imageVersions.map((version) => ({
-                      id: version.id || '',
-                      label: [
-                        version.version_label,
-                        version.latest ? ' (Latest)' : '',
-                      ].join(''),
-                    })),
+                    // Only populate the dropdown when there is an actual choice
+                    // to make (more than one available image).
+                    items:
+                      imageVersions.length > 1
+                        ? imageVersions.map((version) => ({
+                            id: version.id || '',
+                            label: [
+                              version.version_label,
+                              version.latest ? ' (Latest)' : '',
+                            ].join(''),
+                          }))
+                        : [],
                   },
                 ]}
                 classes={{
@@ -184,7 +248,7 @@ export const FlasherConfiguration: React.FC<FlasherConfigurationProps> = ({
                   setImageVersion(imageVersions.find((v) => v.id === key))
                 }
               />
-              {disabled && (
+              {disabled && imageVersions.length > 1 && (
                 <button
                   className={stepStyles['input-button']}
                   onClick={(): void => setDisabled(false)}
@@ -197,43 +261,47 @@ export const FlasherConfiguration: React.FC<FlasherConfigurationProps> = ({
                 </button>
               )}
             </div>
-            {preserveSupported ? (
-              <div className={stepStyles['preserve-data-container']}>
-                <XXXSmall className={stepStyles['preserve-data-label']}>
-                  {formatMessage(messages.configurationStepPreserveDataTitle)}
-                </XXXSmall>
-                <div className={stepStyles['preserve-data']}>
-                  <Checkbox
-                    isSelected={preserve}
-                    onChange={(value): void => setPreserve(value)}
-                    classes={{
-                      input: stepStyles['preserve-data-input'],
-                      inputChecked: stepStyles['preserve-data-input--checked'],
-                    }}
-                  >
-                    {formatMessage(messages.configurationStepPreserveDataLabel)}
-                  </Checkbox>
-                  <div {...tooltipProps}>
-                    <div className={stepStyles['info-icon']}>
-                      <AppLabInfo />
+            {preserveDataSupported &&
+              (preserveSupported ? (
+                <div className={stepStyles['preserve-data-container']}>
+                  <XXXSmall className={stepStyles['preserve-data-label']}>
+                    {formatMessage(messages.configurationStepPreserveDataTitle)}
+                  </XXXSmall>
+                  <div className={stepStyles['preserve-data']}>
+                    <Checkbox
+                      isSelected={preserve}
+                      onChange={(value): void => setPreserve(value)}
+                      classes={{
+                        input: stepStyles['preserve-data-input'],
+                        inputChecked:
+                          stepStyles['preserve-data-input--checked'],
+                      }}
+                    >
+                      {formatMessage(
+                        messages.configurationStepPreserveDataLabel,
+                      )}
+                    </Checkbox>
+                    <div {...tooltipProps}>
+                      <div className={stepStyles['info-icon']}>
+                        <AppLabInfo />
+                      </div>
+                      {renderTooltip(stepStyles['tooltip-content'])}
                     </div>
-                    {renderTooltip(stepStyles['tooltip-content'])}
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className={stepStyles['preserve-data-warning']}>
-                <TriangleSharp />
-                <XXSmall>
-                  {formatMessage(
-                    messages.configurationStepPreserveDataWarning,
-                    {
-                      bold: (text: string) => <b>{text}</b>,
-                    },
-                  )}
-                </XXSmall>
-              </div>
-            )}
+              ) : (
+                <div className={stepStyles['preserve-data-warning']}>
+                  <TriangleSharp />
+                  <XXSmall>
+                    {formatMessage(
+                      messages.configurationStepPreserveDataWarning,
+                      {
+                        bold: (text: string) => <b>{text}</b>,
+                      },
+                    )}
+                  </XXSmall>
+                </div>
+              ))}
           </>
         ) : (
           <div className={stepStyles['flash-event-container']}>
@@ -285,17 +353,28 @@ export const FlasherConfiguration: React.FC<FlasherConfigurationProps> = ({
                   </XXSmall>
                 </div>
               )}
-              <Button
-                disabled={!hasEnoughSpace || flashEvent !== null}
-                loading={flashEvent !== null}
-                variant={ButtonVariant.Primary}
-                onClick={handleConfirm}
-                classes={{
-                  textButtonText: stepStyles['flash-button'],
-                }}
+              {/* The wrapper carries the tooltip so it still triggers on hover
+                  even while the button itself is disabled. */}
+              <div
+                {...(imagesUnavailable ? noImagesTooltipProps : {})}
+                className={stepStyles['flash-button-wrapper']}
               >
-                {formatMessage(messages.configurationStepAction)}
-              </Button>
+                <Button
+                  disabled={
+                    !imagesLoaded || !hasEnoughSpace || flashEvent !== null
+                  }
+                  loading={flashEvent !== null}
+                  variant={ButtonVariant.Primary}
+                  onClick={handleConfirm}
+                  classes={{
+                    textButtonText: stepStyles['flash-button'],
+                  }}
+                >
+                  {formatMessage(messages.configurationStepAction)}
+                </Button>
+                {imagesUnavailable &&
+                  renderNoImagesTooltip(stepStyles['tooltip-content'])}
+              </div>
             </>
           )}
         </div>

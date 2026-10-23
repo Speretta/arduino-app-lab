@@ -9,7 +9,7 @@ import styles from '../settings.module.scss';
 
 export interface DeviceStorageProps {
   boardResources?: BoardResources;
-  boardType?: string;
+  isVentunoQ: boolean;
   bytesToGiB: (bytes: number) => string;
 }
 
@@ -17,17 +17,16 @@ const WARNING_THRESHOLD = 70;
 const ERROR_THRESHOLD = 95;
 export const DeviceStorage = ({
   boardResources,
-  boardType,
+  isVentunoQ,
   bytesToGiB,
 }: DeviceStorageProps): JSX.Element => {
   const { formatMessage } = useI18n();
-  const isVentuno = boardType?.toLowerCase().includes('ventuno') ?? false;
   const rootDiskUsed = boardResources?.rootDisk?.used ?? 0;
   const rootDiskTotal = boardResources?.rootDisk?.total ?? 0;
   const homeDiskUsed = boardResources?.homeDisk?.used ?? 0;
   const homeDiskTotal = boardResources?.homeDisk?.total ?? 0;
-  const diskUsed = isVentuno ? rootDiskUsed : rootDiskUsed + homeDiskUsed;
-  const diskTotal = isVentuno ? rootDiskTotal : rootDiskTotal + homeDiskTotal;
+  const diskUsed = isVentunoQ ? rootDiskUsed : rootDiskUsed + homeDiskUsed;
+  const diskTotal = isVentunoQ ? rootDiskTotal : rootDiskTotal + homeDiskTotal;
 
   const rootDiskPercentageUsed =
     rootDiskTotal > 0 ? Math.floor((rootDiskUsed / rootDiskTotal) * 100) : 0;
@@ -57,7 +56,7 @@ export const DeviceStorage = ({
             total: bytesToGiB(diskTotal),
           })}
         </XXSmall>
-        {!isVentuno && (
+        {!isVentunoQ && (
           <SettingsSection.Info
             title={formatMessage(deviceMessages.diskStorageUsageInfo)}
           >

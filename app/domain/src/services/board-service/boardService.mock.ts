@@ -1,8 +1,8 @@
 import { BOARD_FQBN } from '@cloud-editor-mono/common';
 import {
   Board,
-  Carrier,
-  CarriersStatus,
+  HwList,
+  HwStatus,
   KeyboardLayout,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 
@@ -137,35 +137,30 @@ export const MockBoardService: BoardService = {
     return linuxDistribution;
   },
 
-  async getCarriers(): Promise<Carrier[]> {
-    return [];
+  async isHwSupported(): Promise<boolean> {
+    return true;
   },
 
-  async getCarriersStatus(): Promise<CarriersStatus> {
+  async getHwList(): Promise<HwList> {
+    return { mounts: [] };
+  },
+
+  async getHwStatus(): Promise<HwStatus> {
     return {
-      carriers: [
+      mounts: [
         {
-          carrierName: '',
-          current: [],
+          kind: 'carrier',
+          name: '',
+          currentDevices: [],
           currentEnabled: false,
-          next: [],
+          nextDevices: [],
           nextEnabled: false,
         },
       ],
     };
   },
 
-  async enableCarriers(
-    _status: CarriersStatus,
-    _password: string,
-  ): Promise<void> {
-    return Promise.resolve();
-  },
-
-  async disableCarriers(
-    _carriers: Carrier[],
-    _password: string,
-  ): Promise<void> {
+  async setHwStatus(_status: HwStatus, _password: string): Promise<void> {
     return Promise.resolve();
   },
 

@@ -1,0 +1,16 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: stretch;
+  padding-right: 16px;
+
+  .title {
+    font-weight: 700;
+    color: var(--text-default);
+  }
+
+  .spacer {
+    flex-grow: 1;
+  }
+}

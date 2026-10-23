@@ -1,6 +1,6 @@
 ---
 name: vscode-languageserver-protocol
-version: 3.17.5
+version: 3.18.3
 type: npm
 summary: VSCode Language Server Protocol implementation
 homepage:

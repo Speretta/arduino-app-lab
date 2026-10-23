@@ -1,0 +1,27 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  border-top: 1px solid var(--border-default);
+  padding-top: 16px;
+
+  .header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .title {
+    flex: 1;
+    color: var(--text-subtle);
+  }
+
+  .button {
+    svg {
+      width: 16px;
+      height: 16px;
+    }
+  }
+}

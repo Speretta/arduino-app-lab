@@ -1,7 +1,7 @@
 import {
+  AppBrickListItem,
   BrickConfigVariable,
   BrickCreateUpdateRequest,
-  BrickInstance,
 } from '@cloud-editor-mono/infrastructure';
 import { capitalize } from 'lodash-es';
 import { useEffect, useState } from 'react';
@@ -16,7 +16,7 @@ import { configureAppBricksDialogMessages as messages } from '../messages';
 import styles from './configure-app-bricks-dialog.module.scss';
 
 export type ConfigureAppBricksDialogLogic = () => {
-  bricks: BrickInstance[];
+  bricks: AppBrickListItem[];
   open: boolean;
   confirmAction: (
     bricks: Record<string, BrickCreateUpdateRequest>,
@@ -30,7 +30,7 @@ interface BrickVariable extends Omit<BrickConfigVariable, 'value'> {
   value: string;
 }
 type BricksParams = {
-  brick: BrickInstance;
+  brick: AppBrickListItem;
   modelId?: string;
   variables: BrickVariable[];
 }[];
@@ -51,7 +51,9 @@ export const ConfigureAppBricksDialog: React.FC<
       bricks.reduce<BricksParams>((acc, brick) => {
         if (
           !brick.id ||
-          ((brick.compatible_models ?? []).length === 0 &&
+          // Older CLIs fill compatible_models on the list; newer ones send [] or null.
+          (!brick.require_model &&
+            (brick.compatible_models ?? []).length === 0 &&
             (brick.config_variables ?? []).length === 0)
         ) {
           return acc;
@@ -71,7 +73,6 @@ export const ConfigureAppBricksDialog: React.FC<
         ];
       }, []),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bricks, open]);
 
   const handleConfirm = async (): Promise<void> => {
@@ -160,7 +161,6 @@ export const ConfigureAppBricksDialog: React.FC<
                   inputStyle={InputStyle.AppLab}
                   type="text"
                   value={variable.value}
-                  /* eslint-disable-next-line jsx-a11y/no-autofocus */
                   autoFocus={brickIndex === 0 && varIndex === 0}
                   onChange={(value: string): void =>
                     setParams((prev) =>

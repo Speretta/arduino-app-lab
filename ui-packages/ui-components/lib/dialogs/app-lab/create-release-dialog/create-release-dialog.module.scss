@@ -1,0 +1,127 @@
+// The width of the control column, which the release date lines up with.
+$control-width: 212px;
+
+// The design uses the 500px modal; the variable is declared on the modal content, so it is overridden there.
+.content {
+  --modal-min-width: 500px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  // 468px + 2 x 16px padding is the 500px modal of the design.
+  min-width: 468px;
+  padding: 16px !important;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  // The fieldset's own frame and insets are not part of the design.
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+.header {
+  // Lines the date up with the control column of the rows below.
+  --release-summary-value-width: #{$control-width};
+}
+
+// Label on the left, control in a fixed column on the right, as in the design.
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.row-label {
+  font-weight: 600;
+  color: var(--text-default);
+}
+
+.row-optional {
+  color: var(--text-subtle);
+  font-weight: 400;
+}
+
+.row-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: $control-width;
+  flex: 0 0 auto;
+
+  // The Input's own module sets the width at the same specificity.
+  .label-input {
+    flex: 0 0 90px;
+    width: 90px;
+  }
+
+  // The design fills every field of the dialog the same way, with no border at rest.
+  .label-input,
+  .target-select {
+    background: var(--component-bg-below-1);
+    border-color: transparent;
+  }
+
+  .label-input-container,
+  .target-select {
+    width: 100%;
+
+    // The fixed height keeps the fields as tall as they are with the inputs' default 14px text.
+    input {
+      font-size: 12px;
+      height: 21px;
+    }
+  }
+}
+
+.info {
+  display: inline-flex;
+  cursor: pointer;
+
+  svg {
+    width: 14px;
+    height: 14px;
+
+    path {
+      fill: var(--text-subtle);
+    }
+  }
+}
+
+.tooltip {
+  background: var(--component-bg-above);
+  border-radius: 3px;
+  color: var(--text-default);
+  font-size: 12px;
+  padding: 8px 12px;
+  max-width: 260px;
+}
+
+.tooltip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.option-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-default);
+  font-weight: 600;
+}
+
+.option-toggle {
+  flex: 0 0 auto;
+}

@@ -8,32 +8,6 @@ export const welcomeMessages = defineMessages({
     defaultMessage: 'Welcome to Arduino App Lab',
     description: 'Title for the welcome section of the App Lab setup',
   },
-  descriptionMultipleBoards: {
-    id: 'appLabSetup.welcome.descriptionMultipleBoards',
-    defaultMessage: 'Multiple boards are connected, please select one to start',
-    description:
-      'Description for the welcome section of the App Lab setup when multiple boards are connected',
-  },
-  connected: {
-    id: 'appLabSetup.welcome.connected',
-    defaultMessage: 'Connected',
-    description: 'Message indicating that the board is connected',
-  },
-  noDevice: {
-    id: 'appLabSetup.welcome.noDevice',
-    defaultMessage: 'No device',
-    description: 'Message indicating that no device is connected',
-  },
-  connectYourBoard: {
-    id: 'appLabSetup.welcome.connectYourBoard',
-    defaultMessage: 'Connect board',
-    description: 'Message prompting the user to connect their board',
-  },
-  connectYourBoardDescription: {
-    id: 'appLabSetup.welcome.connectYourBoardDescription',
-    defaultMessage: 'Waiting for a board to be connected',
-    description: 'Description for the connect your board message',
-  },
   chooseBoard: {
     id: 'appLabSetup.welcome.chooseBoard',
     defaultMessage: 'Choose a board to get started.',
@@ -53,31 +27,6 @@ export const welcomeMessages = defineMessages({
     id: 'appLabSetup.welcome.availableOnNetwork',
     defaultMessage: 'Available on your network',
     description: 'Group header for network-connected boards',
-  },
-  linuxPasswordTitle: {
-    id: 'appLabSetup.welcome.linuxPasswordTitle',
-    defaultMessage: 'Linux password',
-    description: 'Title for the Linux password dialog',
-  },
-  cancelButton: {
-    id: 'appLabSetup.welcome.cancelButton',
-    defaultMessage: 'Cancel',
-    description: 'Cancel button text',
-  },
-  confirmButton: {
-    id: 'appLabSetup.welcome.confirmButton',
-    defaultMessage: 'Confirm',
-    description: 'Confirm button text',
-  },
-  usernameLabel: {
-    id: 'appLabSetup.welcome.usernameLabel',
-    defaultMessage: 'Username',
-    description: 'Label for the username input field',
-  },
-  passwordLabel: {
-    id: 'appLabSetup.welcome.passwordLabel',
-    defaultMessage: 'Password',
-    description: 'Label for the password input field',
   },
   noBoardsFound: {
     id: 'appLabSetup.welcome.noBoardsFound',
@@ -99,22 +48,22 @@ export const welcomeMessages = defineMessages({
 export const setupMessages = defineMessages<SetupItemId>({
   [SetupItemId.BoardConfiguration]: {
     id: 'appLabSetup.boardConfiguration',
-    defaultMessage: 'Board Configuration',
+    defaultMessage: 'Board configuration',
     description: 'Board Configuration',
   },
   [SetupItemId.NetworkSetup]: {
     id: 'appLabSetup.networkSetup',
-    defaultMessage: 'Network Setup',
+    defaultMessage: 'Network setup',
     description: 'Network Setup',
   },
   [SetupItemId.LinuxCredentials]: {
     id: 'appLabSetup.linuxCredentials',
-    defaultMessage: 'Linux Credentials',
+    defaultMessage: 'Linux credentials',
     description: 'Linux Credentials',
   },
   [SetupItemId.ArduinoAccount]: {
     id: 'appLabSetup.arduinoAccount',
-    defaultMessage: 'Arduino Account',
+    defaultMessage: 'Arduino account',
     description: 'Arduino Account',
   },
 });
@@ -122,12 +71,12 @@ export const setupMessages = defineMessages<SetupItemId>({
 export const boardConfigurationMessages = defineMessages({
   keyboardLabel: {
     id: 'appLabSetup.boardConfiguration.keyboardLabel',
-    defaultMessage: 'Keyboard Layout',
+    defaultMessage: 'Keyboard layout',
     description: 'Label for the keyboard layout input field',
   },
   nameLabel: {
     id: 'appLabSetup.boardConfiguration.nameLabel',
-    defaultMessage: 'Board Name',
+    defaultMessage: 'Board name',
     description: 'Label for the board name input field',
   },
   boardConfigurationError: {
@@ -145,11 +94,6 @@ export const boardConfigurationMessages = defineMessages({
 });
 
 export const linuxCredentialsMessages = defineMessages({
-  descriptionLabel: {
-    id: 'appLabSetup.linuxCredentials.descriptionLabel',
-    defaultMessage: 'Select a password for your Linux account',
-    description: 'Description for the linux credentials setup section',
-  },
   usernameLabel: {
     id: 'appLabSetup.linuxCredentials.usernameLabel',
     defaultMessage: 'Username',
@@ -162,14 +106,8 @@ export const linuxCredentialsMessages = defineMessages({
   },
   passwordConfirmationLabel: {
     id: 'appLabSetup.linuxCredentials.passwordConfirmationLabel',
-    defaultMessage: 'Confirm Password',
+    defaultMessage: 'Confirm password',
     description: 'Label for the password confirmation input field',
-  },
-  linuxCredentialsError: {
-    id: 'appLabSetup.linuxCredentials.linuxCredentialsError',
-    defaultMessage: 'Error setting user credentials',
-    description:
-      'Message displayed when there is an error setting the user credentials',
   },
   linuxCredentialsSuccess: {
     id: 'appLabSetup.linuxCredentials.linuxCredentialsSuccess',
@@ -187,17 +125,17 @@ export const sectionTitleMessages = defineMessages<SetupItemId>({
   },
   [SetupItemId.NetworkSetup]: {
     id: 'appLabSetup.networkSetup.title',
-    defaultMessage: 'Network Setup',
+    defaultMessage: 'Network setup',
     description: 'Title for the network setup section',
   },
   [SetupItemId.LinuxCredentials]: {
     id: 'appLabSetup.linuxCredentials.title',
-    defaultMessage: 'Linux Credentials',
+    defaultMessage: 'Linux credentials',
     description: 'Title for the linux credentials setup section',
   },
   [SetupItemId.ArduinoAccount]: {
     id: 'appLabSetup.arduinoAccount.title',
-    defaultMessage: 'Arduino Account',
+    defaultMessage: 'Arduino account',
     description: 'Title for the Arduino account setup section',
   },
 });
@@ -283,7 +221,7 @@ export const sectionContainerMessages = defineMessages({
   },
   linuxCredentialsSubtitle: {
     id: 'appLabSetup.sectionContainer.linuxCredentialsSubtitle',
-    defaultMessage: 'Please choose a password for your Board',
+    defaultMessage: 'Please choose a password for your board',
     description: 'Subtitle for the linux credentials section',
   },
 });

@@ -32,11 +32,6 @@ export const messages = defineMessages({
     description:
       'Advisory given to user when upload is not available because no device/port is selected',
   },
-  successfulCreation: {
-    id: 'create-file-success',
-    defaultMessage: 'File successfully created',
-    description: 'Advisory given to user when file is created',
-  },
   successfulSketchRename: {
     id: 'rename-sketch-success',
     defaultMessage: 'Sketch successfully renamed',
@@ -47,16 +42,6 @@ export const messages = defineMessages({
     defaultMessage: 'Sketch name already exists',
     description:
       'Advisory given when to user when selected sketch name already exists',
-  },
-  successfulRename: {
-    id: 'rename-file-success',
-    defaultMessage: 'File successfully renamed',
-    description: 'Advisory given to user when file is renamed',
-  },
-  successfulDeletion: {
-    id: 'delete-file-success',
-    defaultMessage: 'File successfully deleted',
-    description: 'Advisory given to user when file is deleted',
   },
   portOfflineAdvisoryTitle: {
     id: 'port-offline-title',
@@ -144,12 +129,6 @@ export const messages = defineMessages({
     id: 'sketch-data-not-compliant-reference-link',
     defaultMessage: 'Arduino Sketch Specification',
     description: 'Link to the Arduino Sketch Specification',
-  },
-  iotWebSerialWrongDevice: {
-    id: 'iot-web-serial-wrong-device',
-    defaultMessage: `Selected board doesn't match the device associated with this Thing`,
-    description:
-      'Advisory given to user when user selects a different board from the associated Thing one using the Chrome web serial selector',
   },
   otaBlockedAdvisoryTitle: {
     id: 'ota-blocked-title',

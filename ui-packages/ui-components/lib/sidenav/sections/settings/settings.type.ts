@@ -1,8 +1,6 @@
 import { MessageDescriptor } from 'react-intl';
 import { ValueOf } from 'type-fest';
 
-import { Themes } from '../../../../themes/theme.type';
-
 export enum SettingsItemId {
   Appearance = 'Appearance',
   Sketch = 'Sketch',
@@ -29,8 +27,6 @@ export interface SettingsSection<T extends SettingsItemWithId> {
 }
 
 export enum Preferences {
-  Theme = 'theme',
-  AutoTheme = 'autoTheme',
   FontSize = 'fontSize',
   AutoSave = 'autoSave',
   SaveOnVerifyingUploading = 'saveOnVerifyingUploading',
@@ -47,8 +43,6 @@ export type PreferenceValue = ValueOf<typeof defaultPreferences>;
 
 const DEFAULT_FONT_SIZE = 12;
 export const defaultPreferences = {
-  [Preferences.Theme]: Themes.LightTheme,
-  [Preferences.AutoTheme]: false,
   [Preferences.FontSize]: DEFAULT_FONT_SIZE,
   [Preferences.AutoSave]: true,
   [Preferences.SaveOnVerifyingUploading]: false,

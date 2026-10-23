@@ -38,7 +38,7 @@ import {
 import {
   DeleteFileHandler,
   RenameFileHandler,
-} from '@cloud-editor-mono/ui-components/lib/editor-tabs-bar';
+} from '@cloud-editor-mono/ui-components';
 import { PressEvent } from '@react-aria/interactions';
 import { useNavigate, useSearch } from '@tanstack/react-location';
 import {
@@ -88,7 +88,6 @@ import {
   useSearchReferenceItem,
 } from '../../../common/hooks/queries/reference';
 import { AuthContext } from '../../../common/providers/auth/authContext';
-import { ThemeContext } from '../../../common/providers/theme/themeContext';
 import { EXAMPLES_MATCH_PATH } from '../../../routing/Router';
 import {
   CUSTOM_LIBRARY_ID_PARAM,
@@ -118,17 +117,17 @@ export const useSidenavWidth: UseSidenavSize =
     const { mutate: setSidenavWidth } = useMutation({
       mutationFn: (width: number) => set(SIDENAV_SIZE_KEY, width),
       onSuccess: () => {
-        queryClient.invalidateQueries([SIDENAV_SIZE_KEY]);
+        queryClient.invalidateQueries({ queryKey: [SIDENAV_SIZE_KEY] });
       },
     });
 
-    const { data: sidenavWidth, isLoading } = useQuery(
-      [SIDENAV_SIZE_KEY],
-      async () => {
+    const { data: sidenavWidth, isLoading } = useQuery({
+      queryKey: [SIDENAV_SIZE_KEY],
+      queryFn: async () => {
         const data = await get(SIDENAV_SIZE_KEY);
         return data ?? null;
       },
-    );
+    });
 
     return {
       setSidenavWidth,
@@ -388,7 +387,6 @@ const createGenAILogic =
     genAiMessageUsageExceeded?: boolean,
     shouldDisplayAiLimitBanner?: boolean,
     aiMessagesRemaining?: number,
-    isAiRestrictionsEnabled?: boolean,
   ) =>
   (): ReturnType<UseGenAILogic> => {
     const { formatMessage } = useI18n();
@@ -430,10 +428,8 @@ const createGenAILogic =
       handleApplyPatchAvailability,
       scrollToLine,
       errorLines,
-      genAiMessageUsageExceeded:
-        isAiRestrictionsEnabled && genAiMessageUsageExceeded,
-      shouldDisplayAiLimitBanner:
-        isAiRestrictionsEnabled && shouldDisplayAiLimitBanner,
+      genAiMessageUsageExceeded,
+      shouldDisplayAiLimitBanner,
       aiMessagesRemaining,
       linksEnabled: !isPlayStoreApp(),
       openGenAIPolicyTermsDialog,
@@ -446,12 +442,10 @@ const createSettingsLogic =
   (saveAllFiles: () => void, handleOptOut?: () => void): UseSettingsLogic =>
   (): ReturnType<UseSettingsLogic> => {
     const { setPreference, restorePreferences } = usePreferences();
-    const themeContext = useContext(ThemeContext);
     return {
       getPreference: usePreferenceObservable,
       setPreference,
       restorePreferences,
-      themeContext,
       saveAllFiles,
       handleOptOut,
     };
@@ -504,7 +498,6 @@ export const createUseSidenavLogic = function (
       isErrorExplanationStreamSending,
       stopErrorExplanationGeneration,
       errorFiles,
-      isAiRestrictionsEnabled,
       handleApplyPatchAvailability,
       openGenAIPolicyTermsDialog,
       hydrateByPaths,
@@ -521,16 +514,19 @@ export const createUseSidenavLogic = function (
     const { mutate: onFileExplorerOpen } = useMutation({
       mutationFn: () => set(SKETCH_EXPLORER_OPEN_KEY, true),
       onSuccess: () => {
-        queryClient.invalidateQueries([SKETCH_EXPLORER_OPEN_KEY]);
+        queryClient.invalidateQueries({ queryKey: [SKETCH_EXPLORER_OPEN_KEY] });
       },
     });
 
     const {
       data: sketchExplorerHasBeenOpened,
       isLoading: sketchExplorerHasBeenOpenedIsLoading,
-    } = useQuery([SKETCH_EXPLORER_OPEN_KEY], async () => {
-      const data = await get(SKETCH_EXPLORER_OPEN_KEY);
-      return data ?? null;
+    } = useQuery({
+      queryKey: [SKETCH_EXPLORER_OPEN_KEY],
+      queryFn: async () => {
+        const data = await get(SKETCH_EXPLORER_OPEN_KEY);
+        return data ?? null;
+      },
     });
 
     // Set the active item only if it is a valid sidenav item. If not, set the active item to undefined
@@ -701,7 +697,6 @@ export const createUseSidenavLogic = function (
           genAiMessageUsageExceeded,
           displayAiLimitBanner,
           genAiMessageRemaining,
-          isAiRestrictionsEnabled,
         ),
         [SidenavItemId.Settings]: createSettingsLogic(
           saveAllFiles,

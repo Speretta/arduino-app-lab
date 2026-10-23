@@ -5,11 +5,17 @@ export type EthernetConnectionStatus =
   | 'connected'
   | 'disconnected'
   | 'connecting';
+export interface NetworkStatus {
+  wifi: WiFiConnectionStatus;
+  ethernet: EthernetConnectionStatus;
+  internet: boolean;
+}
+
 export interface SettingsService {
   getNetworkList(): Promise<NetworkItem[]>;
-  getWiFiStatus(): Promise<WiFiConnectionStatus>;
-  getEthernetStatus(): Promise<EthernetConnectionStatus>;
-  getInternetStatus(): Promise<boolean>;
+  // One call, because the board answers all three over one SSH session and its
+  // sshd allows 10.
+  getNetworkStatus(): Promise<NetworkStatus>;
   connectToWiFi(ssid: string, password: string): Promise<void | 'timeout'>;
   disconnectWiFi(): Promise<void>;
   getConnectionName(): Promise<string | null>;

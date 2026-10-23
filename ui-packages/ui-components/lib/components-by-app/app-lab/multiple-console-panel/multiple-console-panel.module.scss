@@ -99,6 +99,8 @@ $consolePanelWithActionsHeight: 100%;
     flex-direction: column-reverse !important;
     flex: 1;
     min-height: 0;
+    // Clears the shared monitor's --editor-background so the log area inherits the console surface (--surface-bg-below-2) like its header does
+    background-color: transparent !important;
 }
 
 .serial-monitor-contents-wrapper {

@@ -19,20 +19,10 @@ export const messages = defineMessages({
     defaultMessage: 'Verify interrupted',
     description: 'Confirmation compile was interrupted',
   },
-  notificationCompilationFailed: {
-    id: 'notification.createCompilation-interrupt',
-    defaultMessage: 'Error while initiating the verification, please retry.',
-    description: 'Create compilation has failed',
-  },
   notificationVerifyCouldNotBeInterrupted: {
     id: 'notification.verify-could-not-be-interrupted',
     defaultMessage: 'Verify could not be interrupted',
     description: 'Confirmation compile could not be interrupted',
-  },
-  iotUploadIsReady: {
-    id: 'iot-upload-is-ready',
-    defaultMessage: 'Over-The-Air upload available, compiling...',
-    description: 'Advisory given to user when OTA upload is ready',
   },
   iotUploadFailedUnknownIfReady: {
     id: 'iot-upload-failed-unknown-ready',
@@ -64,11 +54,6 @@ export const messages = defineMessages({
     id: 'iot-upload-pending',
     defaultMessage: 'Over-The-Air upload pending...',
     description: 'Advisory given to user when upload pending',
-  },
-  iotUploadSuccess: {
-    id: 'iot-upload-success',
-    defaultMessage: 'Upload Over-The-Air succeeded',
-    description: 'Advisory given to user when upload succeeded',
   },
   iotCompleted: {
     id: 'iot-completed',
@@ -138,18 +123,6 @@ export const messages = defineMessages({
     defaultMessage: `Timeout expired - Please check the board connection status and try again`,
     description:
       'Advisory given to user when current OTA upload has failed with timeout',
-  },
-  iotError_Sha256Mismatch: {
-    id: 'iot-upload-ota-error-sha256',
-    defaultMessage: `SHA256 mismatch - Unable to apply the new firmware. Previous firmware detected after restart`,
-    description:
-      'Advisory given to user when current OTA upload has failed with Sha256 mismatch',
-  },
-  iotError_Sha256Unknown: {
-    id: 'iot-upload-ota-error-sha256Unknown',
-    defaultMessage: `SHA256 Unknown - Unknown Firmware detected after restart.`,
-    description:
-      'Advisory given to user when current OTA upload has failed with Sha256 Unknown',
   },
   iotUploadOTAIncompatible: {
     id: 'iot-upload-ota-incompatible',

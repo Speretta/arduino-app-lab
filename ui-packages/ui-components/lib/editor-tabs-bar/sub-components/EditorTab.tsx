@@ -191,10 +191,7 @@ const EditorTab = (props: EditorTabProps): React.ReactElement => {
             )}
             {tabData && !tabData.isFixed && (
               <IconButton
-                onClick={(e): void => {
-                  e.stopPropagation();
-                  onTabAction(TabMenuItemIds.Close);
-                }}
+                onPress={(): void => onTabAction(TabMenuItemIds.Close)}
                 label="Close"
                 title="Close"
                 Icon={CloseX}
@@ -203,7 +200,6 @@ const EditorTab = (props: EditorTabProps): React.ReactElement => {
                 classes={{
                   button: styles['tab-close-button'],
                   icon: styles['tab-close-button-icon'],
-                  tooltip: styles['tab-close-button-tooltip'],
                 }}
               />
             )}
@@ -250,8 +246,7 @@ const EditorTab = (props: EditorTabProps): React.ReactElement => {
   return !dataIsLoading ? (
     <WrapperTitle
       key={tooltipResetKey}
-      title={closeTooltipVisible ? undefined : tabData?.fileId}
-      classNames={{ tooltip: styles['tab-close-button-tooltip'] }}
+      title={closeTooltipVisible ? undefined : tabData?.fileFullName}
     >
       {renderTabInfo()}
     </WrapperTitle>

@@ -2,10 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   connectToWiFi,
-  getEthernetStatus,
-  getInternetStatus,
   getNetworkList,
-  getWiFiStatus,
+  getNetworkStatus,
   setSettingsService,
 } from './settingsService.impl';
 import {
@@ -33,9 +31,7 @@ describe('settingsService.impl + MockSettingsService – getNetworkList', () => 
 
 describe('settingsService.impl + MockSettingsService – initial states', () => {
   it('correctly exposes wifi/ethernet/internet states (regardless of current state)', async () => {
-    const wifi = await getWiFiStatus();
-    const eth = await getEthernetStatus();
-    const internet = await getInternetStatus();
+    const { wifi, ethernet: eth, internet } = await getNetworkStatus();
 
     expect(['connected', 'disconnected', 'connecting']).toContain(wifi);
     expect(['connected', 'disconnected', 'connecting']).toContain(eth);
@@ -57,9 +53,7 @@ describe('settingsService.impl + MockSettingsService – connectToWiFi success',
 
     expect(result).toBeUndefined();
 
-    const wifi = await getWiFiStatus();
-    const eth = await getEthernetStatus();
-    const internet = await getInternetStatus();
+    const { wifi, ethernet: eth, internet } = await getNetworkStatus();
 
     expect(wifi).toBe('connected');
     expect(eth).toBe('disconnected');
@@ -78,9 +72,7 @@ describe('settingsService.impl + MockSettingsService – connectToWiFi timeout',
 
     expect(result).toBe('timeout');
 
-    const wifi = await getWiFiStatus();
-    const eth = await getEthernetStatus();
-    const internet = await getInternetStatus();
+    const { wifi, ethernet: eth, internet } = await getNetworkStatus();
 
     expect(wifi).toBe('connecting');
     expect(eth).toBe('disconnected');

@@ -1,5 +1,9 @@
 @use "../../../../public/shared.module.scss";
 
+.container {
+  color: var(--text-default);
+}
+
 .message-title {
   display: flex;
   gap: 5px;
@@ -7,5 +11,5 @@
 
 .message-title-file-name {
   word-break: break-all;
-  color: shared.theme-var(--associate-dialog-title);
+  color: var(--text-default);
 }

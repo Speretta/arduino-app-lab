@@ -1,4 +1,4 @@
-import { Config } from '@bcmi-labs/cloud-editor-common';
+import { Config } from '@cloud-editor-mono/common';
 
 import { ClipboardGetText, ClipboardSetText } from '../../wailsjs/runtime';
 

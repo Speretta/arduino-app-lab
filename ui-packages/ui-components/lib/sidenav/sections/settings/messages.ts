@@ -1,7 +1,7 @@
 import { defineMessages } from 'react-intl';
 
 export const messages = defineMessages({
-  appearenceLabel: {
+  appearanceLabel: {
     id: 'settings.appearance',
     defaultMessage: 'Appearance',
     description: 'Label for the appearance settings item',
@@ -25,36 +25,6 @@ export const messages = defineMessages({
     id: 'settings.restoreSettings',
     defaultMessage: 'RESTORE Settings to Default',
     description: 'Label for the restore settings button',
-  },
-  themeSection: {
-    id: 'settings.appearance.themeSection',
-    defaultMessage: 'Theme',
-    description: 'Label for the theme section',
-  },
-  themeLightLabel: {
-    id: 'settings.appearance.themeSection.light',
-    defaultMessage: 'Light',
-    description: 'Label for the light theme',
-  },
-  themeDarkLabel: {
-    id: 'settings.appearance.themeSection.dark',
-    defaultMessage: 'Dark',
-    description: 'Label for the dark theme',
-  },
-  themeComingSoonLabel: {
-    id: 'settings.appearance.themeSection.comingSoon',
-    defaultMessage: 'Coming Soon',
-    description: 'Label for the coming soon theme',
-  },
-  themeAutoLabel: {
-    id: 'settings.appearance.themeSection.auto',
-    defaultMessage: 'Auto',
-    description: 'Label for the auto theme',
-  },
-  themeAutoDescription: {
-    id: 'settings.appearance.themeSection.auto.description',
-    defaultMessage: ' - based on OS setting',
-    description: 'Description for the auto theme',
   },
   fontSizeSection: {
     id: 'settings.appearance.fontSizeSection',
@@ -91,11 +61,6 @@ export const messages = defineMessages({
     defaultMessage:
       'On new sketches, when you plug a device it will get automatically selected.',
     description: 'Label for the info auto-selection setting',
-  },
-  consoleVerbositySection: {
-    id: 'settings.device.consoleVerbositySection',
-    defaultMessage: 'Console verbosity',
-    description: 'Label for the console verbosity section',
   },
   consoleVerbosityInfo: {
     id: 'settings.device.consoleVerbositySection.info',

@@ -41,7 +41,7 @@ export function ShareSketchButton(props: ShareSketchButtonProps): JSX.Element {
           state.isOpen && [dropdownStyles['dropdown-menu-button-open']],
         )}
       >
-        {<ShareSketchIcon />}
+        <ShareSketchIcon />
       </button>
       {state.isOpen && (
         <DropdownMenuPopover triggerRef={buttonRef} state={state}>

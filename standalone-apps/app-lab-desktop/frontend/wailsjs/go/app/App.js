@@ -50,8 +50,8 @@ export function AgentLoadSession(arg1) {
   return window['go']['app']['App']['AgentLoadSession'](arg1);
 }
 
-export function AgentNewSession(arg1) {
-  return window['go']['app']['App']['AgentNewSession'](arg1);
+export function AgentNewSession(arg1, arg2) {
+  return window['go']['app']['App']['AgentNewSession'](arg1, arg2);
 }
 
 export function AgentPermissionReply(arg1, arg2) {
@@ -62,8 +62,8 @@ export function AgentPinSession(arg1, arg2) {
   return window['go']['app']['App']['AgentPinSession'](arg1, arg2);
 }
 
-export function AgentPrompt(arg1, arg2) {
-  return window['go']['app']['App']['AgentPrompt'](arg1, arg2);
+export function AgentPrompt(arg1, arg2, arg3) {
+  return window['go']['app']['App']['AgentPrompt'](arg1, arg2, arg3);
 }
 
 export function AgentRenameSession(arg1, arg2) {
@@ -130,8 +130,8 @@ export function CarrierList() {
   return window['go']['app']['App']['CarrierList']();
 }
 
-export function CarrierShow(arg1) {
-  return window['go']['app']['App']['CarrierShow'](arg1);
+export function CarrierShow() {
+  return window['go']['app']['App']['CarrierShow']();
 }
 
 export function CheckAndApplyUpdate(arg1) {
@@ -140,6 +140,10 @@ export function CheckAndApplyUpdate(arg1) {
 
 export function CheckBoardUpdate(arg1, arg2) {
   return window['go']['app']['App']['CheckBoardUpdate'](arg1, arg2);
+}
+
+export function ChooseReleaseSavePath(arg1) {
+  return window['go']['app']['App']['ChooseReleaseSavePath'](arg1);
 }
 
 export function ConnectToWiFi(arg1, arg2) {
@@ -172,6 +176,10 @@ export function ExportApp(arg1, arg2, arg3) {
 
 export function Flash(arg1, arg2) {
   return window['go']['app']['App']['Flash'](arg1, arg2);
+}
+
+export function ForgetWorkspaceApp(arg1) {
+  return window['go']['app']['App']['ForgetWorkspaceApp'](arg1);
 }
 
 export function ForwardNonUIPort(arg1) {
@@ -218,10 +226,6 @@ export function GetErrorFormatter() {
   return window['go']['app']['App']['GetErrorFormatter']();
 }
 
-export function GetEthStatus() {
-  return window['go']['app']['App']['GetEthStatus']();
-}
-
 export function GetFeatureFlags() {
   return window['go']['app']['App']['GetFeatureFlags']();
 }
@@ -230,16 +234,8 @@ export function GetFileContent(arg1) {
   return window['go']['app']['App']['GetFileContent'](arg1);
 }
 
-export function GetFileTree(arg1) {
-  return window['go']['app']['App']['GetFileTree'](arg1);
-}
-
 export function GetIPAddress() {
   return window['go']['app']['App']['GetIPAddress']();
-}
-
-export function GetInternetStatus() {
-  return window['go']['app']['App']['GetInternetStatus']();
 }
 
 export function GetKernelVersion() {
@@ -274,6 +270,10 @@ export function GetNetworkModeStatus() {
   return window['go']['app']['App']['GetNetworkModeStatus']();
 }
 
+export function GetNetworkStatus() {
+  return window['go']['app']['App']['GetNetworkStatus']();
+}
+
 export function GetOSImageVersion() {
   return window['go']['app']['App']['GetOSImageVersion']();
 }
@@ -294,12 +294,32 @@ export function GetTitle() {
   return window['go']['app']['App']['GetTitle']();
 }
 
-export function GetWiFiStatus() {
-  return window['go']['app']['App']['GetWiFiStatus']();
-}
-
 export function HandleSecondInstanceLaunch(arg1) {
   return window['go']['app']['App']['HandleSecondInstanceLaunch'](arg1);
+}
+
+export function HwAvailable() {
+  return window['go']['app']['App']['HwAvailable']();
+}
+
+export function HwDisable(arg1, arg2) {
+  return window['go']['app']['App']['HwDisable'](arg1, arg2);
+}
+
+export function HwEnable(arg1, arg2, arg3) {
+  return window['go']['app']['App']['HwEnable'](arg1, arg2, arg3);
+}
+
+export function HwList() {
+  return window['go']['app']['App']['HwList']();
+}
+
+export function HwShow() {
+  return window['go']['app']['App']['HwShow']();
+}
+
+export function HwSupported() {
+  return window['go']['app']['App']['HwSupported']();
 }
 
 export function ImportAppFromPath(arg1) {
@@ -326,16 +346,16 @@ export function IsBoard() {
   return window['go']['app']['App']['IsBoard']();
 }
 
-export function IsDirectory(arg1) {
-  return window['go']['app']['App']['IsDirectory'](arg1);
-}
-
 export function IsLocalDirectory(arg1) {
   return window['go']['app']['App']['IsLocalDirectory'](arg1);
 }
 
 export function IsLspEnabled() {
   return window['go']['app']['App']['IsLspEnabled']();
+}
+
+export function IsUIZoomAvailable() {
+  return window['go']['app']['App']['IsUIZoomAvailable']();
 }
 
 export function IsUserPartitionPreservationSupported(arg1, arg2) {
@@ -350,8 +370,20 @@ export function ListAvailableOSImages() {
   return window['go']['app']['App']['ListAvailableOSImages']();
 }
 
+export function ListDirectory(arg1) {
+  return window['go']['app']['App']['ListDirectory'](arg1);
+}
+
 export function ListKeyboardLayouts() {
   return window['go']['app']['App']['ListKeyboardLayouts']();
+}
+
+export function ListLspFiles(arg1, arg2) {
+  return window['go']['app']['App']['ListLspFiles'](arg1, arg2);
+}
+
+export function ListLspSketchFiles(arg1) {
+  return window['go']['app']['App']['ListLspSketchFiles'](arg1);
 }
 
 export function ListSSIDs() {
@@ -384,6 +416,18 @@ export function OpenFile(arg1) {
 
 export function OpenUIWhenReady(arg1, arg2) {
   return window['go']['app']['App']['OpenUIWhenReady'](arg1, arg2);
+}
+
+export function ReadReleaseArchive(arg1) {
+  return window['go']['app']['App']['ReadReleaseArchive'](arg1);
+}
+
+export function ReadReleaseManifest(arg1) {
+  return window['go']['app']['App']['ReadReleaseManifest'](arg1);
+}
+
+export function RebindWorkspaceApp(arg1, arg2, arg3) {
+  return window['go']['app']['App']['RebindWorkspaceApp'](arg1, arg2, arg3);
 }
 
 export function RebootBoard(arg1) {
@@ -454,12 +498,20 @@ export function SetRefreshToken(arg1, arg2) {
   return window['go']['app']['App']['SetRefreshToken'](arg1, arg2);
 }
 
+export function SetUIZoom(arg1) {
+  return window['go']['app']['App']['SetUIZoom'](arg1);
+}
+
 export function SetUserPassword(arg1) {
   return window['go']['app']['App']['SetUserPassword'](arg1);
 }
 
 export function StartLSP(arg1, arg2) {
   return window['go']['app']['App']['StartLSP'](arg1, arg2);
+}
+
+export function StatPath(arg1) {
+  return window['go']['app']['App']['StatPath'](arg1);
 }
 
 export function StopAllLSP() {
@@ -488,4 +540,8 @@ export function WatchAppsDir(arg1) {
 
 export function WriteFileContent(arg1, arg2, arg3) {
   return window['go']['app']['App']['WriteFileContent'](arg1, arg2, arg3);
+}
+
+export function WriteReleaseFile(arg1, arg2) {
+  return window['go']['app']['App']['WriteReleaseFile'](arg1, arg2);
 }

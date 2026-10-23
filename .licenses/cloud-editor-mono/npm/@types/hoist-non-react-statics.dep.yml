@@ -1,6 +1,6 @@
 ---
 name: "@types/hoist-non-react-statics"
-version: 3.3.6
+version: 3.3.7
 type: npm
 summary: TypeScript definitions for hoist-non-react-statics
 homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/hoist-non-react-statics

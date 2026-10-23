@@ -26,6 +26,8 @@ var allowedEnv = []string{
 var desktopEnv = []string{
 	"DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "XDG_CURRENT_DESKTOP",
 	"DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY",
+	"XDG_DATA_DIRS", "XDG_DATA_HOME", "XDG_CONFIG_DIRS",
+	"DESKTOP_SESSION", "XDG_SESSION_TYPE",
 }
 
 // windowsEnv are extra variables Windows processes need to start at all.
@@ -34,6 +36,9 @@ var windowsEnv = []string{
 	"APPDATA", "LOCALAPPDATA", "ProgramData", "ProgramFiles", "ProgramFiles(x86)",
 	"USERPROFILE", "HOMEDRIVE", "HOMEPATH", "USERNAME", "NUMBER_OF_PROCESSORS",
 }
+
+// mcpToolTimeout lets a board tool run to its own deadline; the engine's 60s default kills the longest (board_exec, 10 min).
+const mcpToolTimeout = "MCP_TOOL_TIMEOUT=600000"
 
 // ChildEnv builds the agent's environment from the allow-list, keeping only the
 // variables actually present in the host environment. It is the base every
@@ -49,5 +54,5 @@ func ChildEnv() []string {
 			env = append(env, k+"="+v)
 		}
 	}
-	return env
+	return append(env, mcpToolTimeout)
 }

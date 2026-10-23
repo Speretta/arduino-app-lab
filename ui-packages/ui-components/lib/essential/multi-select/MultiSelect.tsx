@@ -1,6 +1,8 @@
+import { useTheme } from '@bcmi-labs/art-ui';
 import {
   Close,
   NoResults,
+  NoResultsDark,
   SelectArrow,
 } from '@cloud-editor-mono/images/assets/icons';
 import clsx from 'clsx';
@@ -35,6 +37,10 @@ type MultiSelectProps = {
 
 type Props = Omit<AriaSelectProps<string> & MultiSelectProps, 'children'>;
 
+// react-aria's Key. Not React.Key, which also allows bigint and so cannot
+// satisfy ListBox's selectedKeys.
+type SelectionKey = string | number;
+
 const MultiSelect: React.FC<Props> = (props: Props) => {
   const {
     placeholder,
@@ -52,6 +58,8 @@ const MultiSelect: React.FC<Props> = (props: Props) => {
     sensitivity: 'base',
   });
 
+  const { themeName } = useTheme();
+
   const search = useCallback(
     (items: string[], query: string): string[] =>
       items.filter((item) => contains(item, query)),
@@ -62,7 +70,7 @@ const MultiSelect: React.FC<Props> = (props: Props) => {
     search,
     250,
   );
-  const [selectedList, setSelectedList] = useState<React.Key[]>([]);
+  const [selectedList, setSelectedList] = useState<SelectionKey[]>([]);
   const filteredAndUnselectedList = useMemo(
     () =>
       filteredItems.filter(
@@ -237,7 +245,7 @@ const MultiSelect: React.FC<Props> = (props: Props) => {
                 <div role="presentation" className={styles['separator']} />
               )}
               <div className={styles['no-results']}>
-                <NoResults />
+                {themeName === 'light' ? <NoResults /> : <NoResultsDark />}
                 <XSmall>No results found</XSmall>
               </div>
             </>

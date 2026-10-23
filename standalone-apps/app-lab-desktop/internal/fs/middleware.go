@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"mime"
 	"os"
 	"reflect"
 	"time"
@@ -51,6 +52,9 @@ func (m *fileContentAssetMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Re
 	}
 	defer f.Close()
 
+	if contentType := assetContentType(file); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
 	_, err = io.Copy(w, f)
 	if err != nil {
 		runtime.LogErrorf(ctx, "failed to read app asset %s: %v", p, err)
@@ -74,6 +78,16 @@ func FileContentAssetMiddleware(ctxHolder *context.Holder, selectedBoard *board.
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// assetContentType is the media type to serve file with, taken from its
+// extension. Without the header net/http sniffs the first bytes, and that
+// sniffing has no signature for SVG: an SVG document comes out as text/xml,
+// which the webview refuses to render inside <img>, while PNG and JPEG sniff
+// fine. Only the extension knows. An unknown extension gives "", which leaves
+// the sniffing in place for what it does handle.
+func assetContentType(file string) string {
+	return mime.TypeByExtension(path.Ext(file))
 }
 
 // splitAssetPath splits a request path (with the route prefix already removed)

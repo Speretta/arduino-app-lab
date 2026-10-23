@@ -1,1 +1,4 @@
-export { Settings as AppLabSettings } from './Settings';
+export {
+  AGENT_SETTINGS_SECTION_ID,
+  Settings as AppLabSettings,
+} from './Settings';

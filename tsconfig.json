@@ -12,7 +12,6 @@
     ],
     "allowJs": false,
     "skipLibCheck": true,
-    "esModuleInterop": false,
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "noFallthroughCasesInSwitch": true,
@@ -20,15 +19,21 @@
     "allowUnreachableCode": false,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    "incremental": false,
     "jsx": "react-jsx",
     "types": ["vitest/globals", "@testing-library/jest-dom"],
     "paths": {
       "react": ["./node_modules/@types/react"]
     }
   },
-  "exclude": ["dev-utils/dev-config/scripts"]
+  // No "include" here, so this config sweeps every file in the repo — that is what
+  // the pre-push type check relies on. Vite configs are excluded because they are
+  // build tooling each package declares through its own tsconfig.node.json; without
+  // this the root sweep is the only thing checking them, and it fails on configs the
+  // package builds deliberately leave out (see cloud-editor-component/tsconfig.json).
+  "exclude": ["dev-utils/dev-config/scripts", "**/vite.config.ts"]
 }

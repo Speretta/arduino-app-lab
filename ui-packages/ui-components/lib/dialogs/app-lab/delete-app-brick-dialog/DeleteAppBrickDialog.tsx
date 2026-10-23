@@ -1,5 +1,5 @@
 import { Bin, Eraser } from '@cloud-editor-mono/images/assets/icons';
-import { BrickInstance } from '@cloud-editor-mono/infrastructure';
+import { AppBrickListItem } from '@cloud-editor-mono/infrastructure';
 import { useState } from 'react';
 
 import {
@@ -14,7 +14,7 @@ import { deleteAppBrickDialogMessages as messages } from '../messages';
 import styles from './delete-app-brick-dialog.module.scss';
 
 export type DeleteAppBrickDialogLogic = () => {
-  brick: BrickInstance | null;
+  brick: AppBrickListItem | null;
   open: boolean;
   confirmAction: (brickId: string) => Promise<boolean>;
   onOpenChange: (open: boolean) => void;
@@ -67,7 +67,6 @@ export const DeleteAppBrickDialog: React.FC<DeleteAppBrickDialogProps> = ({
             iconPosition="right"
             Icon={Bin}
             type="submit"
-            /* eslint-disable-next-line jsx-a11y/no-autofocus */
             autoFocus
           >
             {formatMessage(messages.confirmButton)}

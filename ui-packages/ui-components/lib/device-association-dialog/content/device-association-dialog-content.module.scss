@@ -12,7 +12,7 @@ $dialogContentHeaderHeight: 54;
 %header-icon {
     & svg {
         & > path {
-            fill: shared.theme-var(--associate-dialog-foreground);
+            fill: var(--text-default);
         }
     }
 }
@@ -23,7 +23,7 @@ $dialogContentHeaderHeight: 54;
     justify-items: center;
     align-items: center;
     height: $dialogContentHeaderHeight * 1px;
-    border-bottom: 1px solid #{shared.theme-var(--associate-dialog-divider)};
+    border-bottom: 1px solid #{var(--border-default)};
 
     span {
         white-space: nowrap;

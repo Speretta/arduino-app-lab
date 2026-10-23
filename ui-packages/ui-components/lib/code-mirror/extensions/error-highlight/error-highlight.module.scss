@@ -1,9 +1,9 @@
 @use "../../../../public/shared.module.scss";
 
-$errorContentColor: shared.theme-var(--console-content-foreground-error);
+$errorContentColor: var(--console-content-foreground-error);
 
 .errorLine {
-    background-color: #da5b4a4d;
+    background-color: var(--editor-syntax-highlight-error-background);
 }
 
 .errorContent[data-marker="value"] {

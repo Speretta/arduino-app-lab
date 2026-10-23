@@ -1,29 +1,30 @@
 import {
   AIModelItem,
+  AppBrickDetails,
+  AppBrickListItem,
   AppConfig,
   AppDetailedInfo,
   AppInfo,
   AppPort,
   BrickCreateUpdateRequest,
   BrickDetails,
-  BrickInstance,
   BrickListItem,
   CloneAppRequest,
   CreateAppRequest,
+  CreateReleaseRequest,
   EventSourceHandlers,
   ExampleCatalogResult,
   LibraryListResponse,
   ListAppParams,
   ListLibrariesParams,
+  ReleaseInstallResult,
+  ReleaseManifest,
   SystemPropertyValue,
   UpdateAppDetailRequest,
   UpdateCheckResult,
   WebSocketHandlers,
 } from '@cloud-editor-mono/infrastructure';
-import {
-  ImportResourceResult,
-  TreeNode,
-} from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+import { ImportResourceResult } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 
 export interface OrchestratorService {
   getApps(params: ListAppParams): Promise<AppInfo[]>;
@@ -38,13 +39,50 @@ export interface OrchestratorService {
   ): Promise<string | undefined>;
   createApp(body: CreateAppRequest): Promise<string | undefined>;
   cloneApp(id: string, body?: CloneAppRequest): Promise<string | undefined>;
+  // Resolves with the release archive once the build is over. Progress is on
+  // getReleaseBuildEvents, under the build id the caller picks; aborting the
+  // controller stops the build.
+  startReleaseBuild(
+    id: string,
+    buildId: string,
+    body: CreateReleaseRequest,
+    abortController?: AbortController,
+  ): Promise<Blob>;
+  getReleaseBuildEvents(
+    handlers: EventSourceHandlers,
+    abortController?: AbortController,
+  ): Promise<void>;
+  // Asks where a release goes. `undefined` means the user closed the dialog.
+  chooseReleaseSavePath(defaultFileName: string): Promise<string | undefined>;
+  writeReleaseFile(filePath: string, archive: Blob): Promise<void>;
+  // Downloads the containers and models of an installed release.
+  prepareApp(
+    id: string,
+    handlers: EventSourceHandlers,
+    abortController?: AbortController,
+  ): Promise<void>;
+  readReleaseManifest(filePath: string): Promise<ReleaseManifest>;
+  readReleaseArchive(filePath: string): Promise<Blob>;
+  installRelease(
+    archive: Blob,
+    fileName: string,
+    abortController?: AbortController,
+  ): Promise<ReleaseInstallResult>;
   deleteApp(id: string): Promise<boolean>;
   exportApp(
     id: string,
     appName: string,
     includeData: boolean,
   ): Promise<boolean>;
-  getFiles(path: string): Promise<TreeNode[]>;
+  /**
+   * Fetches the app packaged as a ZIP, for callers that need the bytes rather
+   * than a file on disk (e.g. uploading it to Project Hub).
+   */
+  exportAppArchive(
+    id: string,
+    includeData: boolean,
+    abortController?: AbortController,
+  ): Promise<Blob>;
   getFileContent(path: string): Promise<string>;
   startApp(
     id: string,
@@ -63,8 +101,8 @@ export interface OrchestratorService {
   ): Promise<void>;
   getSerialMonitorLogs(handlers: WebSocketHandlers): Promise<WebSocket>;
   getAppPorts(id: string): Promise<AppPort[]>;
-  getAppBricks(id: string, params?: never): Promise<BrickInstance[]>;
-  getAppBrickInstance(appId: string, brickId: string): Promise<BrickInstance>;
+  getAppBricks(id: string, params?: never): Promise<AppBrickListItem[]>;
+  getAppBrickInstance(appId: string, brickId: string): Promise<AppBrickDetails>;
   addAppBrick(
     appId: string,
     brickId: string,
@@ -84,7 +122,7 @@ export interface OrchestratorService {
     appId: string,
     brickId: string,
     params: { name: string },
-  ): Promise<boolean>;
+  ): Promise<string | null>;
   getBricks(): Promise<BrickListItem[]>;
   getExamples(): Promise<ExampleCatalogResult>;
   getBrickDetails(id: string): Promise<BrickDetails>;
@@ -116,9 +154,15 @@ export interface OrchestratorService {
   getAIModels(): Promise<AIModelItem[]>;
   installEIModel(projectId: string, impulseId: string): Promise<AIModelItem>;
   deleteAIModel(id: string, isForced?: boolean): Promise<void>;
-  uploadAIModel(
+  installAIModel(
     modelId: string,
     handlers: EventSourceHandlers,
     abortController: AbortController,
+  ): Promise<void>;
+  downloadAIModel(
+    source: string,
+    handlers: EventSourceHandlers,
+    abortController: AbortController,
+    mmprojUrl?: string,
   ): Promise<void>;
 }

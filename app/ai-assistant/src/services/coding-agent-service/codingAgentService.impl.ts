@@ -64,6 +64,8 @@ export let onRestart: CodingAgentService['onRestart'] =
   notImplemented('onRestart');
 export let onLoginUrl: CodingAgentService['onLoginUrl'] =
   notImplemented('onLoginUrl');
+export let onWorkspaceAppForgotten: CodingAgentService['onWorkspaceAppForgotten'] =
+  notImplemented('onWorkspaceAppForgotten');
 export let applyToEditor: CodingAgentService['applyToEditor'] = async () =>
   notImplemented('applyToEditor')();
 export let openAgentFile: CodingAgentService['openAgentFile'] = async () =>
@@ -100,6 +102,7 @@ export const setCodingAgentService = (service: CodingAgentService): void => {
   onPermission = service.onPermission;
   onRestart = service.onRestart;
   onLoginUrl = service.onLoginUrl;
+  onWorkspaceAppForgotten = service.onWorkspaceAppForgotten;
   applyToEditor = service.applyToEditor;
   openAgentFile = service.openAgentFile;
 };

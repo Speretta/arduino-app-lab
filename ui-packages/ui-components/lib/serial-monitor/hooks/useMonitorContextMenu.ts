@@ -1,4 +1,4 @@
-import { writeText } from '@bcmi-labs/cloud-editor-domain/src/services/services-by-app/app-lab';
+import { writeText } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import { selectAll } from '@codemirror/commands';
 import { EditorView } from '@codemirror/view';
 import { useCallback, useEffect, useRef, useState } from 'react';

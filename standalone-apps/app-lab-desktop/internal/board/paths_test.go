@@ -184,3 +184,52 @@ func TestReportedAppFileRoots(t *testing.T) {
 		})
 	}
 }
+
+func TestIsUserAppPath(t *testing.T) {
+	for path, want := range map[string]bool{
+		AppsRootDir + "/my-app":                true,
+		AppsRootDir + "/my-app/python/main.py": true,
+		AppsRootDir:                            false,
+		AppsRootDir + "/../.ssh":               false,
+		AppsRootDir + "Evil/app":               false,
+		dataRootDir + "/releases/r1":           false,
+		dataRootDir + "/examples/blink":        false,
+		"":                                     false,
+	} {
+		if got := IsUserAppPath(path, AppsRootDir); got != want {
+			t.Errorf("IsUserAppPath(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
+// A board with its own apps dir must keep its apps writable, so the dir comes from the board.
+func TestUserAppsDir(t *testing.T) {
+	for name, tc := range map[string]struct {
+		status  int
+		body    string
+		want    string
+		wantErr bool
+	}{
+		"the reported dir":          {http.StatusOK, `{"directories":{"apps":"/data/apps/","data":"/data"}}`, "/data/apps", false},
+		"an empty dir falls back":   {http.StatusOK, `{"directories":{"apps":"","data":"/data"}}`, AppsRootDir, false},
+		"a relative dir falls back": {http.StatusOK, `{"directories":{"apps":"apps","data":"/data"}}`, AppsRootDir, false},
+		"the root falls back":       {http.StatusOK, `{"directories":{"apps":"/","data":"/data"}}`, AppsRootDir, false},
+		// The default here would mark every app of a board with its own apps dir read-only.
+		"an unreachable config is an error": {http.StatusInternalServerError, ``, "", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			orchestrator := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer orchestrator.Close()
+			got, err := UserAppsDir(context.Background(), orchestrator.URL)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("UserAppsDir() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Errorf("UserAppsDir() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

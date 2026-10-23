@@ -1,29 +1,9 @@
-import '@bcmi-labs/cloud-sidebar/dist/index.css';
-
-import {
-  ArduinoLogo,
-  Breadcrumbs,
-  BreadcrumbsDropdown,
-  BreadcrumbsDropdownItem,
-  BreadcrumbsItem,
-  BreadcrumbsSeparator,
-  HeaderPortal,
-  Scrollable,
-  SidebarInfobox,
-  SidebarNavigation,
-  SidebarRoot,
-  SpaceSelector,
-  SystemStatus,
-} from '@bcmi-labs/cloud-sidebar';
+import { Breadcrumb, Button, DropdownMenu } from '@bcmi-labs/art-ui/components';
+import { CloudSidebar, HeaderPortal } from '@bcmi-labs/cloud-sidebar';
 import { Config } from '@cloud-editor-mono/common';
 import { login } from '@cloud-editor-mono/domain';
-import { ArduinoLoop } from '@cloud-editor-mono/images/assets/icons';
-import {
-  Button,
-  ButtonType,
-  Skeleton,
-  useI18n,
-} from '@cloud-editor-mono/ui-components';
+import { ArduinoLoop, CaretDown } from '@cloud-editor-mono/images/assets/icons';
+import { Skeleton, useI18n } from '@cloud-editor-mono/ui-components';
 import { memo } from 'react';
 
 import styles from './header.module.scss';
@@ -53,15 +33,7 @@ const Header: React.FC<HeaderProps> = (props: HeaderProps) => {
 
   return !isReadOnly ? (
     <>
-      <SidebarRoot asDialog="header">
-        <SpaceSelector />
-        <Scrollable>
-          <SidebarNavigation />
-          <SidebarInfobox />
-          <ArduinoLogo />
-        </Scrollable>
-        <SystemStatus />
-      </SidebarRoot>
+      <CloudSidebar asHeader={true} />
       <HeaderPortal>
         {headerItemId === HeaderItemId.None ||
         !headerActions ? null : itemDataIsLoading ? (
@@ -69,88 +41,98 @@ const Header: React.FC<HeaderProps> = (props: HeaderProps) => {
             <Skeleton variant="rounded" count={1} />
           </div>
         ) : (
-          <Breadcrumbs>
-            <BreadcrumbsItem>
-              {headerItemId !== HeaderItemId.Sketch ? (
-                formatMessage(headerTitleLabels[headerItemId])
-              ) : (
-                <a href={`${Config.CLOUD_HOME_URL}/sketches`}>
-                  {formatMessage(headerTitleLabels[headerItemId])}
-                </a>
-              )}
-            </BreadcrumbsItem>
-            <BreadcrumbsSeparator />
-            <BreadcrumbsDropdown triggerContent={itemName}>
-              {headerItemId === HeaderItemId.Sketch && (
-                <>
-                  {/* <BreadcrumbsDropdownItem>Save</BreadcrumbsDropdownItem>
-                <BreadcrumbsDropdownItem>Duplicate</BreadcrumbsDropdownItem> */}
-                  <BreadcrumbsDropdownItem
-                    onClick={headerActions[headerItemId].Rename}
-                  >
-                    Rename
-                  </BreadcrumbsDropdownItem>
-                  <BreadcrumbsDropdownItem
-                    onClick={headerActions[headerItemId].Download}
-                  >
-                    Download
-                  </BreadcrumbsDropdownItem>
-                  <BreadcrumbsDropdownItem
-                    onClick={headerActions[headerItemId].Share}
-                  >
-                    Share Sketch
-                  </BreadcrumbsDropdownItem>
-                  <BreadcrumbsDropdownItem
-                    onClick={headerActions[headerItemId].ShareToClassroom}
-                    disabled={!canShareToClassroom}
-                  >
-                    Share to Google Classroom
-                  </BreadcrumbsDropdownItem>
-                  <BreadcrumbsDropdownItem
-                    className={styles.warning}
-                    onClick={headerActions[headerItemId].Delete}
-                  >
-                    Delete
-                  </BreadcrumbsDropdownItem>
-                </>
-              )}
-              {headerItemId === HeaderItemId.CustomLibrary && (
-                <>
-                  {/* <BreadcrumbsDropdownItem>Save</BreadcrumbsDropdownItem> */}
-                  <BreadcrumbsDropdownItem
-                    onClick={headerActions[headerItemId].Download}
-                  >
-                    Download
-                  </BreadcrumbsDropdownItem>
-                  <BreadcrumbsDropdownItem
-                    className={styles.warning}
-                    onClick={headerActions[headerItemId].Delete}
-                  >
-                    Delete
-                  </BreadcrumbsDropdownItem>
-                </>
-              )}
-              {headerItemId === HeaderItemId.Example && (
-                <>
-                  <BreadcrumbsDropdownItem
-                    onClick={headerActions[headerItemId].CopyToSketches}
-                  >
-                    Save in your sketches
-                  </BreadcrumbsDropdownItem>
-                  <BreadcrumbsDropdownItem
-                    onClick={headerActions[headerItemId].Download}
-                  >
-                    Download
-                  </BreadcrumbsDropdownItem>
-                  <BreadcrumbsDropdownItem
-                    onClick={headerActions[headerItemId].Share}
-                  >
-                    Share
-                  </BreadcrumbsDropdownItem>
-                </>
-              )}
-            </BreadcrumbsDropdown>
-          </Breadcrumbs>
+          <Breadcrumb.Root size="lg">
+            <Breadcrumb.Item
+              render={
+                headerItemId === HeaderItemId.Sketch ? (
+                  <a
+                    href={`${Config.CLOUD_HOME_URL}/sketches`}
+                    className={styles['sketch-link']}
+                  />
+                ) : undefined
+              }
+            >
+              {formatMessage(headerTitleLabels[headerItemId])}
+            </Breadcrumb.Item>
+            <Breadcrumb.Separator />
+            <Breadcrumb.Item>{itemName}</Breadcrumb.Item>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger
+                render={<Breadcrumb.Item />}
+                className={styles['dropdown-trigger']}
+              >
+                <CaretDown />
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content>
+                {headerItemId === HeaderItemId.Sketch && (
+                  <>
+                    <DropdownMenu.Item
+                      onClick={headerActions[headerItemId].Rename}
+                    >
+                      Rename
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={headerActions[headerItemId].Download}
+                    >
+                      Download
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={headerActions[headerItemId].Share}
+                    >
+                      Share Sketch
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={headerActions[headerItemId].ShareToClassroom}
+                      disabled={!canShareToClassroom}
+                    >
+                      Share to Google Classroom
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={headerActions[headerItemId].Delete}
+                      behaviour="destructive"
+                    >
+                      Delete
+                    </DropdownMenu.Item>
+                  </>
+                )}
+                {headerItemId === HeaderItemId.CustomLibrary && (
+                  <>
+                    {/* <DropdownMenu.Item>Save</DropdownMenu.Item> */}
+                    <DropdownMenu.Item
+                      onClick={headerActions[headerItemId].Download}
+                    >
+                      Download
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={headerActions[headerItemId].Delete}
+                      behaviour="destructive"
+                    >
+                      Delete
+                    </DropdownMenu.Item>
+                  </>
+                )}
+                {headerItemId === HeaderItemId.Example && (
+                  <>
+                    <DropdownMenu.Item
+                      onClick={headerActions[headerItemId].CopyToSketches}
+                    >
+                      Save in your sketches
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={headerActions[headerItemId].Download}
+                    >
+                      Download
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={headerActions[headerItemId].Share}
+                    >
+                      Share
+                    </DropdownMenu.Item>
+                  </>
+                )}
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+          </Breadcrumb.Root>
         )}
       </HeaderPortal>
     </>
@@ -173,7 +155,7 @@ const Header: React.FC<HeaderProps> = (props: HeaderProps) => {
             </a>
           ) : null
         ) : user === null ? (
-          <Button type={ButtonType.Tertiary} onClick={login}>
+          <Button variant="tertiary" onClick={login}>
             {formatMessage(messages.signIn)}
           </Button>
         ) : null}

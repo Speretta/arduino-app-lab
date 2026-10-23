@@ -1,0 +1,18 @@
+@use "@cloud-editor-mono/arduino-sass/src/fonts" as fonts;
+
+.chip {
+  // Never shrinks: the app name is the point of the chip, so the title next to it ellipses first.
+  // A name too long for the row is clipped by the row, which is why no max-width caps it here.
+  flex-shrink: 0;
+  height: 20px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  background: var(--component-bg-above);
+  color: var(--text-default);
+  font-size: 10px;
+  font-weight: fonts.$font-weight-semibold;
+  white-space: nowrap;
+  transform: translateY(1px);
+}

@@ -1,8 +1,8 @@
 ---
 name: "@radix-ui/react-tooltip"
-version: 1.2.4
+version: 1.2.16
 type: npm
-summary: 
+summary:
 homepage: https://radix-ui.com/primitives
 license: mit
 licenses:

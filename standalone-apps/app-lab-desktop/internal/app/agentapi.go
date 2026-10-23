@@ -224,7 +224,10 @@ func (a *App) AgentStart(agentID string) error {
 	}
 
 	// Start the in-process board MCP server and advertise it on every session.
-	mcpSrv, err := boardmcp.Start(boardAccess{app: a})
+	if a.modelInstalls == nil { // outlives the agent: a download started before a restart must not be restarted by it
+		a.modelInstalls = boardmcp.NewModelInstaller()
+	}
+	mcpSrv, err := boardmcp.Start(boardAccess{app: a}, a.modelInstalls)
 	if err != nil {
 		return fmt.Errorf("start board MCP: %w", err)
 	}
@@ -265,8 +268,10 @@ func (a *App) newAgentManager(id airuntime.AgentID, env []string, mcp []agent.MC
 				}
 				a.emit("acp:restart", info)
 			},
-			MCPServers: mcp,
-			BoardName:  a.selectedBoardName(),
+			MCPServers:   mcp,
+			BoardName:    a.selectedBoardName(),
+			Grants:       workspaceGrants{app: a},
+			WorkspaceDir: a.workspaceMirrorDir,
 		},
 	)
 	return mgr
@@ -274,7 +279,7 @@ func (a *App) newAgentManager(id airuntime.AgentID, env []string, mcp []agent.MC
 
 // selectedBoardName returns the selected board's display name (same guard as boardAccess.SelectedBoard), or "" when none.
 func (a *App) selectedBoardName() string {
-	if sb := a.selectedBoard; sb != nil && sb.Info.Serial != "" {
+	if sb := a.boardSnapshot(); sb.Info.Serial != "" {
 		return sb.Info.BoardName
 	}
 	return ""
@@ -621,7 +626,7 @@ func (a *App) AgentValidateAuth() error {
 	}
 	ctx, cancel := context.WithTimeout(a.ctx(), validateAuthTimeout)
 	defer cancel()
-	sid, err := m.NewSession(ctx, cwd)
+	sid, err := m.NewSession(ctx, cwd, agent.SessionWorkspace{})
 	if err != nil {
 		return err
 	}
@@ -631,7 +636,7 @@ func (a *App) AgentValidateAuth() error {
 	// Best-effort delete; the id keeps being filtered until AgentListSessions sees the probe actually gone (a nil
 	// error here isn't proof — DeleteSession gives up after a few verify attempts and still reports success).
 	defer func() { _ = m.DeleteSession(a.ctx(), sid) }()
-	return m.Prompt(ctx, sid, "ping")
+	return m.Prompt(ctx, sid, "ping", nil)
 }
 
 // probeWasSeen reports whether the current probe has ever shown up in the agent's session list.
@@ -659,7 +664,23 @@ func keepNonProbeSessions(sessions []agent.SessionSummary, probe string) (kept [
 	return kept, probeListed
 }
 
-// AgentListSessions lists the workspace's persisted sessions (newest first), overlaying client-side custom titles.
+// sessionsOnBoard drops the sessions the store binds to another board: app ids repeat across boards, so listing them all would
+// show folders for apps this board doesn't have. One with no entry, or an entry predating board scoping, is kept: hiding history is worse.
+func sessionsOnBoard(sessions []agent.SessionSummary, workspaces map[string]sessionWorkspaceEntry, boardID string) []agent.SessionSummary {
+	if boardID == "" {
+		return sessions // no board connected: nothing to compare against
+	}
+	kept := make([]agent.SessionSummary, 0, len(sessions))
+	for _, s := range sessions {
+		if ws, ok := workspaces[s.ID]; ok && ws.BoardID != "" && ws.BoardID != boardID {
+			continue
+		}
+		kept = append(kept, s)
+	}
+	return kept
+}
+
+// AgentListSessions lists the connected board's persisted sessions (newest first), overlaying client-side custom titles.
 func (a *App) AgentListSessions() ([]agent.SessionSummary, error) {
 	m, err := a.agentManager()
 	if err != nil {
@@ -693,12 +714,15 @@ func (a *App) AgentListSessions() ([]agent.SessionSummary, error) {
 	}
 	created := map[string]string{}
 	if dir, err := a.agentConfigDir(); err == nil {
-		a.titleMu.Lock()
+		boardID := a.selectedBoardID()
+		a.storeMu.Lock()
 		titles, _ := readSessionTitles(dir)
 		statuses, _ := readSessionStatus(dir)
 		pins, _ := readSessionPins(dir)
+		workspaces, _ := readSessionWorkspaces(dir)
 		created, _ = readSessionCreated(dir)
-		a.titleMu.Unlock()
+		a.storeMu.Unlock()
+		sessions = sessionsOnBoard(sessions, workspaces, boardID)
 		for i := range sessions {
 			if t, ok := titles[sessions[i].ID]; ok {
 				sessions[i].Title = t
@@ -708,6 +732,9 @@ func (a *App) AgentListSessions() ([]agent.SessionSummary, error) {
 			}
 			if pins[sessions[i].ID] {
 				sessions[i].Pinned = true
+			}
+			if ws, scoped := workspaces[sessions[i].ID]; scoped {
+				sessions[i].WorkspaceAppID, sessions[i].WorkspaceName = ws.AppID, ws.Name
 			}
 		}
 		// Record a stable creation time the first time we see a session (ACP gives only updatedAt), seeded from updatedAt so existing sessions keep their order, then frozen so activity never reshuffles the list.
@@ -724,9 +751,9 @@ func (a *App) AgentListSessions() ([]agent.SessionSummary, error) {
 			}
 		}
 		if missing {
-			a.titleMu.Lock()
+			a.storeMu.Lock()
 			_ = writeSessionCreated(dir, created)
-			a.titleMu.Unlock()
+			a.storeMu.Unlock()
 		}
 	}
 	// A live in-flight turn overrides the persisted last-turn status (a session can run in the background after a switch).
@@ -752,8 +779,8 @@ func (a *App) AgentRenameSession(sessionID, title string) error {
 	if err != nil {
 		return err
 	}
-	a.titleMu.Lock()
-	defer a.titleMu.Unlock()
+	a.storeMu.Lock()
+	defer a.storeMu.Unlock()
 	titles, err := readSessionTitles(dir)
 	if err != nil {
 		return err
@@ -772,8 +799,8 @@ func (a *App) AgentPinSession(sessionID string, pinned bool) error {
 	if err != nil {
 		return err
 	}
-	a.titleMu.Lock()
-	defer a.titleMu.Unlock()
+	a.storeMu.Lock()
+	defer a.storeMu.Unlock()
 	pins, err := readSessionPins(dir)
 	if err != nil {
 		return err
@@ -796,7 +823,7 @@ func (a *App) AgentDeleteSession(sessionID string) error {
 		return err
 	}
 	if dir, err := a.agentConfigDir(); err == nil {
-		a.titleMu.Lock()
+		a.storeMu.Lock()
 		if titles, err := readSessionTitles(dir); err == nil {
 			delete(titles, sessionID)
 			_ = writeSessionTitles(dir, titles)
@@ -805,11 +832,15 @@ func (a *App) AgentDeleteSession(sessionID string) error {
 			delete(statuses, sessionID)
 			_ = writeSessionStatus(dir, statuses)
 		}
+		if workspaces, err := readSessionWorkspaces(dir); err == nil {
+			delete(workspaces, sessionID)
+			_ = writeSessionWorkspaces(dir, workspaces)
+		}
 		if pins, err := readSessionPins(dir); err == nil {
 			delete(pins, sessionID)
 			_ = writeSessionPins(dir, pins)
 		}
-		a.titleMu.Unlock()
+		a.storeMu.Unlock()
 	}
 	return nil
 }
@@ -820,8 +851,8 @@ func (a *App) setSessionStatus(sessionID string, turnErr error) {
 	if err != nil {
 		return
 	}
-	a.titleMu.Lock()
-	defer a.titleMu.Unlock()
+	a.storeMu.Lock()
+	defer a.storeMu.Unlock()
 	statuses, err := readSessionStatus(dir)
 	if err != nil {
 		return
@@ -857,12 +888,11 @@ func (a *App) AgentLoadSession(sessionID string) error {
 	if err != nil {
 		return err
 	}
-	return m.LoadSession(a.ctx(), agent.SessionID(sessionID), cwd)
+	return m.LoadSession(a.ctx(), agent.SessionID(sessionID), cwd, a.sessionWorkspaceFor(sessionID))
 }
 
-// AgentNewSession opens a session in the shared mirror-root workspace; app scoping is agent-driven via the apps_checkout tool (appID is reserved for a future default-app context).
-func (a *App) AgentNewSession(appID string) (string, error) {
-	_ = appID
+// AgentNewSession opens a session in the shared mirror root, scoped to appID when the user picked one: the cwd stays the root and the scope travels in the system prompt.
+func (a *App) AgentNewSession(appID, appName string) (string, error) {
 	m, err := a.agentManager()
 	if err != nil {
 		return "", err
@@ -871,8 +901,90 @@ func (a *App) AgentNewSession(appID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	sid, err := m.NewSession(a.ctx(), cwd)
-	return string(sid), err
+	ws := a.sessionWorkspace(appID, appName)
+	sid, err := m.NewSession(a.ctx(), cwd, ws)
+	if err != nil {
+		return "", err
+	}
+	a.rememberSessionWorkspace(string(sid), ws)
+	return string(sid), nil
+}
+
+// sessionWorkspace resolves the picked app for the system prompt: the caller passes the name it already has, and only a caller without one pays for the board lookup.
+func (a *App) sessionWorkspace(appID, appName string) agent.SessionWorkspace {
+	appID = strings.TrimSpace(appID)
+	if appID == "" {
+		return agent.SessionWorkspace{}
+	}
+	ws := agent.SessionWorkspace{AppID: appID, Name: strings.TrimSpace(appName)}
+	if ws.Name != "" {
+		return ws
+	}
+	if orchestratorURL, err := a.InferOrchestratorURL(); err == nil {
+		if name, err := arduinoapps.AppName(a.ctx(), orchestratorURL, appID); err == nil {
+			ws.Name = name
+		}
+	}
+	return ws
+}
+
+// rememberSessionWorkspace persists the pick, name included, so a reopened session keeps its focus without asking the board again.
+// A general session (no app) is recorded too: its entry carries the board alone, which is what scopes it to this board in the sidebar.
+func (a *App) rememberSessionWorkspace(sessionID string, ws agent.SessionWorkspace) {
+	dir, err := a.agentConfigDir()
+	if err != nil {
+		return
+	}
+	boardID := a.selectedBoardID()
+	a.storeMu.Lock()
+	defer a.storeMu.Unlock()
+	workspaces, err := readSessionWorkspaces(dir)
+	if err != nil {
+		return
+	}
+	workspaces[sessionID] = sessionWorkspaceEntry{AppID: ws.AppID, Name: ws.Name, BoardID: boardID}
+	_ = writeSessionWorkspaces(dir, workspaces)
+}
+
+// forgetGeneralSessionWorkspace drops a closed general session's entry: a general one holds nothing but the board, and keeping it would leave a dead row per abandoned "New chat".
+func (a *App) forgetGeneralSessionWorkspace(sessionID string) {
+	dir, err := a.agentConfigDir()
+	if err != nil {
+		return
+	}
+	a.storeMu.Lock()
+	defer a.storeMu.Unlock()
+	dropGeneralSessionWorkspace(dir, sessionID)
+}
+
+// dropGeneralSessionWorkspace removes one general session's entry; the caller holds the store lock.
+// An app-scoped entry stays put: it also names the app a reopen has to read back.
+func dropGeneralSessionWorkspace(dir, sessionID string) {
+	workspaces, err := readSessionWorkspaces(dir)
+	if err != nil {
+		return
+	}
+	if ws, ok := workspaces[sessionID]; !ok || ws.AppID != "" {
+		return
+	}
+	delete(workspaces, sessionID)
+	_ = writeSessionWorkspaces(dir, workspaces)
+}
+
+// sessionWorkspaceFor reads a session's persisted workspace from the file alone: asking the orchestrator here would stall the reopen on a slow board.
+func (a *App) sessionWorkspaceFor(sessionID string) agent.SessionWorkspace {
+	dir, err := a.agentConfigDir()
+	if err != nil {
+		return agent.SessionWorkspace{}
+	}
+	a.storeMu.Lock()
+	workspaces, err := readSessionWorkspaces(dir)
+	a.storeMu.Unlock()
+	if err != nil {
+		return agent.SessionWorkspace{}
+	}
+	ws := workspaces[sessionID]
+	return agent.SessionWorkspace{AppID: ws.AppID, Name: ws.Name}
 }
 
 // sessionCwd resolves the ACP cwd to the mirror root, so apps the agent checks out are subdirs of the cwd (native edits stay in-workspace).
@@ -915,18 +1027,22 @@ func hardenAgentPolicyDir(cwd string) error {
 	return nil
 }
 
-func (a *App) AgentPrompt(sessionID, text string) error {
+// AgentPrompt runs a turn; editor is the editor beside the chat, nil from Agent Mode.
+func (a *App) AgentPrompt(sessionID, text string, editor *agent.EditorContext) error {
 	m, err := a.agentManager()
 	if err != nil {
 		return err
 	}
 	since := time.Now()
+	a.checkoutMu.Lock()
+	a.turnStart = since // mid-turn ghost sweeps (pendingGhostEdits) only consider files edited this turn
+	a.checkoutMu.Unlock()
 	// At turn-end: reattach any mirror edited this turn without a checkout, then sync (even on error/cancel) so edits aren't stranded.
 	defer func() {
 		a.reattachEditedMirrors(since)
 		a.syncCheckouts(since, false)
 	}()
-	turnErr := m.Prompt(a.ctx(), agent.SessionID(sessionID), text)
+	turnErr := m.Prompt(a.ctx(), agent.SessionID(sessionID), text, editor)
 	a.setSessionStatus(sessionID, turnErr) // persist "error" on a failed turn, clear on success (a cancel returns nil, so it isn't flagged)
 	return turnErr
 }
@@ -944,7 +1060,11 @@ func (a *App) AgentCloseSession(sessionID string) error {
 	if err != nil {
 		return err
 	}
-	return m.CloseSession(a.ctx(), agent.SessionID(sessionID))
+	if err := m.CloseSession(a.ctx(), agent.SessionID(sessionID)); err != nil {
+		return err
+	}
+	a.forgetGeneralSessionWorkspace(sessionID)
+	return nil
 }
 
 // AgentFileLocation identifies an agent file for the editor: the app's orchestrator id + its app-relative path.

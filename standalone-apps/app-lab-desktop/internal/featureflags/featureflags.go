@@ -2,23 +2,16 @@ package featureflags
 
 import "os"
 
+// Must match FEATURE_FLAGS in
+// app/domain/src/services/feature-flags-service/featureFlagsService.type.ts;
+// featureFlagsService.test.ts fails when the two lists differ.
 var feature_flags = []string{
 	"SHOW_VERSION_IN_FOOTER",
 	"UPDATE_IN_DEV_MODE",
-	"AI_ASSISTANT",
-}
-
-// Flags on unless explicitly set to "false" (opt-out); every other flag stays off unless set to "true".
-var defaultOn = map[string]bool{
-	"AI_ASSISTANT": true,
 }
 
 func enabled(ff string) bool {
-	value, exists := os.LookupEnv(ff)
-	if !exists {
-		return defaultOn[ff]
-	}
-	return value == "true"
+	return os.Getenv(ff) == "true"
 }
 
 func GetFeatureFlags() []string {

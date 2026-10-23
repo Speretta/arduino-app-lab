@@ -1,0 +1,12 @@
+// The design draws this as the 500px modal, narrower than the base modal.
+.content {
+  --modal-min-width: 500px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 468px;
+  padding: 16px !important;
+}

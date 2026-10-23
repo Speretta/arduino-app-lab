@@ -19,17 +19,18 @@ export const useOnboardingFlag: UseOnboardingFlag =
     const { mutate: setOnboardingDone } = useMutation({
       mutationFn: (status: boolean) => set(ONBOARDING_KEY, status),
       onSuccess: () => {
-        queryClient.invalidateQueries([ONBOARDING_KEY]);
+        queryClient.invalidateQueries({ queryKey: [ONBOARDING_KEY] });
       },
     });
 
-    const { data: onboardingDone, isLoading } = useQuery(
-      [ONBOARDING_KEY],
-      async () => {
+    const { data: onboardingDone, isLoading } = useQuery({
+      queryKey: [ONBOARDING_KEY],
+
+      queryFn: async () => {
         const data = await get(ONBOARDING_KEY);
         return data ?? null;
       },
-    );
+    });
 
     return {
       setOnboardingDone,

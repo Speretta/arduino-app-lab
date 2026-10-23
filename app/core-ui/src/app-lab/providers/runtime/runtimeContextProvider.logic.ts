@@ -23,7 +23,9 @@ import { useAppSSE } from '../../features/app/app-detail/hooks/useAppSSE';
 import { useConsoleSources } from '../../features/app/app-detail/hooks/useConsoleSources';
 import { useCurrentAction } from '../../features/app/app-detail/hooks/useCurrentAction';
 import { sendAppLabNotification } from '../../features/notifications';
+import { NOT_PREPARED_ERROR_CODE } from '../../features/release/releaseApp';
 import { useBoardLifecycleStore } from '../../store/boardLifecycle';
+import { usePreparationDialogStore } from '../../store/preparationDialog';
 import useAppsStatus from './hooks/useAppsStatus';
 import { RuntimeContextValue } from './runtimeContext';
 import { AiModelRequiredDialogState } from './runtimeContextProvider.type';
@@ -46,6 +48,13 @@ export const useRuntimeLogic: UseRuntimeLogic =
     const [activeApp, setActiveApp] = useState<AppDetailedInfo | undefined>();
 
     const [appStarted, setAppStarted] = useState<boolean>(false);
+
+    const openPreparationDialog = usePreparationDialogStore(
+      (state) => state.openFor,
+    );
+    // The start error handler is declared before runAction, and runs it again
+    // once a release is prepared.
+    const runActionRef = useRef<(app: AppDetailedInfo) => Promise<void>>();
     const [isSwapping, setIsSwapping] = useState<boolean>(false);
 
     const [aiModelRequiredDialog, setAiModelRequiredDialog] =
@@ -224,7 +233,8 @@ export const useRuntimeLogic: UseRuntimeLogic =
         //this handler is handed to the SSE stream when the action starts, so
         //reading the `activeApp` state here would see the value it had before
         //the action set it (empty console on the first run/stop of a session).
-        const erroredAppId = activeAppRef.current?.id;
+        const erroredApp = activeAppRef.current;
+        const erroredAppId = erroredApp?.id;
         if (erroredAppId) {
           appendData(
             erroredAppId,
@@ -233,6 +243,20 @@ export const useRuntimeLogic: UseRuntimeLogic =
             undefined,
           );
           setStyleToSource(erroredAppId, CONSOLE_SOURCE_KEYS.STARTUP, 'error');
+        }
+
+        //A release is prepared as a whole: its missing model is part of the
+        //preparation, so it must not open the model dialog below.
+        if (
+          data?.code === NOT_PREPARED_ERROR_CODE &&
+          erroredApp?.release &&
+          erroredAppId
+        ) {
+          openPreparationDialog(erroredAppId, erroredApp.name ?? '', () =>
+            runActionRef.current?.(erroredApp),
+          );
+          sendCurrentAction({ type: 'ACTION_FAILED' });
+          return;
         }
 
         //Detect "missing AI model" failures so we can prompt the user to
@@ -251,7 +275,13 @@ export const useRuntimeLogic: UseRuntimeLogic =
           type: 'ACTION_FAILED',
         });
       },
-      [appendData, openAiModelRequired, sendCurrentAction, setStyleToSource],
+      [
+        appendData,
+        openAiModelRequired,
+        openPreparationDialog,
+        sendCurrentAction,
+        setStyleToSource,
+      ],
     );
 
     const startAppOnMessage = useCallback(
@@ -381,6 +411,10 @@ export const useRuntimeLogic: UseRuntimeLogic =
       ],
     );
 
+    useEffect(() => {
+      runActionRef.current = runAction;
+    }, [runAction]);
+
     const stopAction = useCallback(
       async (app: AppDetailedInfo) => {
         setAppStarted(false);
@@ -494,7 +528,7 @@ export const useRuntimeLogic: UseRuntimeLogic =
       ],
     );
 
-    const consoleLogic = useMemo(
+    const consoleState = useMemo(
       () => ({
         consoleSources,
         consoleTabs,
@@ -524,10 +558,13 @@ export const useRuntimeLogic: UseRuntimeLogic =
       [aiModelRequiredDialog, closeAiModelRequired, openAiModelRequired],
     );
 
-    return {
-      appsStatus,
-      runtimeActions,
-      consoleLogic,
-      aiModelRequired,
-    };
+    return useMemo(
+      () => ({
+        appsStatus,
+        runtimeActions,
+        consoleState,
+        aiModelRequired,
+      }),
+      [aiModelRequired, appsStatus, consoleState, runtimeActions],
+    );
   };

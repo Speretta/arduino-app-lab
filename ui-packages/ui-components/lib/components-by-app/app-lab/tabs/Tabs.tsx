@@ -1,61 +1,85 @@
 import clsx from 'clsx';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 
+import {
+  Button,
+  ButtonAppearance,
+  ButtonSize,
+  ButtonVariant,
+} from '../essential/button';
 import styles from './tabs.module.scss';
 
 export type TabsLogic<T extends string> = () => {
   tabs: readonly T[];
-  setTab: (tab: T) => void;
   activeTab: T;
+  setTab: React.Dispatch<React.SetStateAction<T>>;
 };
 
 interface TabsProps<T extends string> {
-  tabsLogic: TabsLogic<T>;
+  tabs: readonly T[];
+  activeTab?: T;
+  onTabChange?: (tab: T) => void;
   classes?: {
     container?: string;
     tab?: string;
   };
   size?: 'small' | 'default';
+  withBackground?: boolean;
+  tabDictionary?: (tab: T) => string;
 }
 
 const Tabs = <T extends string>(props: TabsProps<T>): React.ReactElement => {
-  const { tabsLogic, classes, size = 'default' } = props;
-  const { tabs, setTab, activeTab } = tabsLogic();
+  const {
+    tabs,
+    activeTab: externalActiveTab,
+    onTabChange,
+    classes,
+    size = 'default',
+    withBackground = false,
+    tabDictionary,
+  } = props;
 
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [internalActiveTab, setInternalActiveTab] = useState<T | undefined>(
+    tabs[0],
+  );
+
+  const activeTab =
+    externalActiveTab !== undefined ? externalActiveTab : internalActiveTab;
 
   useEffect(() => {
-    // Set tabs to same width (of the largest one)
-    const container = containerRef.current;
-    if (!container) {
-      return;
+    if (externalActiveTab !== undefined) {
+      setInternalActiveTab(externalActiveTab);
     }
+  }, [externalActiveTab]);
 
-    const tabs = container.querySelectorAll<HTMLButtonElement>('button');
-    let maxWidth = 0;
-
-    tabs.forEach((tab) => {
-      const width = tab.offsetWidth;
-      if (width > maxWidth) maxWidth = width;
-    });
-    tabs.forEach((tab) => {
-      tab.style.width = `${maxWidth}px`;
-    });
-  }, []);
+  const handleTabChange = (tab: T): void => {
+    setInternalActiveTab(tab);
+    onTabChange?.(tab);
+  };
 
   return (
     <div
-      ref={containerRef}
-      className={clsx(styles['container'], classes?.container, {
-        [styles['default']]: size === 'default',
-        [styles['small']]: size === 'small',
-      })}
+      className={clsx(
+        styles['container'],
+        classes?.container,
+        withBackground && styles['container-with-background'],
+        {
+          [styles['default']]: size === 'default',
+          [styles['small']]: size === 'small',
+        },
+      )}
     >
       {tabs &&
         tabs.map((tab) => (
-          <button
+          <Button
             key={tab}
-            onClick={(): void => setTab(tab)}
+            onClick={(): void => handleTabChange(tab)}
+            variant={
+              activeTab === tab ? ButtonVariant.Primary : ButtonVariant.Tertiary
+            }
+            appearance={ButtonAppearance.LowContrast}
+            size={size === 'small' ? ButtonSize.XXSmall : ButtonSize.XSmall}
+            disableInteractive
             className={clsx(
               styles['tab'],
               {
@@ -64,8 +88,8 @@ const Tabs = <T extends string>(props: TabsProps<T>): React.ReactElement => {
               classes?.tab,
             )}
           >
-            {tab}
-          </button>
+            {tabDictionary ? tabDictionary(tab) : tab}
+          </Button>
         ))}
     </div>
   );

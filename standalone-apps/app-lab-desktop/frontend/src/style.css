@@ -23,3 +23,35 @@
     height: 100vh;
     text-align: center;
 }
+
+/* Every App Lab scrollbar, Figma "Generic / Scrollbars" (UI Spec Overall | App Lab, 4281:13438):
+   vertical 16px with an 8px thumb, horizontal 8px with a 4px thumb, transparent track. The inset is
+   a transparent border clipped out of the thumb, so the thumb works on any surface. The id selector
+   outranks the class-based scrollbar rules in the component stylesheets and the Cloud Editor
+   defaults in index.scss. Colours come from --scrollbar-thumb* in al-custom-tokens.scss. */
+#al-body ::-webkit-scrollbar {
+    width: 16px;
+    height: 8px;
+    background: transparent;
+}
+
+#al-body ::-webkit-scrollbar-track,
+#al-body ::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+#al-body ::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    background-clip: padding-box;
+    border: 4px solid transparent;
+    border-radius: 10px;
+}
+
+#al-body ::-webkit-scrollbar-thumb:horizontal {
+    border-width: 2px;
+}
+
+#al-body ::-webkit-scrollbar-thumb:hover,
+#al-body ::-webkit-scrollbar-thumb:active {
+    background-color: var(--scrollbar-thumb-active);
+}

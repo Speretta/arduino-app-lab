@@ -4,18 +4,25 @@ import {
   CreateAppDialogLogic,
   DeleteAppDialogLogic,
   ExportAppDialogLogic,
+  PublishAppDialogLogic,
+  ReleaseInfoDialogLogic,
 } from '../../../dialogs';
 
 export enum AppAction {
   Rename = 'RENAME',
   Duplicate = 'DUPLICATE',
-  Export = 'Export',
+  Export = 'EXPORT',
+  CreateRelease = 'CREATE_RELEASE',
+  ReleaseInfo = 'RELEASE_INFO',
+  Publish = 'PUBLISH',
   Delete = 'DELETE',
 }
 
 export type AppTitleLogic = () => {
   app: AppDetailedInfo | undefined;
   appStatus?: AppStatus;
+  // Set while a release of this App is being created.
+  createReleaseDisabledReason?: string;
   name: string;
   editing: boolean;
   hasError: boolean;
@@ -29,5 +36,7 @@ export type AppTitleLogic = () => {
   onUpdateAppIcon: (emoji: string) => Promise<boolean>;
   deleteAppDialogLogic: DeleteAppDialogLogic;
   createAppDialogLogic: CreateAppDialogLogic;
+  publishAppDialogLogic: PublishAppDialogLogic;
   exportAppDialogLogic: ExportAppDialogLogic;
+  releaseInfoDialogLogic: ReleaseInfoDialogLogic;
 };

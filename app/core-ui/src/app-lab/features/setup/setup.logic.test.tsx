@@ -49,13 +49,14 @@ let boardsMock: Array<{
   protocol: string;
   serial: string;
   address: string;
+  fqbn: string;
 }> = [];
 
 const selectBoardMock = vi.fn().mockResolvedValue(undefined);
 let showBoardConnPswPromptMock = false;
 const onConnPswCancelMock = vi.fn();
 const onConnPswSubmitMock = vi
-  .fn<[password: string], Promise<void>>()
+  .fn<(password: string) => Promise<void>>()
   .mockImplementation(() => Promise.resolve());
 let isConnectingToBoardMock = false;
 let connToBoardErrorMock: string | undefined;
@@ -75,6 +76,7 @@ const createMockBoardsProps = (): {
     protocol: string;
     serial: string;
     address: string;
+    fqbn: string;
   }>;
   selectedBoard?: Board;
   selectBoard: (board: Board) => Promise<void>;
@@ -87,6 +89,10 @@ const createMockBoardsProps = (): {
   connToBoardError: string | undefined;
   connToBoardCompleted: boolean;
   setSelectedBoardCheckingStatus: () => void;
+  couldNotAutoSelectBoard: boolean;
+  lastAppInfoLoaded: boolean;
+  saveAppId: (appId: string) => Promise<void>;
+  resetAppId: () => Promise<void>;
 } => ({
   boards: boardsMock,
   selectedBoard: undefined,
@@ -101,6 +107,10 @@ const createMockBoardsProps = (): {
   connToBoardCompleted: connToBoardCompletedMock,
   setSelectedBoardCheckingStatus:
     setSelectedBoardCheckingStatusMock as () => void,
+  couldNotAutoSelectBoard: false,
+  lastAppInfoLoaded: false,
+  saveAppId: vi.fn() as (appId: string) => Promise<void>,
+  resetAppId: vi.fn() as () => Promise<void>,
 });
 let getPropsLoadingMock = false;
 const upsertPropMock = vi.fn();
@@ -113,7 +123,7 @@ let footerItemsMock = [
     state: 'default',
   },
 ];
-const onOpenTerminalMock = vi.fn<[], Promise<void>>().mockResolvedValue();
+const onOpenTerminalMock = vi.fn<() => Promise<void>>().mockResolvedValue();
 let terminalErrorMock: string | null = null;
 
 vi.mock('../../hooks/useIsBoard', async () => {
@@ -278,6 +288,7 @@ beforeEach(() => {
   };
 
   linuxCredentialsCtxValue = {
+    isVentunoQ: false,
     userPasswordChecked: false,
     userPasswordIsSet: false,
     setUserPassword: vi.fn(),
@@ -351,6 +362,7 @@ describe('createUseSetupLogic - board selection vs setup steps', () => {
         protocol: 'serial',
         serial: '',
         address: '',
+        fqbn: 'arduino:avr:uno',
       },
     ];
 
@@ -668,6 +680,7 @@ describe('createUseSetupLogic - error handling board connection', () => {
         protocol: 'serial',
         serial: '',
         address: '',
+        fqbn: 'arduino:avr:uno',
       },
     ];
     connToBoardErrorMock = 'Unable to connect';

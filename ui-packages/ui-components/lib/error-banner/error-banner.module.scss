@@ -3,7 +3,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: var(--component-bg-below-1, #171E21);
+  background: var(--component-bg-below-1);
   border-radius: 8px;
   min-height: 44px;
   width: 100%;
@@ -11,19 +11,30 @@
   box-sizing: border-box;
 }
 
+.error-tooltip {
+  max-width: 500px;
+}
+
+.tooltip-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
 .error-label {
   font-size: 14px;
   line-height: 20px;
-  color: var(--feedback-error-default, #ff8878);
+  color: var(--feedback-error-default);
   flex-shrink: 0;
   white-space: nowrap;
 }
 
 .error-message {
-  flex: 1;
   font-size: 14px;
   line-height: 20px;
-  color: var(--feedback-error-default, #ff8878);
+  color: var(--feedback-error-default);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -50,11 +61,11 @@
   transition: background-color 0.2s ease;
 
   &:hover {
-    background-color: #aeb8b826;
+    background-color: var(--component-bg-flexible);
   }
 
   &:active {
-    background-color: #aeb8b826;
+    background-color: var(--component-bg-flexible);
   }
 
   svg {

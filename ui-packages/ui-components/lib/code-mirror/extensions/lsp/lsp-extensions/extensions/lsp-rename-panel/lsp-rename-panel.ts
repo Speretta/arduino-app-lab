@@ -5,6 +5,23 @@ export const LSP_RENAME_PANEL_CLASS = 'cm-lsp-rename-panel';
 const MESSAGE_CLASS = 'cm-lsp-rename-message';
 const MESSAGE_ERROR_CLASS = 'cm-lsp-rename-message-error';
 
+export const getRenamePanel = (
+  view: EditorView,
+): ReturnType<typeof getDialog> => getDialog(view, LSP_RENAME_PANEL_CLASS);
+
+export const isRenamePanelOpen = (view: EditorView): boolean =>
+  getRenamePanel(view) !== null;
+
+export const closeRenamePanel = (view: EditorView): void => {
+  if (!isRenamePanelOpen(view)) {
+    return;
+  }
+  const closeBtn = view.dom.querySelector(
+    `.cm-panel.${LSP_RENAME_PANEL_CLASS} .cm-dialog-close`,
+  ) as HTMLElement | null;
+  closeBtn?.click();
+};
+
 interface RenamePanelParams {
   /** Symbol name the panel opens with, selected so it can be overtyped. */
   currentName: string;
@@ -27,7 +44,7 @@ export const openLspRenamePanel = ({
   view,
   ...params
 }: RenamePanelParams & { view: EditorView }): void => {
-  const openPanel = getDialog(view, LSP_RENAME_PANEL_CLASS);
+  const openPanel = getRenamePanel(view);
   if (openPanel) {
     // Already prompting (rename pressed again): restart from the symbol now
     // under the cursor.
@@ -43,7 +60,7 @@ export const openLspRenamePanel = ({
   // When triggered from the context menu, the menu steals focus from the rename
   // input when it closes.
   setTimeout(() => {
-    const panel = getDialog(view, LSP_RENAME_PANEL_CLASS);
+    const panel = getRenamePanel(view);
     if (panel) {
       selectInput(panel.dom);
     }

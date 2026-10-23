@@ -2,12 +2,13 @@ import { PluginOption, UserConfig, UserConfigExport } from 'vite';
 
 declare function libConfig(config: {
   exportName: string;
-  externalDependencies?: string[];
+  externalDependencies?: (string | RegExp)[];
   plugins?: PluginOption[];
   options?: UserConfig;
   noUI?: boolean;
   vitestSetupFiles?: string[];
   envDir?: string;
+  dtsFirst?: boolean;
 }): UserConfigExport;
 
 declare function appConfig(config?: {

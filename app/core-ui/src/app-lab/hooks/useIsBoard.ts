@@ -6,6 +6,6 @@ export const useIsBoard = (): UseQueryResult<boolean, unknown> => {
     queryKey: ['isBoard'],
     queryFn: isBoard,
     staleTime: Infinity,
-    cacheTime: Infinity,
+    gcTime: Infinity,
   });
 };

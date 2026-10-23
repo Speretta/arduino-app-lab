@@ -1,3 +1,31 @@
+// Guardrail for the injectable-logic-props pattern
+// (ui-packages/ui-components/README.md, "Injectable Logic As Props"): a *Logic
+// contract is a function the component invokes during its own render, so a
+// consumer can supply the behaviour that runs there. An object type cannot be
+// invoked, so it is not a logic prop.
+//
+// Only the shape is checked. Whether the function calls hooks is not part of
+// the contract — the README says logic props *could* contain hooks — so a
+// contract that just gathers values and returns them is valid, and that is the
+// accepted cost of keeping one injection point per component.
+//
+// Only type aliases are matched. `*Logic` also names hook return types in this
+// repo (`function useAppListLogic(): UseAppListLogic`), which are objects by
+// design, so banning `interface *Logic` would reject 15 correct declarations.
+// Telling the two apart needs the prop's type, which this rule cannot resolve.
+const logicContractRules = [
+  {
+    selector: 'TSTypeAliasDeclaration[id.name=/Logic$/] > TSTypeLiteral',
+    message:
+      'A *Logic contract must be a function type: () => { ... }, because the component invokes it during its own render. An object type cannot be invoked, so it is plain props wearing the name — wrap it in a function, even if it only gathers values and returns them. See ui-packages/ui-components/README.md, "Injectable Logic As Props".',
+  },
+  {
+    selector: 'TSTypeAliasDeclaration[id.name=/Logic$/] > TSIntersectionType',
+    message:
+      'A *Logic contract must be a function type. Intersect inside the return type instead: () => ReturnType<OtherLogic> & { ... }.',
+  },
+];
+
 module.exports = {
   root: true,
   env: {
@@ -25,6 +53,7 @@ module.exports = {
     'plugin:react-hooks/recommended',
     'plugin:prettier/recommended',
     'plugin:jsx-a11y/recommended',
+    'plugin:storybook/recommended',
   ],
   plugins: ['simple-import-sort', 'prettier', 'jsx-a11y', 'formatjs'],
   rules: {
@@ -50,6 +79,7 @@ module.exports = {
       },
     ],
     'no-return-await': 'error',
+    'jsx-a11y/no-autofocus': ['error', { ignoreNonDOM: true }],
     'react/react-in-jsx-scope': 'off',
     'simple-import-sort/imports': 'error',
     'simple-import-sort/exports': 'error',
@@ -64,6 +94,7 @@ module.exports = {
       files: ['*.ts', '*.mts', '*.cts', '*.tsx'],
       rules: {
         '@typescript-eslint/explicit-function-return-type': 'warn',
+        'no-restricted-syntax': ['error', ...logicContractRules],
       },
     },
     {
@@ -77,6 +108,11 @@ module.exports = {
       files: [
         'ui-packages/ui-components/**/*.{ts,tsx}',
         'app/core-ui/src/app-lab/**/*.{ts,tsx}',
+        // App Lab imports the infrastructure barrel directly, so all of that layer
+        // reaches its bundle; it reaches app/domain through deep service entries.
+        // Both are covered whole: no service layer has a reason to pull the barrel.
+        'app/domain/**/*.{ts,tsx}',
+        'app/infrastructure/**/*.{ts,tsx}',
       ],
       rules: {
         'no-restricted-imports': [

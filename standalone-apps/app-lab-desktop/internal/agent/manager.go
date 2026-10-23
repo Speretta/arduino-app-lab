@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -30,6 +32,31 @@ type ManagerConfig struct {
 	RestartDelay time.Duration // base backoff, doubled each attempt (0 → default)
 	MCPServers   []MCPServer   // MCP servers advertised on every session (board tools)
 	BoardName    string        // connected board's display name, stated in every session's system prompt
+	Grants       GrantStore    // optional: where "Always allow" answers are kept between runs
+	// WorkspaceDir maps a workspace app id to its mirror directory; optional, and without it nothing counts as outside the workspace.
+	WorkspaceDir func(appID string) string
+}
+
+// workspaceRebinder is implemented by the real connection: a rename has to reach the sessions already open on the app.
+type workspaceRebinder interface {
+	RebindWorkspace(oldID, newID string)
+}
+
+// RebindWorkspace tells the live connection an app changed id, so open sessions keep resolving to their own workspace.
+func (m *Manager) RebindWorkspace(oldID, newID string) {
+	conn, err := m.connection()
+	if err != nil {
+		return
+	}
+	if r, ok := conn.(workspaceRebinder); ok {
+		r.RebindWorkspace(oldID, newID)
+	}
+}
+
+// grantStoreSetter is implemented by the real connection; optional, so ConnFactory keeps its shape and the manager's fakes need know nothing about grants.
+type grantStoreSetter interface {
+	attachGrants(GrantStore)
+	attachWorkspaceDirs(func(appID string) string)
 }
 
 // RestartInfo tells the UI the agent went down. Usually that is an auto-restart after an unexpected exit, but the host
@@ -49,9 +76,15 @@ type liveSession struct {
 	modelID   string
 	models    []AgentModel // models the agent advertised for this session
 	modeID    string
-	modes     []AgentMode // operating modes the agent advertised for this session
-	cwd       string      // working dir, replayed to LoadSession on auto-restart
+	modes     []AgentMode      // operating modes the agent advertised for this session
+	cwd       string           // working dir, replayed to LoadSession on auto-restart
+	workspace SessionWorkspace // the app this session was opened for, replayed with the cwd so a restart keeps its focus
 	pending   *PermissionRequest
+	editor    editorSeen // what the agent has been shown of the editor beside the chat
+	cancelled bool       // Stop was pressed during the running turn, so its prompt may never have reached the model
+	untitled  bool       // new and not prompted yet: the CLI titles the session from its first message
+	tokens    int        // the context size last reported, to notice the CLI compacting it
+	resets    int        // bumped when what the agent was shown is forgotten, so a turn that saw one does not undo it
 }
 
 // Manager runs the ACP conversation (sessions, prompts, permissions, auto-restart); a restart doesn't resume the chat yet.
@@ -132,6 +165,10 @@ func (m *Manager) launch(initCtx context.Context) error {
 	}
 	conn.SetMCPServers(m.cfg.MCPServers) // advertise board tools on every session (survives restart)
 	conn.SetBoardName(m.cfg.BoardName)
+	if s, ok := conn.(grantStoreSetter); ok {
+		s.attachGrants(m.cfg.Grants) // re-read on every (re)start, so a crash does not forget what the user allowed
+		s.attachWorkspaceDirs(m.cfg.WorkspaceDir)
+	}
 	methods, err := conn.Initialize(initCtx)
 	if err != nil {
 		_ = m.agent.Stop()
@@ -151,13 +188,14 @@ func (m *Manager) resumeSessions() {
 	conn := m.conn
 	closed := m.closed
 	type sess struct {
-		sid SessionID
-		cwd string
-		ptr *liveSession
+		sid       SessionID
+		cwd       string
+		workspace SessionWorkspace
+		ptr       *liveSession
 	}
 	list := make([]sess, 0, len(m.sessions))
 	for sid, s := range m.sessions {
-		list = append(list, sess{sid, s.cwd, s})
+		list = append(list, sess{sid, s.cwd, s.workspace, s})
 	}
 	m.mu.Unlock()
 	if conn == nil || closed {
@@ -171,7 +209,7 @@ func (m *Manager) resumeSessions() {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(m.mctx, resumeLoadTimeout)
-		_, err := conn.LoadSession(ctx, s.sid, s.cwd)
+		_, err := conn.LoadSession(ctx, s.sid, s.cwd, s.workspace)
 		cancel()
 		if err != nil {
 			m.mu.Lock()
@@ -183,27 +221,34 @@ func (m *Manager) resumeSessions() {
 	}
 }
 
-func (m *Manager) NewSession(ctx context.Context, cwd string) (SessionID, error) {
+func (m *Manager) NewSession(ctx context.Context, cwd string, ws SessionWorkspace) (SessionID, error) {
 	conn, err := m.connection()
 	if err != nil {
 		return "", err
 	}
-	res, err := conn.NewSession(ctx, cwd)
+	res, err := conn.NewSession(ctx, cwd, ws)
 	if err != nil {
 		return "", err
 	}
 	m.mu.Lock()
 	s := m.session(res.SessionID)
-	s.cwd = cwd
+	s.cwd, s.workspace = cwd, ws
+	s.untitled = true
 	s.applyResult(res)
 	m.mu.Unlock()
 	return res.SessionID, nil
 }
 
 // applyResult copies a session's advertised models/modes (and current selections) into the live entry.
+// A result that advertises none (session/load answers without the model selector) keeps what the session
+// already had: overwriting empties GetSessionState, and the UI hides both pickers for that session.
 func (s *liveSession) applyResult(res NewSessionResult) {
-	s.models = res.Models
-	s.modes = res.Modes
+	if len(res.Models) > 0 {
+		s.models = res.Models
+	}
+	if len(res.Modes) > 0 {
+		s.modes = res.Modes
+	}
 	if res.CurrentModelID != "" {
 		s.modelID = res.CurrentModelID
 	}
@@ -278,15 +323,16 @@ func (m *Manager) sessionListed(ctx context.Context, cwd string, sid SessionID) 
 
 // LoadSession re-establishes a persisted session (replaying its history via OnUpdate) and records its
 // models/modes so GetSessionState/SetModel/SetMode work. Registers the session before the replay.
-func (m *Manager) LoadSession(ctx context.Context, sid SessionID, cwd string) error {
+func (m *Manager) LoadSession(ctx context.Context, sid SessionID, cwd string, ws SessionWorkspace) error {
 	conn, err := m.connection()
 	if err != nil {
 		return err
 	}
 	m.mu.Lock()
-	m.session(sid).cwd = cwd
+	live := m.session(sid)
+	live.cwd, live.workspace = cwd, ws
 	m.mu.Unlock()
-	res, err := conn.LoadSession(ctx, sid, cwd)
+	res, err := conn.LoadSession(ctx, sid, cwd, ws)
 	if err != nil {
 		return err
 	}
@@ -298,17 +344,62 @@ func (m *Manager) LoadSession(ctx context.Context, sid SessionID, cwd string) er
 	return nil
 }
 
-func (m *Manager) Prompt(ctx context.Context, sid SessionID, text string) error {
+// Prompt runs a turn. editor is the editor beside the chat (nil without one); the agent gets what it has not seen of it yet.
+func (m *Manager) Prompt(ctx context.Context, sid SessionID, text string, editor *EditorContext) error {
 	conn, err := m.connection()
 	if err != nil {
 		return err
 	}
+	var before []string
+	var seen editorSeen
+	command, isCommand := slashCommand(text)
 	m.mu.Lock()
 	m.lastPromptSID = sid // elicitations carry no sessionId; route them to whoever is prompting
+	s := m.session(sid)
+	s.cancelled = false
+	if contextResetCommands[command] {
+		s.editor = editorSeen{} // the agent keeps no file content past these, so the next prompt sends it again
+		s.resets++
+	}
+	resets := s.resets
+	// A command must stay the first block: the adapter reads prompt[0] to spot the commands it runs itself.
+	if editor != nil && !isCommand {
+		if block, next := editorContextText(s.editor, editor, s.untitled); block != "" {
+			before, seen = []string{block}, next
+		}
+	}
 	m.mu.Unlock()
 	m.setStreaming(sid, true)
 	defer m.setStreaming(sid, false)
-	return conn.Prompt(ctx, sid, text)
+	err = conn.Prompt(ctx, sid, text, before)
+	if err == nil { // a failed or stopped turn may never have reached the model
+		m.mu.Lock()
+		if s := m.sessions[sid]; s != nil && !s.cancelled {
+			if !isCommand {
+				s.untitled = false
+			}
+			if before != nil && s.resets == resets {
+				s.editor = seen
+			}
+		}
+		m.mu.Unlock()
+	}
+	return err
+}
+
+// The commands after which the agent no longer holds what it was shown of the editor.
+var contextResetCommands = map[string]bool{"compact": true, "clear": true, "reset": true, "new": true}
+
+// The Claude CLI runs a message as a command only when its first word is "/" and a name like this.
+var commandName = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9:_-]*$`)
+
+// slashCommand returns the command a message runs, if it runs one; "// comment" or "/etc/hosts …" is a plain message.
+func slashCommand(text string) (string, bool) {
+	fields := strings.Fields(text)
+	if len(fields) == 0 || !strings.HasPrefix(fields[0], "/") || !commandName.MatchString(fields[0][1:]) {
+		return "", false
+	}
+	return fields[0][1:], true
 }
 
 func (m *Manager) Cancel(ctx context.Context, sid SessionID) error {
@@ -316,6 +407,11 @@ func (m *Manager) Cancel(ctx context.Context, sid SessionID) error {
 	if err != nil {
 		return err
 	}
+	m.mu.Lock()
+	if s := m.sessions[sid]; s != nil && s.streaming {
+		s.cancelled = true
+	}
+	m.mu.Unlock()
 	return conn.Cancel(ctx, sid)
 }
 
@@ -535,6 +631,18 @@ func (m *Manager) HandleUpdate(sid SessionID, u Update) {
 			if len(u.Models) > 0 { // a value-only update echoes the selection without re-listing models
 				s.models = u.Models
 			}
+		}
+		m.mu.Unlock()
+	}
+	// The context only grows within a session; a sharp drop means the CLI compacted it and the agent lost the files it was shown.
+	if u.Type == "usage" && u.UsedTokens > 0 {
+		m.mu.Lock()
+		if s := m.sessions[sid]; s != nil {
+			if u.UsedTokens < s.tokens/2 {
+				s.editor = editorSeen{}
+				s.resets++
+			}
+			s.tokens = u.UsedTokens
 		}
 		m.mu.Unlock()
 	}

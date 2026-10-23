@@ -76,6 +76,13 @@ const Network = forwardRef((props: NetworkProps, ref) => {
 
   const [skipModalOpen, setSkipModalOpen] = useState(false);
 
+  // The draft also arrives (or changes) while this stays mounted — the agent naming a network with the dialog already open — and only its identity changes, so typing keeps the local copy and the list's own object is already held.
+  useEffect(() => {
+    if (logic.draftNetworkCredentials) {
+      setNetworkCredentials(logic.draftNetworkCredentials);
+    }
+  }, [logic.draftNetworkCredentials]);
+
   useImperativeHandle(ref, () => ({
     confirm: (): void => connectToWifiNetwork(networkCredentials),
     skip: (): void => setSkipModalOpen(true),

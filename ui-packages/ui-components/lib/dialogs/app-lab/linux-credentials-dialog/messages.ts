@@ -3,7 +3,7 @@ import { defineMessages } from 'react-intl';
 export const linuxCredentialsDialogMessages = defineMessages({
   title: {
     id: 'linuxCredentialsDialog.title',
-    defaultMessage: 'Linux Credentials',
+    defaultMessage: 'Linux credentials',
     description: 'Title of the Linux credentials dialog',
   },
   usernameLabel: {

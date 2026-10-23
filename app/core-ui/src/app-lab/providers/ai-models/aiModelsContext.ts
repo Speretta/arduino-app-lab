@@ -1,15 +1,19 @@
-import {
-  AIModel,
-  AIModelItem,
-  EIProject,
-} from '@cloud-editor-mono/infrastructure';
+import { AIModelItem, EIProject } from '@cloud-editor-mono/infrastructure';
 import { ModelDownloadInfo } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { createContext, useContext } from 'react';
 
+export type DownloadAIModelSSEOptions = {
+  progressKey?: string;
+  // Only for a user-linked download: the brick whose detail asked for it,
+  // recorded once the download starts.
+  linkedBrickId?: string;
+  onStarted?: () => void;
+  onError?: (error: Error) => void;
+};
+
 export type AiModelsContextValue = {
-  projects: AIModel[];
-  projectsLoading: boolean;
   currentDownloads: { [projectId: string]: ModelDownloadInfo } | null;
+  clearDownload: (progressId: string) => void;
   installedModels: AIModelItem[];
   getInstalledModel: (
     modelId: string,
@@ -23,13 +27,19 @@ export type AiModelsContextValue = {
   enabledEIAutoRefresh: (enabled: boolean) => void;
   openAndAssociateToDevice: () => void;
   isModelOutdated: (modelId: string) => boolean;
-  downloadAIModelSSE: (id: string, progressKey?: string) => Promise<boolean>;
+  installAIModelSSE: (
+    declaredId: string,
+    options?: DownloadAIModelSSEOptions,
+  ) => Promise<AIModelItem | undefined>;
+  downloadAIModelSSE: (
+    source: string,
+    options?: DownloadAIModelSSEOptions & { mmprojUrl?: string },
+  ) => Promise<AIModelItem | undefined>;
 };
 
-const AiModelsContextValue: AiModelsContextValue = {} as AiModelsContextValue;
-
-export const AiModelsContext =
-  createContext<AiModelsContextValue>(AiModelsContextValue);
+export const AiModelsContext = createContext<AiModelsContextValue | undefined>(
+  undefined,
+);
 
 export const useAiModels = (): AiModelsContextValue => {
   const context = useContext(AiModelsContext);

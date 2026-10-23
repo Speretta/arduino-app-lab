@@ -13,6 +13,7 @@ import {
   ButtonSize,
   ButtonVariant,
   RuntimeActionsProps,
+  useTooltip,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
@@ -33,6 +34,18 @@ const RuntimeActions = (props: RuntimeActionsProps): React.ReactElement => {
     isBannerEnabled = true,
     showStop = true,
   } = runtimeActionsLogic();
+
+  const { props: tooltipPropsStop, renderTooltip: renderTooltipStop } =
+    useTooltip({
+      content: 'Stop',
+      timeout: 0,
+    });
+
+  const { props: tooltipPropsRun, renderTooltip: renderTooltipRun } =
+    useTooltip({
+      content: 'Run',
+      timeout: 0,
+    });
 
   const getStatusBanner = (params: {
     action: Action;
@@ -131,37 +144,43 @@ const RuntimeActions = (props: RuntimeActionsProps): React.ReactElement => {
     <div className={styles['actions']}>
       {showStatusBanner && getStatusBanner(showStatusBanner)}
       {stopShown ? (
-        <Button
-          classes={{
-            button: clsx(styles['icon-only']),
-          }}
-          onClick={(): void => stopApp(appId, appStatus)}
-          variant={ButtonVariant.Secondary}
-          appearance={ButtonAppearance.Destructive}
-          size={ButtonSize.XSmall}
-          disabled={stopDisabled || runtimeDisable}
-          Icon={Stop}
-          iconPosition="left"
-        >
-          Stop
-        </Button>
+        <div {...tooltipPropsStop}>
+          <Button
+            classes={{
+              button: clsx(styles['icon-only']),
+            }}
+            onClick={(): void => stopApp(appId, appStatus)}
+            variant={ButtonVariant.Secondary}
+            appearance={ButtonAppearance.Destructive}
+            size={ButtonSize.XSmall}
+            disabled={stopDisabled || runtimeDisable}
+            Icon={Stop}
+            iconPosition="left"
+          >
+            Stop
+          </Button>
+          {renderTooltipStop()}
+        </div>
       ) : (
-        <Button
-          classes={{
-            button: clsx(styles['icon-only']),
-          }}
-          onClick={(): void => runApp(appId)}
-          variant={ButtonVariant.Primary}
-          appearance={ButtonAppearance.Action}
-          size={ButtonSize.XSmall}
-          disabled={
-            currentActionStatus === ActionStatus.Pending || runtimeDisable
-          }
-          Icon={Play}
-          iconPosition="left"
-        >
-          Run
-        </Button>
+        <div {...tooltipPropsRun}>
+          <Button
+            classes={{
+              button: clsx(styles['icon-only']),
+            }}
+            onClick={(): void => runApp(appId)}
+            variant={ButtonVariant.Primary}
+            appearance={ButtonAppearance.Action}
+            size={ButtonSize.XSmall}
+            disabled={
+              currentActionStatus === ActionStatus.Pending || runtimeDisable
+            }
+            Icon={Play}
+            iconPosition="left"
+          >
+            Run
+          </Button>
+          {renderTooltipRun()}
+        </div>
       )}
     </div>
   );

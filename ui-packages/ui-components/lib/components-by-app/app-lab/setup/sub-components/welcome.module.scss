@@ -6,8 +6,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: var(--color-text-primary, #ECF1F1);
-  background: var(--color-background, #090f11);
+  color: var(--welcome-text-primary);
+  background: var(--surface-bg-below-2);
   gap: 16px;
   overflow: hidden;
 
@@ -29,7 +29,7 @@
   .welcome-title {
     font-size: 32px;
     font-weight: 600;
-    color: var(--color-text-primary, #ECF1F1);
+    color: var(--welcome-text-primary);
     margin-bottom: 16px;
     margin-top: 16px;
   }
@@ -37,13 +37,13 @@
   .welcome-subtitle {
     font-size: 16px;
     font-weight: 600;
-    color: var(--color-text-primary, #ECF1F1);
+    color: var(--welcome-text-primary);
     text-align: center;
   }
 
   .welcome-description {
     font-size: 16px;
-    color: var(--color-text-primary, #ECF1F1);
+    color: var(--welcome-text-primary);
   }
 }
 
@@ -67,23 +67,6 @@
     overflow-y: visible;
     max-width: 514px;
   }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    margin: 0;
-    border: none;
-  }
-
-  &::-webkit-scrollbar {
-    width: 0;
-  }
-
-  &:hover::-webkit-scrollbar {
-    width: 8px;
-  }
 }
 
 .board-group {
@@ -100,7 +83,7 @@
   align-items: center;
   gap: 8px;
   padding: 16px 0 4px;
-  color: var(--color-text-secondary, rgba(255, 255, 255, 0.6));
+  color: var(--text-subtle);
 
 
   svg {
@@ -116,13 +99,13 @@
   font-weight: 400;
   font-size: 12px;
   vertical-align: middle;
-  color: var(--color-text-primary, #ECF1F1);
+  color: var(--welcome-text-primary);
 }
 
 .group-divider {
   flex: 1;
   height: 1px;
-  background: var(--color-border-secondary, rgba(255, 255, 255, 0.1));
+  background: var(--divider-subtle);
 }
 
 .empty-state {
@@ -137,7 +120,7 @@
     font-size: 16px;
     letter-spacing: 0.01em;
     text-align: center;
-    color: var(--color-text-secondary, rgba(255, 255, 255, 0.6));
+    color: var(--text-subtle);
   }
 
   .empty-description {
@@ -145,7 +128,7 @@
     font-size: 16px;
     letter-spacing: 0.01em;
     text-align: center;
-    color: var(--color-text-secondary, rgba(255, 255, 255, 0.6));
+    color: var(--text-subtle);
   }
 }
 
@@ -157,7 +140,7 @@
 .input {
   border-radius: 8px !important;
   background: transparent !important;
-  border-color: var(--color-border-secondary, #434f54);
+  border-color: var(--border-default);
 
   &.has-error {
     border-color: var(--feedback-error-default, #c11f09);
@@ -168,7 +151,7 @@
     div[role="tooltip"] {
       color: var(--text-inverted, #171e21) !important;
       position: absolute;
-      border: 1px solid var(--color-border-secondary, gray);
+      border: 1px solid var(--border-strong);
       right: -20px;
       top: -20px;
       background: var(--feedback-neutral-default, #aeb8b8);
@@ -184,7 +167,7 @@
   }
 
   &.disabled {
-    border-color: var(--color-border-secondary, #434f54) !important;
+    border-color: var(--border-default) !important;
     cursor: not-allowed;
 
     input {
@@ -228,14 +211,14 @@
 
     *[class*="InputBox"] {
       background: transparent !important;
-      border-color: var(--color-border-secondary, #434f54);
+      border-color: var(--border-default);
 
       *[class*="label"] {
-        color: var(--color-text-primary, #ECF1F1);
+        color: var(--welcome-text-primary);
       }
 
       input {
-        color: var(--color-text-primary, #ECF1F1);
+        color: var(--welcome-text-primary);
 
         &[type="password"]::-ms-reveal {
           display: none;
@@ -244,7 +227,7 @@
 
       *[class*="InputBox--Icons"] {
         svg {
-          color: var(--color-text-primary, #ECF1F1);
+          color: var(--welcome-text-primary);
         }
       }
     }
@@ -263,6 +246,6 @@
   }
 
   &-footer {
-    border-top: 3px solid var(--color-border-primary, #1e2628);
+    border-top: 3px solid var(--border-subtle);
   }
 }

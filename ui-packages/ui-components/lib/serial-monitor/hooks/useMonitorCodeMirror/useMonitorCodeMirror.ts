@@ -10,6 +10,7 @@ import { debounce } from 'lodash-es';
 import { RefObject, useCallback, useEffect, useRef, useState } from 'react';
 
 import { SerialMonitorStatus } from '../../SerialMonitor.type';
+import { AnsiParser } from './ansiParser';
 import { LINE_SEPARATOR } from './constants';
 import { addResetEffect } from './extensions/reset';
 import {
@@ -217,6 +218,8 @@ export const useMonitorCodeMirror: UseMonitorCodeMirror = (
 
   const rootRef = useRef<HTMLDivElement>(null);
   const viewInstanceRef = useRef<EditorView | null>(null);
+  const ansiParserRef = useRef<AnsiParser | null>(null);
+  ansiParserRef.current ??= new AnsiParser();
 
   const onTimestampsChangedRef = useRef(onTimestampsChanged);
   useEffect(() => {
@@ -291,23 +294,56 @@ export const useMonitorCodeMirror: UseMonitorCodeMirror = (
       const doc = view.state.doc;
       const lastDocPosition = doc.length;
 
-      const changes: ChangeSpec = { from: lastDocPosition, insert: content };
+      // Sent content is echoed user input, so it must not disturb the parser
+      // state that the incoming stream depends on.
+      const ansiSegments = sentByUser
+        ? [{ text: content }]
+        : ansiParserRef.current!.push(content);
+      const cleanContent = ansiSegments.map((s) => s.text).join('');
+
+      // A chunk can be nothing but escape codes, which only move parser state.
+      if (cleanContent === '' && !className) return;
+
+      const changes: ChangeSpec = {
+        from: lastDocPosition,
+        insert: cleanContent,
+      };
       const tr: TransactionSpec = { changes, effects: [] };
 
       if (sentByUser) {
-        addSentContentEffect(tr, lastDocPosition, content);
+        addSentContentEffect(tr, lastDocPosition, cleanContent);
       }
 
       if (className) {
         if (isGlobalStyle) {
-          addStyledContentEffect(tr, 0, doc.toString() + content, className);
+          addStyledContentEffect(
+            tr,
+            0,
+            doc.toString() + cleanContent,
+            className,
+          );
         } else {
-          addStyledContentEffect(tr, lastDocPosition, content, className);
+          addStyledContentEffect(tr, lastDocPosition, cleanContent, className);
         }
       }
 
+      // Apply ANSI color decorations
+      let offset = lastDocPosition;
+      for (const segment of ansiSegments) {
+        if (segment.text.length > 0) {
+          addStyledContentEffect(
+            tr,
+            offset,
+            segment.text,
+            segment.className,
+            segment.style,
+          );
+        }
+        offset += segment.text.length;
+      }
+
       if (autoScrollEnabledRef.current) {
-        const normalizedContent = content.replace(
+        const normalizedContent = cleanContent.replace(
           new RegExp(LINE_SEPARATOR, 'g'),
           '',
         );
@@ -331,6 +367,8 @@ export const useMonitorCodeMirror: UseMonitorCodeMirror = (
   const resetContent = useCallback(() => {
     const view = viewInstanceRef.current;
     if (!view) return;
+
+    ansiParserRef.current?.reset();
 
     const tr = {
       changes: {

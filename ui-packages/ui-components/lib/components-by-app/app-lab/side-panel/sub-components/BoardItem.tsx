@@ -42,24 +42,32 @@ export const BoardItem = ({
 
   return (
     <div className={styles['board-item']}>
-      <div className={styles['thumbnail']}>
-        {board ? <BoardIcon board={board} /> : null}
-      </div>
-      <div className={styles['text']}>
-        <div {...nameTooltipProps} className={styles['text-line']}>
-          <XXSmall bold truncate className={styles['name']}>
-            {board?.name || formatMessage(messages.noBoardConnectedLabel)}
-          </XXSmall>
-          {board?.name ? renderNameTooltip() : null}
-        </div>
-        {board && (
-          <div className={styles['text-line']}>
-            <XXXSmall truncate className={styles['family']}>
-              {board.type}
-            </XXXSmall>
-          </div>
-        )}
-      </div>
+      <button
+        className={styles['board-info']}
+        onClick={(): void => {
+          setIsSwitcherOpen(true);
+          setShowSwitcherTooltip(false);
+        }}
+      >
+        <span className={styles['thumbnail']}>
+          {board ? <BoardIcon board={board} /> : null}
+        </span>
+        <span className={styles['text']}>
+          <span {...nameTooltipProps} className={styles['text-line']}>
+            <XXSmall bold truncate className={styles['name']}>
+              {board?.name || formatMessage(messages.noBoardConnectedLabel)}
+            </XXSmall>
+            {board?.name ? renderNameTooltip() : null}
+          </span>
+          {board && (
+            <span className={styles['text-line']}>
+              <XXXSmall truncate className={styles['family']}>
+                {board.type}
+              </XXXSmall>
+            </span>
+          )}
+        </span>
+      </button>
       {/* opens the exact same board-list panel the footer uses; only this trigger button differs */}
       <div
         className={styles['switcher-tooltip-trigger']}
@@ -71,6 +79,7 @@ export const BoardItem = ({
           selectBoard={onSelectBoard}
           useStaticPosition={false}
           buttonChildren={<IconNavigationMenuMoreHorizontal />}
+          isOpen={isSwitcherOpen}
           onOpenChange={(isOpen): void => {
             setIsSwitcherOpen(isOpen);
             setShowSwitcherTooltip(false);

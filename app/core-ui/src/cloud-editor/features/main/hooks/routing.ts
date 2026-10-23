@@ -5,11 +5,9 @@ import {
 } from '@cloud-editor-mono/domain';
 import { useNavigate, useSearch } from '@tanstack/react-location';
 import { del, get } from 'idb-keyval';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useHash } from 'react-use';
 
-import { useShowUserSettings } from '../../../../common/hooks/queries/user';
-import { AuthContext } from '../../../../common/providers/auth/authContext';
 import { MAIN_PATH } from '../../../../routing/Router';
 import {
   HIGHLIGHT_PARAM,
@@ -123,30 +121,6 @@ export const useTranslateHashToHighlightParam: UseTranslateHashToHighlightParam 
       }
     }, [hash, navigate, search, shouldTranslate]);
   };
-
-type UseRedirectToWebIDE = (
-  shouldRedirect: boolean,
-  handleOptOut: () => Promise<void>,
-) => void;
-
-export const useRedirectToWebIDE: UseRedirectToWebIDE = function (
-  shouldRedirect: boolean,
-  redirect: () => Promise<void>,
-): ReturnType<UseRedirectToWebIDE> {
-  const { user } = useContext(AuthContext);
-  const { data: userSettings, isLoading: settingsAreLoading } =
-    useShowUserSettings(!!user);
-
-  useEffect(() => {
-    if (
-      userSettings?.optin === false &&
-      !settingsAreLoading &&
-      shouldRedirect
-    ) {
-      redirect();
-    }
-  }, [redirect, settingsAreLoading, shouldRedirect, userSettings?.optin]);
-};
 
 type UseRedirectToIoT = (
   shouldRedirect: boolean,

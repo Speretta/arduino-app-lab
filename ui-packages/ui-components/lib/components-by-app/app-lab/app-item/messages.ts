@@ -11,11 +11,6 @@ export const appItemMessages = defineMessages({
     defaultMessage: 'Running',
     description: 'Indicates that the app is currently running',
   },
-  appSize: {
-    id: 'appItem.appSize',
-    defaultMessage: 'Size: {size} MB',
-    description: 'Indicates the size of the app',
-  },
   actionRename: {
     id: 'appItem.actionRename',
     defaultMessage: 'Rename',

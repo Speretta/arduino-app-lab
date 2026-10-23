@@ -1,6 +1,6 @@
-import { DetectedDevicesGroup } from '../device-association-dialog';
 import { ModalLogic } from '../essential/dialog';
-import { DeviceAssociationSteps } from './content/steps';
+import { DeviceAssociationSteps } from './content/steps/steps';
+import { DetectedDevicesGroup } from './content/sub-components/devices-tabs/devicesTabs.type';
 
 export interface DetectedDevice {
   id?: string;

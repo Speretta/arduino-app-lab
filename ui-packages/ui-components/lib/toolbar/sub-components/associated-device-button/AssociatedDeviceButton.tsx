@@ -10,7 +10,7 @@ import { memo, useRef } from 'react';
 import { Button, ButtonType } from '../../../essential/button';
 import { WrapperTitle } from '../../../essential/wrapper-title';
 import { useI18n } from '../../../i18n/useI18n';
-import { Link, Small, Text, TextSize, XXSmall } from '../../../typography';
+import { Small, Text, TextSize, XXSmall } from '../../../typography';
 import { messages } from '../../messages';
 import {
   IotPortName,
@@ -35,7 +35,6 @@ export interface AssociatedDeviceButtonProps {
   errored?: boolean;
   selectedBoardHasAltPort?: boolean;
   switchToAltPort?: () => void;
-  deviceSetupLink?: string;
   classes?: { ['button-container']?: string; button?: string };
 }
 
@@ -55,7 +54,6 @@ const AssociatedDeviceButton: React.FC<AssociatedDeviceButtonProps> = (
     connectionLost = false,
     selectedBoardHasAltPort,
     switchToAltPort,
-    deviceSetupLink,
   } = props;
   const buttonRef = useRef<HTMLButtonElement>(null);
   const { formatMessage } = useI18n();
@@ -125,11 +123,6 @@ const AssociatedDeviceButton: React.FC<AssociatedDeviceButtonProps> = (
         <PortSwitch
           onSwitch={switchToAltPort}
           selectedBoardIsIot={deviceIsIot}
-          classes={{
-            container: styles['ps-container'],
-            iconContainer: styles['ps-icon-container'],
-            iconContainerSelected: styles['ps-icon-container-selected'],
-          }}
         />
       );
 
@@ -189,12 +182,6 @@ const AssociatedDeviceButton: React.FC<AssociatedDeviceButtonProps> = (
 
   const portInfo = renderPortInfo();
 
-  const iotSetupTabLink = (
-    <Link href={deviceSetupLink} target="_self" rel="noreferrer">
-      {formatMessage(messages.iotSetupTabLink)}
-    </Link>
-  );
-
   const renderIotDevicePopover = (): JSX.Element | null => {
     return (
       <div
@@ -203,9 +190,7 @@ const AssociatedDeviceButton: React.FC<AssociatedDeviceButtonProps> = (
       >
         <div className={clsx(styles['association-node-info-popover'])}>
           <Text size={TextSize.XXSmall}>
-            {formatMessage(messages.iotSetupTabMessage, {
-              iotSetupTabLink: iotSetupTabLink,
-            })}
+            {formatMessage(messages.iotSetupTabMessage)}
           </Text>
         </div>
       </div>

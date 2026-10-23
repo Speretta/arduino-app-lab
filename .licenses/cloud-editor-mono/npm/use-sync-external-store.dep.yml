@@ -1,10 +1,10 @@
 ---
 name: use-sync-external-store
-version: 1.5.0
+version: 1.6.0
 type: npm
 summary: Backwards compatible shim for React's useSyncExternalStore. Works with any
   React that supports hooks.
-homepage: 
+homepage:
 license: mit
 licenses:
 - sources: LICENSE

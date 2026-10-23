@@ -11,4 +11,6 @@ export interface LspService {
   sendLspMessage: (lspId: LspId, message: LspMessage) => Promise<void>;
   getLspTempWorkspaceAppDir: () => Promise<string>;
   getLspWorkspaceFile: (fileUri: string) => Promise<string>;
+  listLspSketchFiles: (dir: string) => Promise<string[]>;
+  listLspFiles: (workspaceDir: string, relDir: string) => Promise<string[]>;
 }

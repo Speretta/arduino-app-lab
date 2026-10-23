@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"app-lab-desktop/internal/appmirror"
+	"app-lab-desktop/internal/arduinoapps"
 )
 
 // appEntry is the slimmed-down app record returned to the agent (drops orchestrator internals).
@@ -25,7 +28,7 @@ type appEntry struct {
 func registerAppsList(srv *mcp.Server, access BoardAccess) string {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "apps_list",
-		Description: "List the Arduino Apps on the connected board, split into the user's installed apps and the built-in examples (id, name, status, description). Read-only.",
+		Description: "List the Arduino Apps on the connected board, split into the user's own apps, the installed App releases and the built-in examples (id, name, status, description). Releases and examples cannot be changed. Read-only.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ noArgs) (*mcp.CallToolResult, any, error) {
 		body, err := orchestratorGet(ctx, access, "/v1/apps")
@@ -41,7 +44,7 @@ func registerAppsList(srv *mcp.Server, access BoardAccess) string {
 	return "apps_list"
 }
 
-// shapeAppsList projects the orchestrator's /v1/apps response into a compact user-apps/examples split.
+// shapeAppsList projects the orchestrator's /v1/apps response into a compact user-apps/releases/examples split.
 func shapeAppsList(raw string) (string, error) {
 	var resp struct {
 		Apps *[]struct {
@@ -50,6 +53,7 @@ func shapeAppsList(raw string) (string, error) {
 			Icon        *string `json:"icon"`
 			ID          *string `json:"id"`
 			Name        *string `json:"name"`
+			Release     *bool   `json:"release"`
 			Status      *string `json:"status"`
 		} `json:"apps"`
 		BrokenApps *[]struct {
@@ -62,16 +66,20 @@ func shapeAppsList(raw string) (string, error) {
 
 	out := struct {
 		Apps     []appEntry `json:"apps"`
+		Releases []appEntry `json:"releases"`
 		Examples []appEntry `json:"examples"`
 		Broken   []string   `json:"broken_apps,omitempty"`
-	}{Apps: []appEntry{}, Examples: []appEntry{}}
+	}{Apps: []appEntry{}, Releases: []appEntry{}, Examples: []appEntry{}}
 
 	if resp.Apps != nil {
 		for _, a := range *resp.Apps {
 			e := appEntry{ID: strv(a.ID), Name: strv(a.Name), Icon: strv(a.Icon), Status: strv(a.Status), Description: strv(a.Description)}
-			if a.Example != nil && *a.Example {
+			switch {
+			case a.Example != nil && *a.Example:
 				out.Examples = append(out.Examples, e)
-			} else {
+			case a.Release != nil && *a.Release:
+				out.Releases = append(out.Releases, e)
+			default:
 				out.Apps = append(out.Apps, e)
 			}
 		}
@@ -110,6 +118,7 @@ type appDetail struct {
 	Status      string       `json:"status"`
 	Description string       `json:"description,omitempty"`
 	Example     bool         `json:"example,omitempty"`
+	Release     bool         `json:"release,omitempty"`
 	Path        string       `json:"path,omitempty"`
 	Bricks      []brickEntry `json:"bricks"`
 }
@@ -133,7 +142,8 @@ func registerAppsGet(srv *mcp.Server, access BoardAccess) string {
 		if err != nil {
 			return nil, nil, err
 		}
-		return textResult(shaped), nil, nil
+		// apps_get is how the agent verifies its work, so it carries the sync warnings.
+		return textResult(SyncIssueWarning(access.PendingSyncIssues()) + shaped), nil, nil
 	})
 	return "apps_get"
 }
@@ -153,6 +163,7 @@ func shapeAppDetail(raw string) (string, error) {
 		ID          string  `json:"id"`
 		Name        string  `json:"name"`
 		Path        *string `json:"path"`
+		Release     *bool   `json:"release"`
 		Status      string  `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
@@ -166,6 +177,7 @@ func shapeAppDetail(raw string) (string, error) {
 		Status:      resp.Status,
 		Description: strv(resp.Description),
 		Example:     resp.Example != nil && *resp.Example,
+		Release:     resp.Release != nil && *resp.Release,
 		Path:        strv(resp.Path),
 		Bricks:      []brickEntry{},
 	}
@@ -187,22 +199,57 @@ func shapeAppDetail(raw string) (string, error) {
 	return string(j), nil
 }
 
+// readOnlyCheckoutNotice forbids the workaround, gives the reason and names the way forward — the house shape for agent-facing refusals.
+const readOnlyCheckoutNotice = "This app is a built-in example or an installed App release: its files on the board are READ-ONLY. " +
+	"Read and study them freely, but any edit you make in this directory will NOT reach the board. " +
+	"To change how it works, call apps_clone to copy it into a new app, check that copy out, and edit there. " +
+	"Do not look for a way around this: if the user asked you to modify this app itself, tell them examples and " +
+	"releases cannot be modified and offer them the editable copy instead."
+
+// requireUserApp refuses a write to an app the mirror also treats as read-only: it asks ResolveApp, so the two cannot
+// disagree. An app whose detail cannot be read is refused too: a wrong "writable" changes files the user cannot restore.
+func requireUserApp(ctx context.Context, access BoardAccess, appID string) error {
+	base, err := access.OrchestratorBaseURL(ctx)
+	if err != nil {
+		return err
+	}
+	target, err := arduinoapps.ResolveApp(ctx, base, appID)
+	if err != nil {
+		return err
+	}
+	if !target.ReadOnly {
+		return nil
+	}
+	return fmt.Errorf("not changed: this app is read-only on the board (a built-in example, an installed App release, " +
+		"or an app outside the user's apps folder) — only the user's own apps can be changed. " +
+		"Do not look for a way around this: tell the user, and offer to apps_clone it into a new app and make the change there")
+}
+
 // registerAppsCheckout adds apps_checkout (read-only: only mirrors the board locally; edits are gated Edit/Write) and returns its name for the allowlist.
 func registerAppsCheckout(srv *mcp.Server, access BoardAccess) string {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "apps_checkout",
-		Description: "Check out an Arduino App's files from the connected board into a local working copy — use this to VIEW, read, or edit an app's files: check out, then use the Read, Edit and Write tools on the returned directory (do NOT read app files by cat-ing them via board_exec). Edits sync back to the board automatically at the end of the turn. Read-only itself; pass the app id from apps_list.",
+		Description: "Check out an Arduino App's files from the connected board into a local working copy — use this to VIEW, read, or edit an app's files: check out, then use the Read, Edit and Write tools on the returned directory (do NOT read app files by cat-ing them via board_exec). Edits sync back to the board automatically — at the end of the turn and right before apps_start, apps_clone, or board_exec — but a running app never picks them up by itself: restart it to apply changes. Built-in examples (Inspirations, brick examples, core-and-foundational) and installed App releases check out READ-ONLY: read them freely, but edits to them never reach the board — apps_clone one first to get a copy you can change. Read-only itself; pass the app id from apps_list.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in appGetInput) (*mcp.CallToolResult, any, error) {
 		id := strings.TrimSpace(in.ID)
 		if id == "" {
 			return nil, nil, fmt.Errorf("app id is required")
 		}
-		path, err := access.CheckoutApp(ctx, id)
+		path, parked, readOnly, err := access.CheckoutApp(ctx, id)
 		if err != nil {
 			return nil, nil, err
 		}
-		return textResult(path), nil, nil
+		// The checkout is the agent's recovery step, so it must surface any earlier edits that never landed.
+		text := SyncIssueWarning(access.PendingSyncIssues()) + path
+		if readOnly {
+			text += "\n\n" + readOnlyCheckoutNotice
+		}
+		for _, rel := range parked {
+			text += fmt.Sprintf("\nnote: your uncommitted edits to %s conflicted with changes made on the board since checkout; the board's version is now in place and your edits were saved to %s — review it NOW and re-apply what you still need with Edit on the real file. The parked copy is internal plumbing and is cleaned up automatically at the end of the turn: never mention it to the user, never ask the user to delete it, and do not push it to the board via board_exec.",
+				rel, rel+appmirror.ParkedSuffix)
+		}
+		return textResult(text), nil, nil
 	})
 	return "apps_checkout"
 }
@@ -237,7 +284,7 @@ func registerAppsLogs(srv *mcp.Server, access BoardAccess) string {
 		if logs == "" {
 			logs = "(no logs)"
 		}
-		return textResult(logs), nil, nil
+		return textResult(SyncIssueWarning(access.PendingSyncIssues()) + logs), nil, nil
 	})
 	return "apps_logs"
 }
@@ -271,24 +318,31 @@ func registerAppsStart(srv *mcp.Server, access BoardAccess) string {
 			return nil, nil, fmt.Errorf("app id is required")
 		}
 		// Push checked-out edits so the started app runs the latest code; refuse to start stale code if this app's sync failed.
-		failed, conflicts := access.FlushMirrorEdits()
+		failed, conflicts, withheld := access.FlushMirrorEdits()
 		if failed[id] != nil {
 			return nil, nil, fmt.Errorf("the pending edits for this app could not be synced to the board (%v) — start aborted so the board doesn't run stale code. The local edits are preserved and will be re-pushed automatically; check the board connection and call apps_start again", failed[id])
 		}
 		if conflicts[id] != nil {
-			return nil, nil, fmt.Errorf("your edits to this app conflict with the board (%v) — start aborted so the board doesn't run stale code. Retrying will not help: call apps_checkout to pick up the board's version, re-apply what you need, then start it", conflicts[id])
+			return nil, nil, fmt.Errorf("your edits to this app conflict with the board (%v) — start aborted so the board doesn't run stale code. Retrying will not help: call apps_checkout to pick up the board's version (it saves your edits as %s files), re-apply what you need, then start it", conflicts[id], appmirror.ParkedSuffix)
 		}
+		// A built-in app cannot take the agent's edits, so the board runs the shipped code: say so rather than let a start read as success.
+		note := ""
+		if withheld[id] != nil {
+			note = fmt.Sprintf("Note: %v. The board is running the app's shipped files, not your local edits — to run your changes, apps_clone this app and start the copy.\n\n", withheld[id])
+		}
+		// Warnings don't abort the start (this app's checkout may be fine), but the agent must learn about stray or unlanded edits; rendered post-flush so they reflect the current state.
+		warn := SyncIssueWarning(access.PendingSyncIssues()) + GhostEditWarning(access.PendingGhostEdits())
 		res := runAppAction(ctx, access, fmt.Sprintf("/v1/apps/%s/start", url.PathEscape(id)))
 		// The agent started this app; ask the UI to auto-open its web UI + forward ports once running (like a manual run).
 		access.RequestOpenAppUI(id)
 		if !res.finished {
 			// Slow start (e.g. a freshly-flashed board pulling images, installing deps, building the sketch);
 			// it keeps running in the background. The agent must poll, not assume success or failure.
-			return textResult("Starting the app — this can take several minutes on a freshly-flashed board (pulling images, installing dependencies, building the sketch). It is still booting in the background; call apps_wait_running to wait for it, and only report it started once that shows it running. Do NOT call apps_start again."), nil, nil
+			return textResult(warn + note + "Starting the app — this can take several minutes on a freshly-flashed board (pulling images, installing dependencies, building the sketch). It is still booting in the background; call apps_wait_running to wait for it, and only report it started once that shows it running. Do NOT call apps_start again."), nil, nil
 		}
 		// Finished within the wait. Trust the actual status: a spurious SSE error with the app running still counts as started.
 		if st, err := appStatus(ctx, access, id); err == nil && strings.EqualFold(st, "running") {
-			return textResult("Started — the app is now running."), nil, nil
+			return textResult(warn + note + "Started — the app is now running."), nil, nil
 		}
 		if res.err != nil {
 			return nil, nil, res.err
@@ -297,7 +351,7 @@ func registerAppsStart(srv *mcp.Server, access BoardAccess) string {
 		if out == "" {
 			out = "Started."
 		}
-		return textResult(out), nil, nil
+		return textResult(warn + note + out), nil, nil
 	})
 	return "apps_start"
 }
@@ -420,6 +474,7 @@ func registerAppsDelete(srv *mcp.Server, access BoardAccess) {
 		if _, err := orchestratorRequest(ctx, access, http.MethodDelete, "/v1/apps/"+url.PathEscape(id), nil); err != nil {
 			return nil, nil, err
 		}
+		access.ForgetWorkspaceApp(id) // its id is reusable by a later app of the same name
 		return textResult(fmt.Sprintf("Deleted app %q.", id)), nil, nil
 	})
 }
@@ -428,7 +483,7 @@ func registerAppsDelete(srv *mcp.Server, access BoardAccess) {
 func registerAppsEdit(srv *mcp.Server, access BoardAccess) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "apps_edit",
-		Description: "Edit an Arduino App's details on the connected board: its name, description and/or icon. Pass the app id from apps_list plus at least one field to change; omitted fields are left as-is. Mutating — asks the user for permission. Example apps can't be edited, and a name already in use is rejected. Renaming needs the app stopped: if it is running or starting, first ask the user whether they want it stopped for the rename, then (only with their agreement) call apps_stop before renaming.",
+		Description: "Edit an Arduino App's details on the connected board: its name, description and/or icon. Pass the app id from apps_list plus at least one field to change; omitted fields are left as-is. Mutating — asks the user for permission. Example apps and App releases can't be edited, and a name already in use is rejected. Renaming needs the app stopped: if it is running or starting, first ask the user whether they want it stopped for the rename, then (only with their agreement) call apps_stop before renaming.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in appEditInput) (*mcp.CallToolResult, any, error) {
 		id := strings.TrimSpace(in.ID)
@@ -437,6 +492,9 @@ func registerAppsEdit(srv *mcp.Server, access BoardAccess) {
 		}
 		if in.Name == nil && in.Description == nil && in.Icon == nil {
 			return nil, nil, fmt.Errorf("provide at least one of name, description, or icon to change")
+		}
+		if err := requireUserApp(ctx, access, id); err != nil {
+			return nil, nil, err
 		}
 		// Renaming a live app leaves the old one running under the new record, so gate a name change on the app being stopped (description/icon are harmless); report it rather than error so the agent asks the user, and let an unreadable status fall through.
 		if in.Name != nil {
@@ -453,11 +511,36 @@ func registerAppsEdit(srv *mcp.Server, access BoardAccess) {
 		if err != nil {
 			return nil, nil, err
 		}
-		if _, err := orchestratorRequest(ctx, access, http.MethodPatch, "/v1/apps/"+url.PathEscape(id), body); err != nil {
+		raw, err := orchestratorRequest(ctx, access, http.MethodPatch, "/v1/apps/"+url.PathEscape(id), body)
+		if err != nil {
 			return nil, nil, err
+		}
+		// A name change mints a new id and the old one stops resolving: carry the workspace over and hand the agent the id to use, or its next call 404s.
+		if newID := editedAppID(raw); newID != "" && newID != id {
+			access.RebindWorkspaceApp(id, newID, strings.TrimSpace(deref(in.Name)))
+			return textResult(fmt.Sprintf("Updated app %q; renaming gave it the new id %q — use that from now on, the old one no longer resolves.", id, newID)), nil, nil
 		}
 		return textResult(fmt.Sprintf("Updated app %q.", id)), nil, nil
 	})
+}
+
+// editedAppID reads the id back from an app update; empty when the response says nothing about it.
+func editedAppID(raw string) string {
+	var app struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(raw), &app); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(app.ID)
+}
+
+// deref reads an optional string field, empty when unset.
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // registerAppsClone adds apps_clone (mutating). Off the read-only allowlist so the agent must get user permission first.
@@ -472,13 +555,15 @@ func registerAppsClone(srv *mcp.Server, access BoardAccess) {
 			return nil, nil, fmt.Errorf("app id is required")
 		}
 		// Flush the source app's checked-out edits so the clone copies the latest code; refuse to clone stale files if its sync failed.
-		failed, conflicts := access.FlushMirrorEdits()
+		failed, conflicts, withheld := access.FlushMirrorEdits()
 		if failed[id] != nil {
 			return nil, nil, fmt.Errorf("the pending edits for this app could not be synced to the board (%v) — clone aborted so it doesn't copy stale files. Check the board connection and try again", failed[id])
 		}
 		if conflicts[id] != nil {
-			return nil, nil, fmt.Errorf("your edits to this app conflict with the board (%v) — clone aborted so it doesn't copy stale files. Retrying will not help: call apps_checkout to pick up the board's version first", conflicts[id])
+			return nil, nil, fmt.Errorf("your edits to this app conflict with the board (%v) — clone aborted so it doesn't copy stale files. Retrying will not help: call apps_checkout to pick up the board's version first (it saves your edits as %s files to re-apply)", conflicts[id], appmirror.ParkedSuffix)
 		}
+		// Warnings don't abort the clone (this app's checkout may be fine), but the agent must learn about stray or unlanded edits; rendered post-flush so they reflect the current state.
+		warn := SyncIssueWarning(access.PendingSyncIssues()) + GhostEditWarning(access.PendingGhostEdits())
 		body, err := json.Marshal(struct {
 			Name *string `json:"name,omitempty"`
 			Icon *string `json:"icon,omitempty"`
@@ -494,7 +579,11 @@ func registerAppsClone(srv *mcp.Server, access BoardAccess) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return textResult(shaped), nil, nil
+		if withheld[id] != nil {
+			// The clone came from the board, so edits the source could not take are absent from the copy.
+			return textResult(warn + fmt.Sprintf("Note: %v. The copy was made from the board's shipped files, so your edits to the read-only app are not in it — re-apply them in the new app.\n\n%s", withheld[id], shaped)), nil, nil
+		}
+		return textResult(warn + shaped), nil, nil
 	})
 }
 
@@ -523,7 +612,7 @@ type appCreateInput struct {
 func registerAppsCreate(srv *mcp.Server, access BoardAccess) string {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "apps_create",
-		Description: "Create a new Arduino App on the connected board — scaffolds its folder, app.yaml and python/main.py. Returns the new app id; write the app's code and declare its bricks by editing those files afterward. Mutating: requires user approval.",
+		Description: "Create a new Arduino App on the connected board — scaffolds its folder, app.yaml and python/main.py. Returns the new app id; write the app's code and declare its bricks by editing those files afterward. The new app is a sibling of every other app on the board, never inside the one a scoped session is working on, and that session keeps its own app. Mutating: requires user approval.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in appCreateInput) (*mcp.CallToolResult, any, error) {
 		name := strings.TrimSpace(in.Name)

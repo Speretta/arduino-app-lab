@@ -26,7 +26,7 @@ $dialogMaxHeight: var(--dialog-max-height);
         max-height: $dialogMaxHeight;
         height: $dialogHeight;
         border-radius: 5px !important;
-        background-color: shared.theme-var(--associate-dialog-background);
+        background-color: var(--component-bg-above);
         display: flex;
     }
 }

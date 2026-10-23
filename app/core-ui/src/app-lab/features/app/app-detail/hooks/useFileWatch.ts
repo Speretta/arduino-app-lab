@@ -10,8 +10,9 @@ import { useCallback, useEffect, useRef } from 'react';
 import { BoardScopedQuery } from '../../../../boardScopedQuery';
 import { useBoardLifecycleStore } from '../../../../store/boardLifecycle';
 import { getBoardCacheId } from '../../../../utils/board';
-import { resolveAbsPath, toAppRelativeId } from './filePaths';
+import { parentDir, resolveAbsPath, toAppRelativeId } from './filePaths';
 import { APP_YAML_PATH, SKETCH_YAML_PATH } from './useAppFiles';
+import { appDirKey } from './useAppFileTree';
 import { UseFileOperationsReturn } from './useFileOperations';
 
 // Fire-and-forget a watch/refresh operation, reporting rejections instead of
@@ -25,16 +26,23 @@ const track = (label: string, op: Promise<unknown>): void => {
 type UseFileWatchParams = {
   appId: string;
   appPath?: string;
-  // Raw open-tab ids across both panes. Must be the unfiltered id state
-  // (pane-A `openFileIds` + pane-B tab ids), NOT the meta-derived `openFiles` —
-  // the latter tracks `filesList`, so it would drop a moved/removed file the
-  // instant the tree refetches, losing the very tab we need to reconcile.
+  // Raw open-tab ids across both panels. Must be the unfiltered id state
+  // (panel-A `openFileIds` + panel-B tab ids), NOT the meta-derived `openFiles` —
+  // that drops any id whose metadata hasn't resolved yet, losing the very tab
+  // we need to reconcile.
   openTabIds: string[];
   refreshFileContents: (
     ids: string[],
     cause?: CodeReloadCause,
   ) => Promise<void>;
   deleteFile: UseFileOperationsReturn['deleteFile'];
+  // Drops a directory (and its descendants) from the listed set. A file path
+  // matches no listed directory, so a removal can be reported blind.
+  unlistDir: (dir: string) => void;
+  // Drops what is cached for a listed directory while leaving it open, so it
+  // refetches. A path that is not a listed directory is a no-op, so a create
+  // can be reported blind.
+  relistDir: (dir: string) => void;
   reloadLspFile?: (path: string) => Promise<void>;
   // Reconciles a watcher-detected structural change (create/remove, i.e. each
   // half of an external move) with every LS. No-op when LSP is disabled.
@@ -53,6 +61,8 @@ export function useFileWatch({
   openTabIds,
   refreshFileContents,
   deleteFile,
+  unlistDir,
+  relistDir,
   reloadLspFile,
   syncLspWatchedChange,
 }: UseFileWatchParams): void {
@@ -65,7 +75,7 @@ export function useFileWatch({
   // Latest open-tab abs paths, read by the (stable) refresh subscription so a
   // `file` event only reloads content when that file is actually open.
   const openAbsPathsRef = useRef<Map<string, string>>(new Map());
-  // Latest open-tab ids (both panes), read by the subscription to reconcile
+  // Latest open-tab ids (both panels), read by the subscription to reconcile
   // tabs on a `dir` remove. The open set — not the file tree — is the source
   // of truth here: a folder move fires only the top-level remove (no per-file
   // events), and the tree may already have been refetched by the create half.
@@ -103,14 +113,21 @@ export function useFileWatch({
   }, [syncLspWatchedChange]);
 
   const invalidateManifest = useCallback(() => {
-    queryClient.invalidateQueries([BoardScopedQuery.APP_FILES, appId]);
-    queryClient.invalidateQueries([BoardScopedQuery.APP_BRICKS, appId]);
-    queryClient.invalidateQueries([
-      BoardScopedQuery.APP_SKETCH_LIBRARIES,
-      appId,
-    ]);
+    // A manifest change can restructure the app (a brick brings its own files),
+    // so no single directory can be named — drop every listing for this app.
+    queryClient.invalidateQueries({
+      queryKey: [BoardScopedQuery.APP_DIR, appId],
+    });
+    queryClient.invalidateQueries({
+      queryKey: [BoardScopedQuery.APP_BRICKS, appId],
+    });
+    queryClient.invalidateQueries({
+      queryKey: [BoardScopedQuery.APP_SKETCH_LIBRARIES, appId],
+    });
     // App title/name lives on the app detail query.
-    queryClient.invalidateQueries([BoardScopedQuery.LIST_MY_APPS, appId]);
+    queryClient.invalidateQueries({
+      queryKey: [BoardScopedQuery.LIST_MY_APPS, appId],
+    });
     // Reload the manifest buffers (if open) as an external change.
     track(
       'refresh manifest',
@@ -135,7 +152,7 @@ export function useFileWatch({
             );
           }
           // Surgically sync the LS's in-memory copy unless the file is shown
-          // in a pane (a live view re-syncs through the reload above; the
+          // in a panel (a live view re-syncs through the reload above; the
           // call no-ops for it). This must ALSO run for open-but-BACKGROUND
           // tabs: they have no editor view, so nothing else tells the LS
           // until the tab is selected — and by then the Arduino LS may have
@@ -160,11 +177,15 @@ export function useFileWatch({
           // otherwise a removed file's tab lingers as a ghost (its id survives
           // while its meta vanishes from the refetched tree). Close the removed
           // path and everything under it (covers a folder removal/move, whose
-          // descendants get no events of their own) in BOTH panes, keyed off
+          // descendants get no events of their own) in BOTH panels, keyed off
           // the live open-tab set. Routed through deleteFile with
           // `source: 'stream'` so the coded UI side effects run without
           // re-issuing the backend delete (it already happened on disk).
           if (event.op === 'remove') {
+            // A folder that goes away must stop being listed, so one that comes
+            // back under the same name (a rename arrives as remove + create)
+            // starts unlisted instead of showing the old contents.
+            unlistDir(relPath);
             openIdsRef.current
               .filter((id) => id === relPath || id.startsWith(`${relPath}/`))
               .forEach((id) =>
@@ -193,6 +214,12 @@ export function useFileWatch({
           // announced the path and the server kept serving the didOpen'd
           // stale buffer until app restart.
           if (event.op === 'create') {
+            // A directory replaced in one step (`mv sub sub_moved && mkdir
+            // sub`) coalesces in the backend's per-path debounce into this
+            // single create, so a folder the tree is showing may now hold
+            // something else entirely. No-op unless the path is a listed
+            // directory, which a plain file create never is.
+            relistDir(relPath);
             const fileId = openAbsPathsRef.current.get(event.path);
             if (fileId) {
               track(
@@ -208,7 +235,18 @@ export function useFileWatch({
           // Refetch so the tree reflects the change (create/write, or a removal
           // with nothing open under it) — deleteFile's own invalidation covers
           // the closed tabs; this covers everything else.
-          queryClient.invalidateQueries([BoardScopedQuery.APP_FILES, appId]);
+          const dir = parentDir(relPath);
+          queryClient.invalidateQueries({
+            queryKey: appDirKey(appId, dir),
+            exact: true,
+          });
+          // The default file is picked from the root's own entries, so it is
+          // only the root that can change the answer.
+          if (dir === '') {
+            queryClient.invalidateQueries({
+              queryKey: [BoardScopedQuery.APP_DEFAULT_FILE, appId],
+            });
+          }
           break;
         }
         case 'manifest':
@@ -221,7 +259,15 @@ export function useFileWatch({
     });
 
     return () => unsubscribe();
-  }, [appId, appPath, queryClient, refreshFileContents, invalidateManifest]);
+  }, [
+    appId,
+    appPath,
+    queryClient,
+    refreshFileContents,
+    invalidateManifest,
+    unlistDir,
+    relistDir,
+  ]);
 
   // One recursive watch on the app covers file content, tree, and manifests.
   useEffect(() => {

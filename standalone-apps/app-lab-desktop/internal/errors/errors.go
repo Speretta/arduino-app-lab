@@ -1,7 +1,9 @@
 package errors
 
 import (
+	"app-lab-desktop/internal/hw"
 	"app-lab-desktop/internal/tunnel"
+	"encoding/json"
 	"errors"
 
 	"github.com/arduino/arduino-app-cli/pkg/board/remote/ssh"
@@ -30,6 +32,21 @@ func TunnelSSHAuthFailedMiddleware() ErrorMiddleware {
 		return func(err error) any {
 			if errors.Is(err, ssh.ErrAuthFailed) {
 				return tunnel.NewSSHErrorAuthFailed(err)
+			}
+			return next(err)
+		}
+	}
+}
+
+func HwErrorMiddleware() ErrorMiddleware {
+	return func(next options.ErrorFormatter) options.ErrorFormatter {
+		return func(err error) any {
+			var hwErr *hw.HwError
+			if errors.As(err, &hwErr) {
+				// The Wails runtime rejects with new Error(value): an object would
+				// become "[object Object]", so the JSON is sent as the message string.
+				data, _ := json.Marshal(hwErr)
+				return string(data)
 			}
 			return next(err)
 		}

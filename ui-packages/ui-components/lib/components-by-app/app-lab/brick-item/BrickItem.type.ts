@@ -1,14 +1,14 @@
-import { BrickInstance } from '@cloud-editor-mono/infrastructure';
+import { AppBrickListItem } from '@cloud-editor-mono/infrastructure';
 
 export interface BrickItemProps {
-  brick: BrickInstance;
+  brick: AppBrickListItem;
   selected?: boolean;
   onClick?: () => void;
   onDoubleClick?: () => void;
   onDelete?: () => void;
   onRename?: () => void;
   onAddBrick?: () => void;
-  onDragStart?: (brick: BrickInstance) => void;
+  onDragStart?: (brick: AppBrickListItem) => void;
   onDragEnd?: () => void;
   missingConfig?: boolean;
 }

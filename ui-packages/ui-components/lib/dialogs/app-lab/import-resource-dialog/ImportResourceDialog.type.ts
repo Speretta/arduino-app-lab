@@ -1,5 +1,8 @@
-import { TreeNode } from '../../../file-tree';
-import { OnDuplicateConflictParams } from '../duplicate-file-dialog/types';
+import { ReleaseDetails } from '../../../components-by-app/app-lab/app-release';
+import {
+  ConflictType,
+  OnDuplicateConflictParams,
+} from '../duplicate-file-dialog/types';
 
 export interface ImportResourceResult {
   id: string;
@@ -10,6 +13,9 @@ export enum ImportStatus {
   Idle = 'idle',
   Uploading = 'uploading',
   UploadFailed = 'upload-failed',
+  // A release archive was picked: its manifest is confirmed before anything is written.
+  ReleaseInfo = 'release-info',
+  Installing = 'installing',
 }
 
 export type ResourceType = 'app' | 'file' | 'folder';
@@ -25,10 +31,18 @@ export type UseImportResourceProps = {
   ) => Promise<ImportResourceResult>;
   type: ResourceType;
   invalidateQueries: () => void;
-  nodes?: TreeNode[];
+  // Resolved by the owner of the filesystem: the file tree is listed lazily, so
+  // a name already taken inside an unlisted folder is invisible here.
+  checkPathConflict?: (
+    toPath: string,
+    nodeType: 'file' | 'folder',
+  ) => Promise<{ hasDuplicate: boolean; conflictType: ConflictType }>;
   targetFolderPath?: string;
   onDuplicateConflict?: (params: OnDuplicateConflictParams) => void;
   selectResourcePath?: () => Promise<string | string[] | null>;
+  // Takes the picked or dropped paths away from the import, e.g. an App release
+  // that is installed instead.
+  claimPaths?: (items: { path: string; isFolder: boolean }[]) => boolean;
 };
 
 export interface ImportResourceDialogProps {
@@ -42,4 +56,10 @@ export type ImportResourceLogic = () => {
   onOpenChange: (open: boolean) => void;
   startImport: (remoteDir?: string) => void;
   type: ResourceType;
+  // Only set while a release archive is waiting to be confirmed.
+  pendingRelease?: ReleaseDetails;
+  enablePreparation?: boolean;
+  setEnablePreparation?: (enabled: boolean) => void;
+  confirmReleaseInstall?: () => void;
+  cancelReleaseInstall?: () => void;
 };

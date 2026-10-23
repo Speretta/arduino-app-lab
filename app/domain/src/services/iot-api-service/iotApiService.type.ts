@@ -1,5 +1,5 @@
 import { ShowDeviceV2_Response } from '@cloud-editor-mono/infrastructure';
-import { DetectedDevicesGroup } from '@cloud-editor-mono/ui-components';
+import { DetectedDevicesGroup } from '@cloud-editor-mono/ui-components/lib/device-association-dialog/content/sub-components/devices-tabs/devicesTabs.type';
 
 export type GetIotCloudDevices_Result = {
   [K in DetectedDevicesGroup]: ShowDeviceV2_Response[];

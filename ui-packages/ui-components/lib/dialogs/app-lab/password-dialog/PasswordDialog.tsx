@@ -15,13 +15,18 @@ import { AppLabDialog } from '../app-lab-dialog/AppLabDialog';
 import { messages } from './messages';
 import styles from './password-dialog.module.scss';
 
-export type PasswordDialogLogic = {
+export type PasswordDialogError =
+  | { kind: 'password' }
+  // message is shown in place of the generic text. It comes from the board and is not translated.
+  | { kind: 'generic'; message?: string };
+
+export type PasswordDialogLogic = () => {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (password: string) => void;
   isLoading: boolean;
   isSuccess: boolean;
-  error?: 'generic' | 'password';
+  error?: PasswordDialogError;
 };
 
 type PasswordDialogProps = {
@@ -33,7 +38,8 @@ export const PasswordDialog: React.FC<PasswordDialogProps> = ({
 }: PasswordDialogProps) => {
   const { formatMessage } = useI18n();
 
-  const { open, onOpenChange, onConfirm, isLoading, isSuccess, error } = logic;
+  const { open, onOpenChange, onConfirm, isLoading, isSuccess, error } =
+    logic();
 
   const [password, setPassword] = useState('');
 
@@ -83,16 +89,15 @@ export const PasswordDialog: React.FC<PasswordDialogProps> = ({
           label={formatMessage(messages.password)}
           disabled={isLoading}
           sensitive
-          /* eslint-disable-next-line jsx-a11y/no-autofocus */
           autoFocus
         />
         {error && (
           <div className={styles['error-message']}>
             <InfoIconOutline />
             <XXXSmall>
-              {error === 'generic'
-                ? formatMessage(messages.genericError)
-                : formatMessage(messages.passwordWrong)}
+              {error.kind === 'password'
+                ? formatMessage(messages.passwordWrong)
+                : formatMessage(messages.genericError)}
             </XXXSmall>
           </div>
         )}

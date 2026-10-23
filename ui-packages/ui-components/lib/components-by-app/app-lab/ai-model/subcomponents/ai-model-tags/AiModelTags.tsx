@@ -9,10 +9,10 @@ import { useMemo } from 'react';
 
 import { useI18n } from '../../../../../i18n/useI18n';
 import { XXSmall } from '../../../../../typography';
-import { aiModelMessages } from '../../../brick-detail/messages';
 import styles from '../../ai-model.module.scss';
 import { AiModelProps } from '../../AiModel.type';
-import { allowedMetadataTags } from '../../helpers';
+import { allowedMetadataTags, isEdgeImpulseModel } from '../../helpers';
+import { messages } from '../../messages';
 
 export interface AiModelTagsProps {
   model: AiModelProps['model'];
@@ -58,7 +58,7 @@ export const AiModelTags: React.FC<AiModelTagsProps> = ({
           variant={ButtonVariant.Tertiary}
           onClick={(e): void => {
             e.stopPropagation();
-            if (model.edgeImpulseProps) {
+            if (isEdgeImpulseModel(model)) {
               openModelPage?.(
                 model.edgeImpulseProps.projectId,
                 selectedImpulseId,
@@ -71,7 +71,7 @@ export const AiModelTags: React.FC<AiModelTagsProps> = ({
             button: styles['model-card-button'],
           }}
         >
-          {formatMessage(aiModelMessages.modelCard)}
+          {formatMessage(messages.modelCard)}
           <div className={styles['model-card-button-icon']}>
             <ArrowUpRight />
           </div>

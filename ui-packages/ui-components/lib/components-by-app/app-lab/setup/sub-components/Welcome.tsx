@@ -4,7 +4,10 @@ import { DotLottiePlayer } from '@dotlottie/react-player';
 import clsx from 'clsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { LinuxCredentialsDialog } from '../../../../dialogs';
+import {
+  LinuxCredentialsDialog,
+  LinuxCredentialsDialogLogic,
+} from '../../../../dialogs';
 import { useI18n } from '../../../../i18n/useI18n';
 import { Large, Small, XSmall } from '../../../../typography';
 import { welcomeMessages } from '../messages';
@@ -71,7 +74,7 @@ const Welcome: React.FC<WelcomeProps> = (props: WelcomeProps) => {
     markBoardAsUsed,
     getLastConnection,
     updateLastConnection,
-  } = boardSerialTracker;
+  } = boardSerialTracker();
 
   const passwordRef = useRef<HTMLInputElement>(null);
 
@@ -215,7 +218,7 @@ const Welcome: React.FC<WelcomeProps> = (props: WelcomeProps) => {
     onConnPswCancel();
   }, [onConnPswCancel]);
 
-  const linuxCredentialsDialog = {
+  const linuxCredentialsDialog: LinuxCredentialsDialogLogic = () => ({
     open: showBoardConnPswPrompt,
     onOpenChange: (isOpen: boolean): void => {
       if (!isOpen) closePasswordPrompt();
@@ -224,7 +227,7 @@ const Welcome: React.FC<WelcomeProps> = (props: WelcomeProps) => {
     onCancel: closePasswordPrompt,
     isLoading: isBoardConnectingOrChecking,
     error: connToBoardError,
-  };
+  });
 
   const handleSelectBoard = useCallback(
     (board: Board) => {

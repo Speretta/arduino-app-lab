@@ -22,37 +22,14 @@
     }
   }
 
-  .header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    align-self: stretch;
-    padding-right: 16px;
-
-    .title {
-      font-weight: 700;
-      color: var(--text-default, #fff);
-    }
-
-    .spacer {
-      flex-grow: 1;
-    }
-
-    .configure-button {
-      background-color: #374146;
-      height: 36px;
-      color: var(--text-default, #fff);
-      border-radius: 8px;
-      padding: 0 16px;
-
-      &-text {
-        font-weight: 600;
-      }
-    }
-  }
-
   .tabs {
     width: 100%;
+    // fill the height left by the header instead of 100%, which overflowed and got clipped
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    display: flex;
+    flex-direction: column;
 
     .tab-list {
       width: auto;
@@ -83,20 +60,10 @@
 
     .tab-panel {
       width: 100%;
-      height: calc(100% - 60px);
+      flex: 1;
+      min-height: 0;
+      height: auto;
       overflow: auto;
-
-      &::-webkit-scrollbar {
-        width: 8px;
-      }
-
-      &::-webkit-scrollbar-thumb {
-        border: 4px solid var(--component-bg-scrim, rgba(0, 0, 0, 0.5));
-      }
-
-      &::-webkit-scrollbar-track {
-        background-color: transparent;
-      }
     }
   }
 
@@ -106,153 +73,7 @@
     gap: 16px;
     padding-right: 8px;
     padding-top: 8px;
-  }
-
-  .ai-models-container {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-
-    .new-models {
-      display: flex;
-      flex-direction: row;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      padding: 16px;
-      border-top: 1px solid var(--border-default, #434f54);
-
-      &-icon {
-        height: 40px;
-        width: 40px;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        background-color: rgba(174, 184, 184, 0.15);
-      }
-
-      &-text {
-        flex: 1;
-        min-width: 304px;
-        span {
-          display: block;
-        }
-      }
-
-      &-button {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 4px;
-        svg {
-          width: 16px;
-          height: 16px;
-        }
-      }
-    }
-
-  }
-
-  .brick-usages {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    width: 100%;
-
-    &-title {
-      border-top: 1px solid var(--border-default, #434f54);
-      color: var(--text-default, #fff);
-      padding-top: 16px;
-      font-weight: 700;
-    }
-
-    &-cards {
-      display: flex;
-      flex-wrap: wrap;
-      column-gap: 16px;
-      row-gap: 16px;
-      padding-bottom: 8px;
-
-      .brick-usage-card {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        width: 225px;
-        height: 40px;
-        flex: 0 0 225px;
-        background: var(--component-bg-below-1, #171e21);
-        border: 1px solid var(--border-inverted, #232b2e);
-        padding: 6px 8px 6px 6px;
-        box-sizing: border-box;
-        border-radius: 8px;
-        color: inherit;
-        cursor: pointer;
-
-        &:hover {
-          background: var(--component-bg-flexible, #aeb8b826);
-          border: 1px solid var(--border-inverted, #232b2e);
-        }
-
-        .brick-usage-header {
-          width: 28px;
-          height: 28px;
-          flex: 0 0 28px;
-          border-radius: 4px;
-          overflow: hidden;
-          position: relative;
-          -webkit-mask-image: -webkit-radial-gradient(white, black);
-
-          &-bg {
-            height: 100%;
-            width: 100%;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-size: 200% 150%;
-            opacity: 1;
-            // No CSS blur here: the wash is blurred inside the SVG by
-            // getBackgroundIcon, so no accelerated compositing layer is created
-            // (see the comment there).
-          }
-
-          &-icon {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            width: 100%;
-            height: 100%;
-            padding: 4px;
-            box-sizing: border-box;
-            border-radius: 4px;
-            left: 0;
-            position: absolute;
-            top: 0;
-          }
-        }
-
-        .brick-usage-content {
-          color: var(--text-subtle, #c9d2d2);
-          font-weight: 700;
-          font-size: 14px;
-          line-height: 20px;
-          flex: 1;
-          min-width: 0;
-          overflow: hidden;
-          text-align: left;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .brick-usage-link-icon {
-          width: 20px;
-          height: 20px;
-          flex: 0 0 20px;
-          color: var(--text-subtle, #c9d2d2);
-        }
-      }
-    }
+    // tail spacing sits inside the scroller so the scrollbar still runs to the bottom edge
+    padding-bottom: 16px;
   }
 }
-

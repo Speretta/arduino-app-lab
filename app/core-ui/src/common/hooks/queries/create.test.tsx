@@ -8,9 +8,11 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 
+import { queryClient as appQueryClient } from '../../providers/data-fetching/QueryProvider';
 import {
   BatchFile,
   useCreateDefaultSketch,
+  useGetCustomLibraries,
   useRetrieveBatchFileContents,
   useRetrieveFileContents,
   useRetrieveFilesList,
@@ -66,6 +68,8 @@ vi.mock('@cloud-editor-mono/domain', async () => {
         id: '1',
         name: 'test',
       } as CreateSketch_Response),
+    retrieveCustomLibraries: vi.fn(),
+    retrieveCustomLibraryCode: vi.fn(),
     retrieveFileContents: vi.fn(),
     retrieveFilesList: vi.fn(),
     saveSketchFile: (): PostSketchFile_Response => ({
@@ -92,6 +96,17 @@ describe('createApiServiceQueries', () => {
         },
       );
       await waitFor(() => expect(result.current.sketchesData).toBeDefined());
+    });
+
+    it('should report loading while disabled, as v4 isLoading did', () => {
+      const { result } = renderHook(
+        () => useRetrieveSketches(false, domain.retrieveSketches, 'key'),
+        {
+          wrapper,
+        },
+      );
+      expect(result.current.sketchesData).toBeUndefined();
+      expect(result.current.getSketchesIsLoading).toBe(true);
     });
   });
 
@@ -292,6 +307,59 @@ describe('createApiServiceQueries', () => {
           expect(result.current.filesContents).toBeDefined();
         });
       });
+    });
+  });
+
+  describe('call useGetCustomLibraries', () => {
+    // The hook invalidates through the app's shared client, so the test
+    // renders with that client.
+    const appWrapper: React.FC<{ children: React.ReactNode }> = ({
+      children,
+    }) => (
+      <QueryClientProvider client={appQueryClient}>
+        {children}
+      </QueryClientProvider>
+    );
+
+    const customLibrary = { id: 'lib-1', path: 'libraries/lib', name: 'lib' };
+
+    beforeEach(() => {
+      appQueryClient.clear();
+      vi.mocked(domain.retrieveCustomLibraries).mockResolvedValue([
+        customLibrary,
+      ] as unknown as Awaited<
+        ReturnType<typeof domain.retrieveCustomLibraries>
+      >);
+      vi.mocked(domain.retrieveCustomLibraryCode).mockResolvedValue({
+        code: '#include <lib.h>',
+      });
+    });
+
+    afterEach(() => {
+      vi.mocked(domain.retrieveCustomLibraries).mockReset();
+      vi.mocked(domain.retrieveCustomLibraryCode).mockReset();
+    });
+
+    it('should refresh the library code when the list is fetched again with equal data', async () => {
+      const { result } = renderHook(() => useGetCustomLibraries(true, true), {
+        wrapper: appWrapper,
+      });
+
+      await waitFor(() =>
+        expect(result.current.customLibraries?.[0].code).toBe(
+          '#include <lib.h>',
+        ),
+      );
+      expect(domain.retrieveCustomLibraryCode).toHaveBeenCalledTimes(1);
+
+      await appQueryClient.refetchQueries({
+        queryKey: ['get-custom-libraries'],
+      });
+
+      await waitFor(() =>
+        expect(domain.retrieveCustomLibraryCode).toHaveBeenCalledTimes(2),
+      );
+      expect(domain.retrieveCustomLibraries).toHaveBeenCalledTimes(2);
     });
   });
 });

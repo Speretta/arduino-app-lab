@@ -107,12 +107,13 @@ func (a *Agent) supervise(cmd *exec.Cmd, pg processGroup, done chan struct{}) {
 	if errors.Is(waitErr, exec.ErrWaitDelay) {
 		waitErr = nil
 	}
-	close(done)
-
 	a.mu.Lock()
 	stopping, stderr := a.stopping, a.stderr.String()
 	a.cmd, a.stdin = nil, nil
 	a.mu.Unlock()
+	// Closed last: Stop returns as soon as this fires, and a Running() (or a restart's Start) right after it must
+	// not still see the old command. Safe to hold until here — nobody waits on it while holding a.mu.
+	close(done)
 
 	if stopping {
 		return

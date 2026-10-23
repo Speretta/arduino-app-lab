@@ -14,10 +14,12 @@ import type { SaveCode } from '@cloud-editor-mono/domain/src/services/services-b
 import { resolveFileIconComponent } from '@cloud-editor-mono/images/assets/file-icons';
 import {
   BRICK_FILE_EXTENSION,
+  BrickDetailTabId,
   CodeEditorLogic,
   dismissSnackbar,
   EditorControlsProps,
   EditorPanelLogic,
+  isBrickDetailTabId,
   mapAssetSources,
   SelectableFileData,
   snackbar,
@@ -28,7 +30,7 @@ import { SecretsEditorLogic } from '@cloud-editor-mono/ui-components/lib/compone
 import { EditorView } from '@codemirror/view';
 import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 
 import {
   getSelectedCodeObservableValue,
@@ -41,16 +43,20 @@ import {
 } from '../../../../../../common/hooks/editor';
 import { SKETCH_SECRETS_FILE_ID } from '../../../../../../common/hooks/files';
 import { UseCreateSketchFromExisting } from '../../../../../../common/hooks/queries/create.type';
-import { useObservable } from '../../../../../../common/hooks/useObservable';
+import {
+  useObservable,
+  useObservableSelector,
+} from '../../../../../../common/hooks/useObservable';
 import { makeAppBrickDetailLogic } from '../../../../../hooks/useBrickDetail';
-import { splitFileName } from '../../hooks/filePaths';
+import { isAbsoluteId, splitFileName } from '../../hooks/filePaths';
 import { resolveNewTabInsertion } from '../../hooks/tabInsertion';
+import { metaFromPath } from '../../hooks/useEditorFileMeta';
 import { usePreviewFileId } from '../../hooks/usePreviewFileId';
 import { EditorPanelLogicParams } from './appLabEditorPanel.type';
 import { messages } from './messages';
 
 // Tracks whether the code subject for `fileId` has a value yet. Used to
-// gate the per-pane editor skeleton: the file's content subject is the
+// gate the per-panel editor skeleton: the file's content subject is the
 // honest signal for whether the editor has something to render.
 function useSubjectHasValue(fileId: string | undefined): boolean {
   const [hasValue, setHasValue] = useState(false);
@@ -114,6 +120,10 @@ function getDataFromFile(
 
 const READONLY_FILE_IDS = ['app.yaml', 'sketch/sketch.yaml'];
 
+// Must keep a stable identity: `gutter` is a dependency of the extension-reconcile effect in
+// `createUseCodeMirrorHook`, so an object literal reconciles the editor on every render.
+const DEFAULT_GUTTER = { lineNumberStartOffset: 0 };
+
 function isReadonlyFile(file?: SelectableFileData): boolean {
   if (!file) return false;
   return (
@@ -176,7 +186,6 @@ function rekeyMapEntry<T>(
 
 type LspEditorProps = Pick<
   ReturnType<CodeEditorLogic>,
-  | 'filesList'
   | 'isLspEnabled'
   | 'lspWorkspaceDir'
   | 'lspClients'
@@ -185,8 +194,10 @@ type LspEditorProps = Pick<
   | 'sendLspMessage'
   | 'subscribeLspMessages'
   | 'getLspWorkspaceFile'
-  | 'getActivePane'
+  | 'getActiveEditorPanel'
   | 'onLspStateChange'
+  | 'showLspReferences'
+  | 'closeLspReferences'
 > & {
   // Built here rather than coming from the shared editor logic, because it has
   // to close over this panel's saveCode (see setLspFileValue).
@@ -194,16 +205,27 @@ type LspEditorProps = Pick<
   ensureLspFileValue?: (fileId: string) => Promise<string | undefined>;
 };
 
-function buildCodeEditorHook(
-  file: SelectableFileData | undefined,
-  fileTabs: SelectableFileData[],
-  setCodeFn: ReturnType<CodeEditorLogic>['setCode'],
-  saveCodeFn: SaveCode,
-  sketchDataIsLoading: boolean,
-  readOnly: boolean,
-  onReceiveViewInstance: (viewInstance: EditorView | null) => void,
-  lsp?: LspEditorProps,
-): CodeEditorLogic {
+type CodeEditorHookParams = {
+  file: SelectableFileData | undefined;
+  fileTabs: SelectableFileData[];
+  setCode: ReturnType<CodeEditorLogic>['setCode'];
+  saveCode: SaveCode;
+  sketchDataIsLoading: boolean;
+  readOnly: boolean;
+  onReceiveViewInstance: (viewInstance: EditorView | null) => void;
+  lsp?: LspEditorProps;
+};
+
+function buildCodeEditorHook({
+  file,
+  fileTabs,
+  setCode,
+  saveCode,
+  sketchDataIsLoading,
+  readOnly,
+  onReceiveViewInstance,
+  lsp,
+}: CodeEditorHookParams): CodeEditorLogic {
   return function useCodeEditorLogic(): ReturnType<CodeEditorLogic> {
     useCodeInjectionsObservable(getCodeInjectionsSubject);
     // Re-render (and let CodeMirror reload the doc) when any open file's buffer
@@ -213,7 +235,7 @@ function buildCodeEditorHook(
     useObservable(getCodeReloadSubject());
 
     return {
-      setCode: setCodeFn,
+      setCode,
       sketchDataIsLoading,
       getCode: () =>
         getSelectedCodeObservableValue(getCodeSubjectById, file?.fileId)?.value,
@@ -233,7 +255,7 @@ function buildCodeEditorHook(
           codeInjectionsSubjectNext(
             file.fileId,
             value.value,
-            { saveCode: saveCodeFn },
+            { saveCode },
             false,
             undefined,
           );
@@ -257,7 +279,7 @@ function buildCodeEditorHook(
       hasHeader: false,
       hasTabs: true,
       useScrollPastEnd: true,
-      gutter: readOnly ? undefined : { lineNumberStartOffset: 0 },
+      gutter: readOnly ? undefined : DEFAULT_GUTTER,
       fileError: file?.error,
       ...lsp,
     };
@@ -267,36 +289,36 @@ function buildCodeEditorHook(
 type UseCreateEditorPanelLogic = (params: EditorPanelLogicParams) => {
   editorPanelLogic: EditorPanelLogic;
   /**
-   * Open `fileId` in `targetPane`, creating panel B if needed. Returned so
+   * Open `fileId` in `targetPanel`, creating panel B if needed. Returned so
    * the single owner of this hook (`useAppDetailLogic`) can route file-tree
-   * and brick drops into the split pane directly.
+   * and brick drops into the split panel directly.
    */
-  openFileInPane: (
+  openFileInPanel: (
     fileId: string,
-    targetPane: 'A' | 'B',
+    targetPanel: 'A' | 'B',
     isPreview?: boolean,
   ) => void;
   /**
-   * Read the pane the user last interacted with ('A' or 'B'). Used by
+   * Read the panel the user last interacted with ('A' or 'B'). Used by
    * `setSelectedFile` in `appDetail.logic` to route file-tree clicks into
-   * the focused pane. A ref-backed getter so callers always see the
+   * the focused panel. A ref-backed getter so callers always see the
    * latest value without re-rendering.
    */
-  getActivePane: () => 'A' | 'B';
-  activePane: 'A' | 'B';
-  rightPaneSelectedFile: SelectableFileData | undefined;
-  rightPaneTabs: SelectableFileData[];
-  renameRightPaneTab: (oldId: string, newId: string) => void;
-  closeRightPaneTab: (fileId: string) => void;
+  getActiveEditorPanel: () => 'A' | 'B';
+  activeEditorPanel: 'A' | 'B';
+  rightPanelSelectedFile: SelectableFileData | undefined;
+  rightPanelTabs: SelectableFileData[];
+  renameRightPanelTab: (oldId: string, newId: string) => void;
+  closeRightPanelTab: (fileId: string) => void;
   /**
-   * Pane-A close with the last-tab consolidation (folds pane B's tabs back
+   * Panel-A close with the last-tab consolidation (folds panel B's tabs back
    * into A and collapses the split instead of leaving A empty). Exposed so
    * externally-driven closes (the watcher's stream deletes in
-   * `closeFileBothPanes`) behave like a user's X-click — a raw `closeFile`
-   * that empties pane A blanks the whole editor panel while pane B still
+   * `closeFileBothPanels`) behave like a user's X-click — a raw `closeFile`
+   * that empties panel A blanks the whole editor panel while panel B still
    * silently holds its tabs.
    */
-  closeFileFromPaneA: (fileId: string) => void;
+  closeFileFromPanelA: (fileId: string) => void;
   openBrickAiModelsTab: (brickId: string) => void;
 };
 
@@ -314,7 +336,6 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     deleteAppFile,
     renameAppFile,
     selectableMainFile,
-    unsavedFileIds,
     openFiles: tabs,
     readOnly,
     fetchFile,
@@ -323,7 +344,6 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     openFilesStore,
     filesContentLoaded,
     storeSplitState,
-    filesList,
     isLspEnabled,
     lspWorkspaceDir,
     lspClients,
@@ -332,58 +352,70 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     subscribeLspMessages,
     getLspWorkspaceFile,
     onLspStateChange,
+    showLspReferences,
+    closeLspReferences,
+    onToggleAgentPanel,
+    agentPanelOpen,
   } = params;
 
-  const [leftPaneMarkdownStateByFileId, setLeftPaneMarkdownStateByFileId] =
+  const [leftPanelMarkdownStateByFileId, setLeftPanelMarkdownStateByFileId] =
     useState<Map<string, boolean>>(new Map());
-  const [rightPaneMarkdownStateByFileId, setRightPaneMarkdownStateByFileId] =
+  const [rightPanelMarkdownStateByFileId, setRightPanelMarkdownStateByFileId] =
     useState<Map<string, boolean>>(new Map());
-  const [leftPaneBrickTabStateByFileId, setLeftPaneBrickTabStateByFileId] =
-    useState<Map<string, string>>(new Map());
-  const [rightPaneBrickTabStateByFileId, setRightPaneBrickTabStateByFileId] =
-    useState<Map<string, string>>(new Map());
+  const [leftPanelBrickTabStateByFileId, setLeftPanelBrickTabStateByFileId] =
+    useState<Map<string, BrickDetailTabId>>(new Map());
+  const [rightPanelBrickTabStateByFileId, setRightPanelBrickTabStateByFileId] =
+    useState<Map<string, BrickDetailTabId>>(new Map());
   const [isSplit, setIsSplit] = useState(false);
-  const [rightPaneTabs, setRightPaneTabs] = useState<SelectableFileData[]>([]);
-  const [rightPaneSelectedFile, setRightPaneSelectedFile] = useState<
+  const [rightPanelTabs, setRightPanelTabs] = useState<SelectableFileData[]>(
+    [],
+  );
+  const [rightPanelSelectedFile, setRightPanelSelectedFile] = useState<
     SelectableFileData | undefined
   >(undefined);
 
-  // Pane B's preview tab — mirrors pane A's `previewFileId` (see
+  // The tabs-bar and editor-panel logic functions subscribe inside the components that render them.
+  const unsavedFiles$ = getUnsavedFilesSubject<Subject<Set<string>>>();
+
+  // Panel B's preview tab — mirrors panel A's `previewFileId` (see
   // `usePreviewFileId`): the one B tab in preview, rendered italic and
   // replaced in place when another file is previewed. The ref lets the
   // tab-mutating callbacks read the latest value without a stale closure.
   const [
-    rightPanePreviewFileId,
-    setRightPanePreviewFileId,
-    rightPanePreviewFileIdRef,
-  ] = usePreviewFileId(unsavedFileIds);
+    rightPanelPreviewFileId,
+    setRightPanelPreviewFileId,
+    rightPanelPreviewFileIdRef,
+  ] = usePreviewFileId(unsavedFiles$);
 
-  // Mirror of pane A's selection-driven fetch: whenever pane B's selected
+  // Mirror of panel A's selection-driven fetch: whenever panel B's selected
   // file changes, make sure its content/subject is loaded. Without this,
   // clicking a B tab whose subject was never instantiated (or was lost in
   // a rekey edge case) leaves the editor stuck reading a missing subject.
   useEffect(() => {
-    if (rightPaneSelectedFile?.fileId) {
-      void fetchFile?.(rightPaneSelectedFile.fileId);
+    if (rightPanelSelectedFile?.fileId) {
+      void fetchFile?.(rightPanelSelectedFile.fileId);
     }
-  }, [fetchFile, rightPaneSelectedFile?.fileId]);
+  }, [fetchFile, rightPanelSelectedFile?.fileId]);
 
-  // Tracks which pane the user last interacted with so file-tree clicks
-  // open in the focused pane (defaulting to A). The ref mirrors the state
+  // Tracks which panel the user last interacted with so file-tree clicks
+  // open in the focused panel (defaulting to A). The ref mirrors the state
   // so non-render consumers (eg. `setSelectedFile` in `appDetail.logic`)
   // can read the latest value without a stale closure.
-  const [activePane, setActivePane] = useState<'A' | 'B'>('A');
-  const activePaneRef = useRef<'A' | 'B'>('A');
-  const handleSetActivePane = useCallback((pane: 'A' | 'B') => {
-    activePaneRef.current = pane;
-    setActivePane(pane);
+  const [activeEditorPanel, setActiveEditorPanel] = useState<'A' | 'B'>('A');
+  const activeEditorPanelRef = useRef<'A' | 'B'>('A');
+  const handleSetActiveEditorPanel = useCallback((panel: 'A' | 'B') => {
+    activeEditorPanelRef.current = panel;
+    setActiveEditorPanel(panel);
   }, []);
-  const getActivePane = useCallback(() => activePaneRef.current, []);
+  const getActiveEditorPanel = useCallback(
+    () => activeEditorPanelRef.current,
+    [],
+  );
 
-  const { focusActivePane } = useCodeEditorViewInstance(
+  const { focusActiveEditorPanel } = useCodeEditorViewInstance(
     selectFile,
     tabs,
-    getActivePane,
+    getActiveEditorPanel,
   );
 
   const selectFileAndFocus = useCallback(
@@ -392,11 +424,11 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
       openAtIndex?: number;
       isPreview?: boolean;
     }): void => {
-      handleSetActivePane('A');
+      handleSetActiveEditorPanel('A');
       selectFile(params);
-      focusActivePane();
+      focusActiveEditorPanel();
     },
-    [handleSetActivePane, selectFile, focusActivePane],
+    [handleSetActiveEditorPanel, selectFile, focusActiveEditorPanel],
   );
 
   const { formatMessage } = useI18n();
@@ -410,28 +442,31 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
   // outlived the record, and leaving app detail then re-entering suppressed the
   // notice for whichever file happened to be selected last.
   const handledSelection = useRef<string | undefined>(undefined);
+  // A new id per notice: sonner keeps a dismissed id in its store, so showing
+  // again under the same id updates the dismissed toast and it never appears.
+  const fileNoticeId = useRef<string | number | undefined>(undefined);
 
   // Collapsing the split always returns focus to the single remaining
-  // pane A, so file-tree clicks resume opening there. Pane B's Editor2 is
+  // panel A, so file-tree clicks resume opening there. Panel B's Editor2 is
   // torn down on collapse, so drop its module-scoped view reference too
   // (the ui-components cleanup only nulls its own map, not ours).
   useEffect(() => {
     if (!isSplit) {
-      activePaneRef.current = 'A';
-      setActivePane('A');
+      activeEditorPanelRef.current = 'A';
+      setActiveEditorPanel('A');
       codeEditorViewInstances.B = null;
     }
   }, [isSplit]);
 
   const shouldRenderMarkdown = selectedFile?.fileId
-    ? leftPaneMarkdownStateByFileId.get(selectedFile.fileId) ?? true
+    ? leftPanelMarkdownStateByFileId.get(selectedFile.fileId) ?? true
     : true;
 
   const setShouldRenderMarkdown = useCallback(
     (value: boolean) => {
       const fileId = selectedFile?.fileId;
       if (!fileId) return;
-      setLeftPaneMarkdownStateByFileId((prev) => {
+      setLeftPanelMarkdownStateByFileId((prev) => {
         if (prev.get(fileId) === value) return prev;
         const next = new Map(prev);
         next.set(fileId, value);
@@ -441,33 +476,33 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     [selectedFile?.fileId],
   );
 
-  const rightPaneShouldRenderMarkdown = rightPaneSelectedFile?.fileId
-    ? rightPaneMarkdownStateByFileId.get(rightPaneSelectedFile.fileId) ?? true
+  const rightPanelShouldRenderMarkdown = rightPanelSelectedFile?.fileId
+    ? rightPanelMarkdownStateByFileId.get(rightPanelSelectedFile.fileId) ?? true
     : true;
 
-  const setRightPaneShouldRenderMarkdown = useCallback(
+  const setRightPanelShouldRenderMarkdown = useCallback(
     (value: boolean) => {
-      const fileId = rightPaneSelectedFile?.fileId;
+      const fileId = rightPanelSelectedFile?.fileId;
       if (!fileId) return;
-      setRightPaneMarkdownStateByFileId((prev) => {
+      setRightPanelMarkdownStateByFileId((prev) => {
         if (prev.get(fileId) === value) return prev;
         const next = new Map(prev);
         next.set(fileId, value);
         return next;
       });
     },
-    [rightPaneSelectedFile?.fileId],
+    [rightPanelSelectedFile?.fileId],
   );
 
   const brickSelectedTab = selectedFile?.fileId
-    ? leftPaneBrickTabStateByFileId.get(selectedFile.fileId) ?? 'overview'
+    ? leftPanelBrickTabStateByFileId.get(selectedFile.fileId) ?? 'overview'
     : 'overview';
 
   const setBrickSelectedTab = useCallback(
-    (value: string) => {
+    (value: BrickDetailTabId) => {
       const fileId = selectedFile?.fileId;
       if (!fileId) return;
-      setLeftPaneBrickTabStateByFileId((prev) => {
+      setLeftPanelBrickTabStateByFileId((prev) => {
         if (prev.get(fileId) === value) return prev;
         const next = new Map(prev);
         next.set(fileId, value);
@@ -477,28 +512,28 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     [selectedFile?.fileId],
   );
 
-  const rightPaneBrickSelectedTab = rightPaneSelectedFile?.fileId
-    ? rightPaneBrickTabStateByFileId.get(rightPaneSelectedFile.fileId) ??
+  const rightPanelBrickSelectedTab = rightPanelSelectedFile?.fileId
+    ? rightPanelBrickTabStateByFileId.get(rightPanelSelectedFile.fileId) ??
       'overview'
     : 'overview';
 
-  const setRightPaneBrickSelectedTab = useCallback(
-    (value: string) => {
-      const fileId = rightPaneSelectedFile?.fileId;
+  const setRightPanelBrickSelectedTab = useCallback(
+    (value: BrickDetailTabId) => {
+      const fileId = rightPanelSelectedFile?.fileId;
       if (!fileId) return;
-      setRightPaneBrickTabStateByFileId((prev) => {
+      setRightPanelBrickTabStateByFileId((prev) => {
         if (prev.get(fileId) === value) return prev;
         const next = new Map(prev);
         next.set(fileId, value);
         return next;
       });
     },
-    [rightPaneSelectedFile?.fileId],
+    [rightPanelSelectedFile?.fileId],
   );
 
   const openBrickAiModelsTab = useCallback(
     (brickId: string): void => {
-      setLeftPaneBrickTabStateByFileId((prev) => {
+      setLeftPanelBrickTabStateByFileId((prev) => {
         if (prev.get(brickId) === 'aiModels') return prev;
         const next = new Map(prev);
         next.set(brickId, 'aiModels');
@@ -523,7 +558,7 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
   // One-shot hydration of split-view state from the persisted per-app
   // record. Gated on `filesContentLoaded` so we can resolve file ids
   // against the real `allFiles` catalogue (dropping deleted entries from
-  // both pane B's tabs and the two markdown maps).
+  // both panel B's tabs and the two markdown maps).
   const splitHydrationComplete = useRef(false);
   useEffect(() => {
     if (splitHydrationComplete.current) return;
@@ -547,65 +582,67 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
 
     const pruneBrickTabMap = (
       src: Record<string, string> | undefined,
-    ): Map<string, string> => {
-      const next = new Map<string, string>();
+    ): Map<string, BrickDetailTabId> => {
+      const next = new Map<string, BrickDetailTabId>();
       if (!src) return next;
       for (const [k, v] of Object.entries(src)) {
-        if (allFilesById.has(k)) next.set(k, v);
+        if (allFilesById.has(k) && isBrickDetailTabId(v)) {
+          next.set(k, v);
+        }
       }
       return next;
     };
 
-    const paneA = openFilesStore.panes?.A;
-    // Instantiate the code subject for every restored A-pane file. Without
+    const panelA = openFilesStore.panes?.A;
+    // Instantiate the code subject for every restored A-panel file. Without
     // this, only the currently selected file (which is unpended by the
     // `selectedFile` effect in `appDetail.logic`) leaves the skeleton —
     // any other restored tab stays stuck on the loader until the user
-    // clicks it. Symmetric with the pane B branch below.
-    const paneAItems = paneA?.items ?? openFilesStore.items ?? [];
-    paneAItems.forEach((id) => {
+    // clicks it. Symmetric with the panel B branch below.
+    const panelAItems = panelA?.items ?? openFilesStore.items ?? [];
+    panelAItems.forEach((id) => {
       if (allFilesById.has(id)) void fetchFile?.(id);
     });
-    if (paneA?.markdownByFileId) {
-      setLeftPaneMarkdownStateByFileId(
-        pruneMarkdownMap(paneA.markdownByFileId),
+    if (panelA?.markdownByFileId) {
+      setLeftPanelMarkdownStateByFileId(
+        pruneMarkdownMap(panelA.markdownByFileId),
       );
     }
-    if (paneA?.brickTabByFileId) {
-      setLeftPaneBrickTabStateByFileId(
-        pruneBrickTabMap(paneA.brickTabByFileId),
+    if (panelA?.brickTabByFileId) {
+      setLeftPanelBrickTabStateByFileId(
+        pruneBrickTabMap(panelA.brickTabByFileId),
       );
     }
 
-    const paneB = openFilesStore.panes?.B;
-    if (paneB) {
-      const resolvedTabs = paneB.items
+    const panelB = openFilesStore.panes?.B;
+    if (panelB) {
+      const resolvedTabs = panelB.items
         .map((id) => allFilesById.get(id))
         .filter((f): f is SelectableFileData => Boolean(f));
       if (resolvedTabs.length > 0) {
-        // Instantiate the code subject for each restored B-pane file.
-        // Without this, files that aren't also open in pane A stay on the
+        // Instantiate the code subject for each restored B-panel file.
+        // Without this, files that aren't also open in panel A stay on the
         // loading skeleton because their content was never fetched (see
-        // `openInPaneB` for the runtime equivalent).
+        // `openInPanelB` for the runtime equivalent).
         resolvedTabs.forEach((file) => void fetchFile?.(file.fileId));
-        setRightPaneTabs(resolvedTabs);
-        const selectedId = paneB.selected;
+        setRightPanelTabs(resolvedTabs);
+        const selectedId = panelB.selected;
         const selected =
           (selectedId ? allFilesById.get(selectedId) : undefined) ??
           resolvedTabs[0];
-        setRightPaneSelectedFile(selected);
-        if (paneB.markdownByFileId) {
-          setRightPaneMarkdownStateByFileId(
-            pruneMarkdownMap(paneB.markdownByFileId),
+        setRightPanelSelectedFile(selected);
+        if (panelB.markdownByFileId) {
+          setRightPanelMarkdownStateByFileId(
+            pruneMarkdownMap(panelB.markdownByFileId),
           );
         }
-        if (paneB.brickTabByFileId) {
-          setRightPaneBrickTabStateByFileId(
-            pruneBrickTabMap(paneB.brickTabByFileId),
+        if (panelB.brickTabByFileId) {
+          setRightPanelBrickTabStateByFileId(
+            pruneBrickTabMap(panelB.brickTabByFileId),
           );
         }
-        // Only restore isSplit when pane B has at least one valid file —
-        // otherwise we'd render an empty right pane.
+        // Only restore isSplit when panel B has at least one valid file —
+        // otherwise we'd render an empty right panel.
         if (openFilesStore.isSplit) {
           setIsSplit(true);
         }
@@ -616,7 +653,7 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
   // Mirror split-view mutations into the persisted store, guarded by the
   // hydration ref so initial hydration doesn't trigger an immediate
   // write-back of stale values. Shallow-patches via `mergeStoreItem` so
-  // it never clobbers pane A's `{items, selected}` written by
+  // it never clobbers panel A's `{items, selected}` written by
   // `useFiles.storeOpenFiles`.
   useEffect(() => {
     if (!splitHydrationComplete.current) return;
@@ -625,18 +662,18 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
       isSplit,
       panes: {
         A: {
-          markdownByFileId: Object.fromEntries(leftPaneMarkdownStateByFileId),
-          brickTabByFileId: Object.fromEntries(leftPaneBrickTabStateByFileId),
+          markdownByFileId: Object.fromEntries(leftPanelMarkdownStateByFileId),
+          brickTabByFileId: Object.fromEntries(leftPanelBrickTabStateByFileId),
         },
         B: isSplit
           ? {
-              items: rightPaneTabs.map((t) => t.fileId),
-              selected: rightPaneSelectedFile?.fileId ?? null,
+              items: rightPanelTabs.map((t) => t.fileId),
+              selected: rightPanelSelectedFile?.fileId ?? null,
               markdownByFileId: Object.fromEntries(
-                rightPaneMarkdownStateByFileId,
+                rightPanelMarkdownStateByFileId,
               ),
               brickTabByFileId: Object.fromEntries(
-                rightPaneBrickTabStateByFileId,
+                rightPanelBrickTabStateByFileId,
               ),
             }
           : null,
@@ -644,22 +681,22 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     });
   }, [
     isSplit,
-    rightPaneTabs,
-    rightPaneSelectedFile,
-    leftPaneMarkdownStateByFileId,
-    rightPaneMarkdownStateByFileId,
-    leftPaneBrickTabStateByFileId,
-    rightPaneBrickTabStateByFileId,
+    rightPanelTabs,
+    rightPanelSelectedFile,
+    leftPanelMarkdownStateByFileId,
+    rightPanelMarkdownStateByFileId,
+    leftPanelBrickTabStateByFileId,
+    rightPanelBrickTabStateByFileId,
     storeSplitState,
   ]);
 
-  // Persist the user's split-pane width. `EditorPanel` debounces the
+  // Persist the user's split-panel width. `EditorPanel` debounces the
   // `onLayout` calls before invoking this so we get one write per
   // drag-pause, not per frame.
   const handleSplitResize = useCallback(
-    (leftPanePercent: number) => {
+    (leftPanelPercent: number) => {
       if (!storeSplitState) return;
-      storeSplitState({ splitProportionLeft: leftPanePercent });
+      storeSplitState({ splitProportionLeft: leftPanelPercent });
     },
     [storeSplitState],
   );
@@ -692,15 +729,17 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
       ? messages.noExtensionHint
       : undefined;
 
+    // Dismiss the previous file notice before showing a new one
+    if (fileNoticeId.current !== undefined) {
+      dismissSnackbar(fileNoticeId.current);
+      fileNoticeId.current = undefined;
+    }
+
     if (!notice || readOnly || filesWithToastShown.current.has(fileId)) {
-      dismissSnackbar();
       return;
     }
 
-    // Dismiss all existing toasts before showing a new one
-    dismissSnackbar();
-
-    snackbar({
+    fileNoticeId.current = snackbar({
       message: formatMessage(notice),
       variant: 'info',
       opts: { duration: 3000 },
@@ -709,39 +748,39 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     filesWithToastShown.current.add(fileId);
   }, [selectedFile, readOnly, formatMessage]);
 
-  const openInPaneB = useCallback(
+  const openInPanelB = useCallback(
     (target: SelectableFileData, insertIndex?: number, isPreview = false) => {
       // Ensure the file's content is fetched. Files start in a "pending"
-      // state until the user selects them on the left pane (which triggers
+      // state until the user selects them on the left panel (which triggers
       // their code subject to be instantiated); without this call, opening
-      // a never-selected file in the right pane would leave the editor
+      // a never-selected file in the right panel would leave the editor
       // stuck on the loading skeleton.
       void fetchFile?.(target.fileId);
 
       // Seed B's markdown mode from A only on the first split — afterwards
-      // the pane's mode is deliberately independent.
-      setRightPaneMarkdownStateByFileId((prev) => {
+      // the panel's mode is deliberately independent.
+      setRightPanelMarkdownStateByFileId((prev) => {
         if (prev.has(target.fileId)) return prev;
-        const seed = leftPaneMarkdownStateByFileId.get(target.fileId) ?? true;
+        const seed = leftPanelMarkdownStateByFileId.get(target.fileId) ?? true;
         const next = new Map(prev);
         next.set(target.fileId, seed);
         return next;
       });
 
-      const oldPreviewId = rightPanePreviewFileIdRef.current;
-      const oldSelectedId = rightPaneSelectedFile?.fileId;
+      const oldPreviewId = rightPanelPreviewFileIdRef.current;
+      const oldSelectedId = rightPanelSelectedFile?.fileId;
 
       // Always use the functional updater so multiple synchronous calls
-      // (e.g. dragging several files at once onto a closed pane B)
+      // (e.g. dragging several files at once onto a closed panel B)
       // accumulate instead of clobbering each other through stale closures.
       setIsSplit(true);
-      setRightPaneTabs((prev) => {
+      setRightPanelTabs((prev) => {
         const existingIdx = prev.findIndex((t) => t.fileId === target.fileId);
         if (existingIdx !== -1) {
           // Re-opening an already-open B tab without preview commits it,
-          // mirroring pane A's `selectFile`.
+          // mirroring panel A's `selectFile`.
           if (!isPreview && oldPreviewId === target.fileId) {
-            setRightPanePreviewFileId(undefined);
+            setRightPanelPreviewFileId(undefined);
           }
           if (insertIndex === undefined) return prev;
           // Already a B tab: reposition it to the drop position. The drop
@@ -757,7 +796,7 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
         }
 
         // New B tab: delegate the insertion + preview-slot maths to the
-        // shared resolver so pane B stays in lock-step with pane A. Work in
+        // shared resolver so panel B stays in lock-step with panel A. Work in
         // id-space, then rebuild the object list from the resolved order.
         const { ids, previewId } = resolveNewTabInsertion({
           ids: prev.map((t) => t.fileId),
@@ -767,50 +806,50 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
           oldPreviewId,
           oldSelectedId,
         });
-        setRightPanePreviewFileId(previewId);
+        setRightPanelPreviewFileId(previewId);
         const byId = new Map(prev.map((t) => [t.fileId, t]));
         byId.set(target.fileId, target);
         return ids
           .map((id) => byId.get(id))
           .filter((t): t is SelectableFileData => Boolean(t));
       });
-      setRightPaneSelectedFile(target);
+      setRightPanelSelectedFile(target);
     },
     [
-      leftPaneMarkdownStateByFileId,
+      leftPanelMarkdownStateByFileId,
       fetchFile,
-      rightPaneSelectedFile?.fileId,
-      setRightPanePreviewFileId,
-      rightPanePreviewFileIdRef,
+      rightPanelSelectedFile?.fileId,
+      setRightPanelPreviewFileId,
+      rightPanelPreviewFileIdRef,
     ],
   );
 
-  // Split sub-feature: duplicate `fileId` from `fromPane` into the opposite
-  // pane — the file remains in its origin (Split, not Move).
-  const splitToOtherPane = useCallback(
-    (fileId: string | undefined, fromPane: 'A' | 'B') => {
-      if (fromPane === 'A') {
+  // Split sub-feature: duplicate `fileId` from `fromPanel` into the opposite
+  // panel — the file remains in its origin (Split, not Move).
+  const splitToOtherPanel = useCallback(
+    (fileId: string | undefined, fromPanel: 'A' | 'B') => {
+      if (fromPanel === 'A') {
         const target =
           fileId === undefined
             ? selectedFile
             : tabs.find((t) => t.fileId === fileId);
         if (!target) return;
-        openInPaneB(target);
+        openInPanelB(target);
         return;
       }
-      const resolvedId = fileId ?? rightPaneSelectedFile?.fileId;
+      const resolvedId = fileId ?? rightPanelSelectedFile?.fileId;
       if (!resolvedId) return;
       // Mirror B's markdown mode into A so the duplicated view opens in
       // the same write/preview state.
       const targetInB =
-        rightPaneTabs.find((t) => t.fileId === resolvedId) ??
-        (rightPaneSelectedFile?.fileId === resolvedId
-          ? rightPaneSelectedFile
+        rightPanelTabs.find((t) => t.fileId === resolvedId) ??
+        (rightPanelSelectedFile?.fileId === resolvedId
+          ? rightPanelSelectedFile
           : undefined);
       if (targetInB?.fileExtension === 'md') {
-        const bMode = rightPaneMarkdownStateByFileId.get(resolvedId);
+        const bMode = rightPanelMarkdownStateByFileId.get(resolvedId);
         if (bMode !== undefined) {
-          setLeftPaneMarkdownStateByFileId((prev) => {
+          setLeftPanelMarkdownStateByFileId((prev) => {
             if (prev.get(resolvedId) === bMode) return prev;
             const next = new Map(prev);
             next.set(resolvedId, bMode);
@@ -823,37 +862,40 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     [
       selectedFile,
       tabs,
-      openInPaneB,
-      rightPaneSelectedFile,
-      rightPaneTabs,
-      rightPaneMarkdownStateByFileId,
+      openInPanelB,
+      rightPanelSelectedFile,
+      rightPanelTabs,
+      rightPanelMarkdownStateByFileId,
       selectFile,
     ],
   );
 
-  const openFileInPane = useCallback(
-    (fileId: string, targetPane: 'A' | 'B', isPreview = false) => {
-      if (targetPane === 'A') {
+  const openFileInPanel = useCallback(
+    (fileId: string, targetPanel: 'A' | 'B', isPreview = false) => {
+      if (targetPanel === 'A') {
         selectFile({ fileId, isPreview });
         return;
       }
+      // `allFiles` covers only ids that already reached a tab, so a file the
+      // user never opened is in none of the three lists. Tab meta comes from
+      // the path alone, so derive it instead of refusing the open.
       const target =
         tabs.find((t) => t.fileId === fileId) ??
-        rightPaneTabs.find((t) => t.fileId === fileId) ??
-        allFiles?.find((f) => f.fileId === fileId);
-      if (!target) return;
-      openInPaneB(target, undefined, isPreview);
+        rightPanelTabs.find((t) => t.fileId === fileId) ??
+        allFiles?.find((f) => f.fileId === fileId) ??
+        metaFromPath(fileId, isAbsoluteId(fileId));
+      openInPanelB(target, undefined, isPreview);
     },
-    [selectFile, tabs, rightPaneTabs, allFiles, openInPaneB],
+    [selectFile, tabs, rightPanelTabs, allFiles, openInPanelB],
   );
 
-  const selectFileInActivePane = useCallback(
+  const selectFileInActiveEditorPanel = useCallback(
     (params: {
       fileId?: string;
       openAtIndex?: number;
       isPreview?: boolean;
     }): void => {
-      if (getActivePane() === 'A') {
+      if (getActiveEditorPanel() === 'A') {
         selectFile(params);
         return;
       }
@@ -863,42 +905,37 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
         return;
       }
 
-      openInPaneB(
-        {
-          fileId,
-          tags: [],
-          ...deriveFileNameFields(fileId),
-        },
-        openAtIndex,
-      );
+      // Same derivation as `openFileInPanel`, so a file opened this way gets
+      // the icon and the read-only marking of one opened in panel A.
+      openInPanelB(metaFromPath(fileId, isAbsoluteId(fileId)), openAtIndex);
     },
-    [getActivePane, selectFile, openInPaneB],
+    [getActiveEditorPanel, selectFile, openInPanelB],
   );
 
   const openOrPushToSplit = useCallback(
-    (fileId?: string) => splitToOtherPane(fileId, 'A'),
-    [splitToOtherPane],
+    (fileId?: string) => splitToOtherPanel(fileId, 'A'),
+    [splitToOtherPanel],
   );
 
-  // Pane-A close wrapper: when the user closes A's last tab while pane B
+  // Panel-A close wrapper: when the user closes A's last tab while panel B
   // exists, fold all B tabs back into A and collapse the split. The
   // closing tab is actually closed (so the X click takes effect) and the
   // active selection becomes whatever B had selected.
-  const closeFileFromPaneA = useCallback(
+  const closeFileFromPanelA = useCallback(
     (fileId: string) => {
       const isClosingLastA = tabs.length <= 1 && tabs[0]?.fileId === fileId;
-      const hasPaneB = isSplit && rightPaneTabs.length > 0;
-      if (isClosingLastA && hasPaneB) {
+      const hasPanelB = isSplit && rightPanelTabs.length > 0;
+      if (isClosingLastA && hasPanelB) {
         // Merge B's tabs into A first so A is never empty in between.
         const aIds = new Set(tabs.map((t) => t.fileId));
-        rightPaneTabs.forEach((t) => {
+        rightPanelTabs.forEach((t) => {
           if (!aIds.has(t.fileId)) selectFile({ fileId: t.fileId });
         });
         // B's per-file markdown modes win (more-recent edit surface).
-        setLeftPaneMarkdownStateByFileId((prev) => {
+        setLeftPanelMarkdownStateByFileId((prev) => {
           let changed = false;
           const next = new Map(prev);
-          rightPaneMarkdownStateByFileId.forEach((mode, mergedId) => {
+          rightPanelMarkdownStateByFileId.forEach((mode, mergedId) => {
             if (next.get(mergedId) !== mode) {
               next.set(mergedId, mode);
               changed = true;
@@ -906,15 +943,15 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
           });
           return changed ? next : prev;
         });
-        setRightPaneMarkdownStateByFileId(new Map());
-        const nextSelectedId = rightPaneTabs.find(
+        setRightPanelMarkdownStateByFileId(new Map());
+        const nextSelectedId = rightPanelTabs.find(
           (t) => t.fileId !== fileId,
         )?.fileId;
         if (nextSelectedId) selectFile({ fileId: nextSelectedId });
-        setRightPaneTabs([]);
-        setRightPaneSelectedFile(undefined);
+        setRightPanelTabs([]);
+        setRightPanelSelectedFile(undefined);
         setIsSplit(false);
-        setLeftPaneMarkdownStateByFileId((prev) => {
+        setLeftPanelMarkdownStateByFileId((prev) => {
           if (!prev.has(fileId)) return prev;
           const next = new Map(prev);
           next.delete(fileId);
@@ -925,7 +962,7 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
       }
       // Normal close: drop the file's per-file markdown mode from A's map
       // so a re-opened tab starts from the default Preview state.
-      setLeftPaneMarkdownStateByFileId((prev) => {
+      setLeftPanelMarkdownStateByFileId((prev) => {
         if (!prev.has(fileId)) return prev;
         const next = new Map(prev);
         next.delete(fileId);
@@ -936,31 +973,31 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     [
       tabs,
       isSplit,
-      rightPaneTabs,
-      rightPaneMarkdownStateByFileId,
+      rightPanelTabs,
+      rightPanelMarkdownStateByFileId,
       selectFile,
       closeFile,
     ],
   );
 
-  // Pane-A "Close All" wrapper. Default-loop close uses a stale `tabs`
+  // Panel-A "Close All" wrapper. Default-loop close uses a stale `tabs`
   // closure inside the synchronous forEach, so it never lands in the
-  // consolidation branch of `closeFileFromPaneA`. We do the merge once
+  // consolidation branch of `closeFileFromPanelA`. We do the merge once
   // here, then close every original A tab in one pass.
-  const closeAllFromPaneA = useCallback(() => {
-    const hasPaneB = isSplit && rightPaneTabs.length > 0;
-    const keepIds = hasPaneB
-      ? new Set(rightPaneTabs.map((t) => t.fileId))
+  const closeAllFromPanelA = useCallback(() => {
+    const hasPanelB = isSplit && rightPanelTabs.length > 0;
+    const keepIds = hasPanelB
+      ? new Set(rightPanelTabs.map((t) => t.fileId))
       : new Set<string>();
-    if (hasPaneB) {
+    if (hasPanelB) {
       const aIds = new Set(tabs.map((t) => t.fileId));
-      rightPaneTabs.forEach((t) => {
+      rightPanelTabs.forEach((t) => {
         if (!aIds.has(t.fileId)) selectFile({ fileId: t.fileId });
       });
-      setLeftPaneMarkdownStateByFileId((prev) => {
+      setLeftPanelMarkdownStateByFileId((prev) => {
         let changed = false;
         const next = new Map(prev);
-        rightPaneMarkdownStateByFileId.forEach((mode, mergedId) => {
+        rightPanelMarkdownStateByFileId.forEach((mode, mergedId) => {
           if (next.get(mergedId) !== mode) {
             next.set(mergedId, mode);
             changed = true;
@@ -968,17 +1005,17 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
         });
         return changed ? next : prev;
       });
-      setRightPaneMarkdownStateByFileId(new Map());
-      const nextSelectedId = rightPaneSelectedFile?.fileId;
+      setRightPanelMarkdownStateByFileId(new Map());
+      const nextSelectedId = rightPanelSelectedFile?.fileId;
       if (nextSelectedId) selectFile({ fileId: nextSelectedId });
-      setRightPaneTabs([]);
-      setRightPaneSelectedFile(undefined);
+      setRightPanelTabs([]);
+      setRightPanelSelectedFile(undefined);
       setIsSplit(false);
     }
     // The underlying `closeFile` protects the unclosable main file.
     tabs.forEach((t) => {
       if (keepIds.has(t.fileId)) return;
-      setLeftPaneMarkdownStateByFileId((prev) => {
+      setLeftPanelMarkdownStateByFileId((prev) => {
         if (!prev.has(t.fileId)) return prev;
         const next = new Map(prev);
         next.delete(t.fileId);
@@ -989,9 +1026,9 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
   }, [
     tabs,
     isSplit,
-    rightPaneTabs,
-    rightPaneSelectedFile,
-    rightPaneMarkdownStateByFileId,
+    rightPanelTabs,
+    rightPanelSelectedFile,
+    rightPanelMarkdownStateByFileId,
     selectFile,
     closeFile,
   ]);
@@ -999,24 +1036,24 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
   const selectSecretsTabInTabsBar = useCallback(() => {
     selectFile({ fileId: SKETCH_SECRETS_FILE_ID });
   }, [selectFile]);
-  const closeRightPaneTab = useCallback(
+  const closeRightPanelTab = useCallback(
     (fileId: string) => {
-      if (rightPanePreviewFileIdRef.current === fileId) {
-        setRightPanePreviewFileId(undefined);
+      if (rightPanelPreviewFileIdRef.current === fileId) {
+        setRightPanelPreviewFileId(undefined);
       }
-      setRightPaneMarkdownStateByFileId((prev) => {
+      setRightPanelMarkdownStateByFileId((prev) => {
         if (!prev.has(fileId)) return prev;
         const next = new Map(prev);
         next.delete(fileId);
         return next;
       });
-      setRightPaneTabs((prev) => {
+      setRightPanelTabs((prev) => {
         const next = prev.filter((t) => t.fileId !== fileId);
         if (next.length === 0) {
           setIsSplit(false);
-          setRightPaneSelectedFile(undefined);
+          setRightPanelSelectedFile(undefined);
         } else {
-          setRightPaneSelectedFile((current) => {
+          setRightPanelSelectedFile((current) => {
             if (current?.fileId !== fileId) return current;
             const closedIdx = prev.findIndex((t) => t.fileId === fileId);
             return next[Math.min(closedIdx, next.length - 1)];
@@ -1025,65 +1062,65 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
         return next;
       });
     },
-    [setRightPanePreviewFileId, rightPanePreviewFileIdRef],
+    [setRightPanelPreviewFileId, rightPanelPreviewFileIdRef],
   );
 
-  const renameRightPaneTab = useCallback((oldId: string, newId: string) => {
+  const renameRightPanelTab = useCallback((oldId: string, newId: string) => {
     if (oldId === newId) return;
     const rekey = <T>(prev: Map<string, T>): Map<string, T> =>
       rekeyMapEntry(prev, oldId, newId);
 
-    setRightPaneTabs((prev) =>
+    setRightPanelTabs((prev) =>
       prev.some((t) => t.fileId === oldId)
         ? prev.map((t) =>
             t.fileId === oldId ? renameSelectableFile(t, newId) : t,
           )
         : prev,
     );
-    setRightPaneSelectedFile((current) =>
+    setRightPanelSelectedFile((current) =>
       current?.fileId === oldId
         ? renameSelectableFile(current, newId)
         : current,
     );
-    setRightPaneMarkdownStateByFileId(rekey);
-    setRightPaneBrickTabStateByFileId(rekey);
+    setRightPanelMarkdownStateByFileId(rekey);
+    setRightPanelBrickTabStateByFileId(rekey);
   }, []);
 
-  const moveTabToOtherPane = useCallback(
-    (fileId: string, fromPane: 'A' | 'B', toIndex?: number) => {
-      if (fromPane === 'A') {
+  const moveTabToOtherPanel = useCallback(
+    (fileId: string, fromPanel: 'A' | 'B', toIndex?: number) => {
+      if (fromPanel === 'A') {
         const target = tabs.find((t) => t.fileId === fileId);
         if (!target) return;
-        // Pane A must always have at least one tab while the editor is
+        // Panel A must always have at least one tab while the editor is
         // shown. If moving this tab would empty A:
-        //  - With no pane B: no-op (nowhere to land).
-        //  - With pane B open: the move is realised as a collapse where
+        //  - With no panel B: no-op (nowhere to land).
+        //  - With panel B open: the move is realised as a collapse where
         //    panel B's content survives — B's tabs (in B's order) plus the
-        //    dragged file become the single remaining pane, with the
+        //    dragged file become the single remaining panel, with the
         //    dragged file at `toIndex` (appended last when omitted —
         //    matches VS Code's last-tab move).
         if (tabs.length <= 1) {
-          if (!isSplit || rightPaneTabs.length === 0) return;
+          if (!isSplit || rightPanelTabs.length === 0) return;
           const aIds = new Set(tabs.map((t) => t.fileId));
           // Merge over B's tabs excluding the dragged file (it may be open
-          // in both panes): the drop index was hit-tested against B's full
+          // in both panels): the drop index was hit-tested against B's full
           // list, so when the dragged file sits before the drop position
           // its own slot must be discounted.
-          const others = rightPaneTabs.filter((t) => !aIds.has(t.fileId));
-          const draggedBIdx = rightPaneTabs.findIndex(
+          const others = rightPanelTabs.filter((t) => !aIds.has(t.fileId));
+          const draggedBIdx = rightPanelTabs.findIndex(
             (t) => t.fileId === fileId,
           );
           let dropAt: number;
           if (toIndex === undefined) {
             dropAt = others.length;
           } else {
-            dropAt = Math.min(toIndex, rightPaneTabs.length);
+            dropAt = Math.min(toIndex, rightPanelTabs.length);
             if (draggedBIdx !== -1 && draggedBIdx < dropAt) dropAt -= 1;
             dropAt = Math.min(dropAt, others.length);
           }
           others.forEach((t, idx) => {
             // Insert B's tabs around the dragged file (already in A at
-            // index 0) so the surviving pane reads as panel B with the
+            // index 0) so the surviving panel reads as panel B with the
             // moved file at the drop position.
             selectFile({
               fileId: t.fileId,
@@ -1091,10 +1128,10 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
             });
           });
           // B's per-file markdown modes win (more-recent edit surface).
-          setLeftPaneMarkdownStateByFileId((prev) => {
+          setLeftPanelMarkdownStateByFileId((prev) => {
             let changed = false;
             const next = new Map(prev);
-            rightPaneMarkdownStateByFileId.forEach((mode, mergedId) => {
+            rightPanelMarkdownStateByFileId.forEach((mode, mergedId) => {
               if (next.get(mergedId) !== mode) {
                 next.set(mergedId, mode);
                 changed = true;
@@ -1102,27 +1139,27 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
             });
             return changed ? next : prev;
           });
-          setRightPaneMarkdownStateByFileId(new Map());
+          setRightPanelMarkdownStateByFileId(new Map());
           selectFile({ fileId });
-          setRightPaneTabs([]);
-          setRightPaneSelectedFile(undefined);
+          setRightPanelTabs([]);
+          setRightPanelSelectedFile(undefined);
           setIsSplit(false);
           return;
         }
-        openInPaneB(target, toIndex);
+        openInPanelB(target, toIndex);
         closeFile(fileId);
-        handleSetActivePane('B');
+        handleSetActiveEditorPanel('B');
         return;
       }
-      const target = rightPaneTabs.find((t) => t.fileId === fileId);
+      const target = rightPanelTabs.find((t) => t.fileId === fileId);
       if (!target) return;
       // Mirror B's per-file markdown mode into A's per-file map before
-      // removing the tab from B (closeRightPaneTab deletes the per-file
+      // removing the tab from B (closeRightPanelTab deletes the per-file
       // entry, so we must read it first).
       if (target.fileExtension === 'md') {
-        const bMode = rightPaneMarkdownStateByFileId.get(fileId);
+        const bMode = rightPanelMarkdownStateByFileId.get(fileId);
         if (bMode !== undefined) {
-          setLeftPaneMarkdownStateByFileId((prev) => {
+          setLeftPanelMarkdownStateByFileId((prev) => {
             if (prev.get(fileId) === bMode) return prev;
             const next = new Map(prev);
             next.set(fileId, bMode);
@@ -1146,24 +1183,27 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
       } else {
         selectFile({ fileId, openAtIndex: toIndex });
       }
-      closeRightPaneTab(fileId);
-      handleSetActivePane('A');
+      closeRightPanelTab(fileId);
+      handleSetActiveEditorPanel('A');
     },
     [
       tabs,
-      rightPaneTabs,
+      rightPanelTabs,
       isSplit,
-      openInPaneB,
+      openInPanelB,
       closeFile,
       selectFile,
       updateOpenFilesOrder,
-      closeRightPaneTab,
-      rightPaneMarkdownStateByFileId,
-      handleSetActivePane,
+      closeRightPanelTab,
+      rightPanelMarkdownStateByFileId,
+      handleSetActiveEditorPanel,
     ],
   );
 
   const useTabsBarLogic = (): ReturnType<TabsBarLogic> => {
+    // Runs inside EditorTabsBar's render, so a dirty/clean transition re-renders the tabs
+    // bar and nothing above it.
+    const unsavedFileIds = useObservable(unsavedFiles$);
     const validateFileName = useCallback(() => [], []);
 
     const makeUniqueFileName = useCallback((fileName: string): string => {
@@ -1177,7 +1217,7 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
       previewFileId,
       selectTab: selectFileAndFocus,
       selectSecretsTab: selectSecretsTabInTabsBar,
-      closeTab: closeFileFromPaneA,
+      closeTab: closeFileFromPanelA,
       updateTabOrder: updateOpenFilesOrder,
       unsavedFileIds,
       isReadOnly: true,
@@ -1194,10 +1234,10 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
         (selectedFile?.fileExtension === 'md' && shouldRenderMarkdown) ||
         selectedFile?.fileExtension === BRICK_FILE_EXTENSION,
       onSplitRight: openOrPushToSplit,
-      onCloseAll: closeAllFromPaneA,
-      // Receive a tab dropped from pane B's bar at the hovered position.
-      onCrossPaneDrop: (fileId: string, insertIndex: number): void =>
-        moveTabToOtherPane(fileId, 'B', insertIndex),
+      onCloseAll: closeAllFromPanelA,
+      // Receive a tab dropped from panel B's bar at the hovered position.
+      onCrossPanelDrop: (fileId: string, insertIndex: number): void =>
+        moveTabToOtherPanel(fileId, 'B', insertIndex),
     };
   };
 
@@ -1208,17 +1248,17 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     previewFileId,
     selectFileAndFocus,
     selectSecretsTabInTabsBar,
-    closeFileFromPaneA,
+    closeFileFromPanelA,
     updateOpenFilesOrder,
-    unsavedFileIds,
+    unsavedFiles$,
     hasSetHeightOnHover,
     addAppFile,
     renameAppFile,
     deleteAppFile,
     shouldRenderMarkdown,
     openOrPushToSplit,
-    closeAllFromPaneA,
-    moveTabToOtherPane,
+    closeAllFromPanelA,
+    moveTabToOtherPanel,
   ]);
 
   const { mutateAsync: saveSketchFileQuery } = useMutation({
@@ -1329,7 +1369,7 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     [fetchFile],
   );
 
-  const selectRightPaneFileById = useCallback(
+  const selectRightPanelFileById = useCallback(
     ({
       fileId,
       isPreview = false,
@@ -1338,40 +1378,44 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
       openAtIndex?: number;
       isPreview?: boolean;
     }) => {
-      setRightPaneSelectedFile(
-        fileId ? rightPaneTabs.find((t) => t.fileId === fileId) : undefined,
+      setRightPanelSelectedFile(
+        fileId ? rightPanelTabs.find((t) => t.fileId === fileId) : undefined,
       );
       // Tab-strip selection of an already-open tab only ever commits a
       // preview (double-click / explicit open) — it never turns a committed
-      // tab back into a preview, matching pane A's `selectFile`.
+      // tab back into a preview, matching panel A's `selectFile`.
       if (
         fileId &&
         !isPreview &&
-        rightPanePreviewFileIdRef.current === fileId
+        rightPanelPreviewFileIdRef.current === fileId
       ) {
-        setRightPanePreviewFileId(undefined);
+        setRightPanelPreviewFileId(undefined);
       }
     },
-    [rightPaneTabs, setRightPanePreviewFileId, rightPanePreviewFileIdRef],
+    [rightPanelTabs, setRightPanelPreviewFileId, rightPanelPreviewFileIdRef],
   );
 
-  const selectRightPaneFileByIdLegacy = useCallback(
-    (fileId?: string) => selectRightPaneFileById({ fileId }),
-    [selectRightPaneFileById],
+  const selectRightPanelFileByIdLegacy = useCallback(
+    (fileId?: string) => selectRightPanelFileById({ fileId }),
+    [selectRightPanelFileById],
   );
 
-  const selectRightPaneFileAndFocus = useCallback(
+  const selectRightPanelFileAndFocus = useCallback(
     ({ fileId }: { fileId?: string }): void => {
-      handleSetActivePane('B');
-      selectRightPaneFileById({ fileId });
-      focusActivePane();
+      handleSetActiveEditorPanel('B');
+      selectRightPanelFileById({ fileId });
+      focusActiveEditorPanel();
     },
-    [handleSetActivePane, selectRightPaneFileById, focusActivePane],
+    [
+      handleSetActiveEditorPanel,
+      selectRightPanelFileById,
+      focusActiveEditorPanel,
+    ],
   );
 
   const { setCode: setCode2, saveCode: saveCode2 } = useCodeChange(
     saveSketchFileQuery,
-    selectRightPaneFileByIdLegacy,
+    selectRightPanelFileByIdLegacy,
     codeInjectionsSubjectNext,
     getCodeSubjectById,
     codeSubjectNext,
@@ -1382,11 +1426,11 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     false,
     false,
     readOnly,
-    rightPaneSelectedFile,
+    rightPanelSelectedFile,
     selectableMainFile,
     undefined,
     undefined,
-    rightPaneTabs,
+    rightPanelTabs,
     true,
   );
 
@@ -1404,133 +1448,121 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     [],
   );
 
-  const leftPaneSubjectHasValue = useSubjectHasValue(selectedFile?.fileId);
-  const isLeftPaneFileLoading = !leftPaneSubjectHasValue;
+  const leftPanelSubjectHasValue = useSubjectHasValue(selectedFile?.fileId);
+  const isLeftPanelFileLoading = !leftPanelSubjectHasValue;
+
+  const lspEditorProps = useMemo<LspEditorProps>(
+    () => ({
+      isLspEnabled,
+      lspWorkspaceDir,
+      lspClients,
+      selectFile: selectFileInActiveEditorPanel,
+      startLSP,
+      sendLspMessage,
+      subscribeLspMessages,
+      getLspWorkspaceFile,
+      setLspFileValue,
+      ensureLspFileValue,
+      getActiveEditorPanel,
+      onLspStateChange,
+      showLspReferences,
+      closeLspReferences,
+    }),
+    [
+      isLspEnabled,
+      lspWorkspaceDir,
+      lspClients,
+      selectFileInActiveEditorPanel,
+      startLSP,
+      sendLspMessage,
+      subscribeLspMessages,
+      getLspWorkspaceFile,
+      setLspFileValue,
+      ensureLspFileValue,
+      getActiveEditorPanel,
+      onLspStateChange,
+      showLspReferences,
+      closeLspReferences,
+    ],
+  );
 
   const codeEditorLogic = useMemo(
     () =>
-      buildCodeEditorHook(
-        selectedFile,
-        tabs,
+      buildCodeEditorHook({
+        file: selectedFile,
+        fileTabs: tabs,
         setCode,
         saveCode,
-        isLeftPaneFileLoading,
+        sketchDataIsLoading: isLeftPanelFileLoading,
         readOnly,
-        onReceiveViewInstanceA,
-        {
-          filesList,
-          isLspEnabled,
-          lspWorkspaceDir,
-          lspClients,
-          selectFile: selectFileInActivePane,
-          startLSP,
-          sendLspMessage,
-          subscribeLspMessages,
-          getLspWorkspaceFile,
-          setLspFileValue,
-          ensureLspFileValue,
-          getActivePane,
-          onLspStateChange,
-        },
-      ),
+        onReceiveViewInstance: onReceiveViewInstanceA,
+        lsp: lspEditorProps,
+      }),
     [
       selectedFile,
       tabs,
       setCode,
       saveCode,
-      isLeftPaneFileLoading,
+      isLeftPanelFileLoading,
       readOnly,
       onReceiveViewInstanceA,
-      filesList,
-      isLspEnabled,
-      lspWorkspaceDir,
-      lspClients,
-      selectFileInActivePane,
-      startLSP,
-      sendLspMessage,
-      subscribeLspMessages,
-      getLspWorkspaceFile,
-      getActivePane,
-      onLspStateChange,
+      lspEditorProps,
     ],
   );
 
-  const rightPaneSubjectHasValue = useSubjectHasValue(
-    rightPaneSelectedFile?.fileId,
+  const rightPanelSubjectHasValue = useSubjectHasValue(
+    rightPanelSelectedFile?.fileId,
   );
 
-  const isRightPaneFileLoading = !rightPaneSubjectHasValue;
+  const isRightPanelFileLoading = !rightPanelSubjectHasValue;
 
   const codeEditorLogic2 = useMemo(
     () =>
-      buildCodeEditorHook(
-        rightPaneSelectedFile,
-        rightPaneTabs,
-        setCode2,
-        saveCode2,
-        isRightPaneFileLoading,
+      buildCodeEditorHook({
+        file: rightPanelSelectedFile,
+        fileTabs: rightPanelTabs,
+        setCode: setCode2,
+        saveCode: saveCode2,
+        sketchDataIsLoading: isRightPanelFileLoading,
         readOnly,
-        onReceiveViewInstanceB,
-        {
-          filesList,
-          isLspEnabled,
-          lspWorkspaceDir,
-          lspClients,
-          selectFile: selectFileInActivePane,
-          startLSP,
-          sendLspMessage,
-          subscribeLspMessages,
-          getLspWorkspaceFile,
-          setLspFileValue,
-          ensureLspFileValue,
-          getActivePane,
-          onLspStateChange,
-        },
-      ),
+        onReceiveViewInstance: onReceiveViewInstanceB,
+        lsp: lspEditorProps,
+      }),
     [
-      rightPaneSelectedFile,
-      rightPaneTabs,
+      rightPanelSelectedFile,
+      rightPanelTabs,
       setCode2,
       saveCode2,
-      isRightPaneFileLoading,
+      isRightPanelFileLoading,
       readOnly,
       onReceiveViewInstanceB,
-      filesList,
-      isLspEnabled,
-      lspWorkspaceDir,
-      lspClients,
-      selectFileInActivePane,
-      startLSP,
-      sendLspMessage,
-      subscribeLspMessages,
-      getLspWorkspaceFile,
-      getActivePane,
-      onLspStateChange,
+      lspEditorProps,
     ],
   );
 
   const selectSecretsTab = useCallback(() => {
-    setRightPaneSelectedFile(
-      rightPaneTabs.find((t) => t.fileId === SKETCH_SECRETS_FILE_ID),
+    setRightPanelSelectedFile(
+      rightPanelTabs.find((t) => t.fileId === SKETCH_SECRETS_FILE_ID),
     );
-  }, [rightPaneTabs]);
+  }, [rightPanelTabs]);
 
   const useTabsBarLogic2 = (): ReturnType<TabsBarLogic> => {
+    const unsavedFileIds = useObservable(unsavedFiles$);
     const validateFileName = useCallback(() => [], []);
     const makeUniqueFileName = useCallback((fileName: string): string => {
       return fileName;
     }, []);
 
     return {
-      tabs: rightPaneTabs,
+      tabs: rightPanelTabs,
       selectableMainFile,
-      selectedTab: rightPaneSelectedFile,
-      previewFileId: rightPanePreviewFileId,
-      selectTab: selectRightPaneFileAndFocus,
+      selectedTab: rightPanelSelectedFile,
+      previewFileId: rightPanelPreviewFileId,
+      selectTab: selectRightPanelFileAndFocus,
       selectSecretsTab,
-      closeTab: closeRightPaneTab,
+      closeTab: closeRightPanelTab,
       updateTabOrder: (ids: string[]) =>
-        setRightPaneTabs((prev) => {
+        setRightPanelTabs((prev) => {
           const map = new Map(prev.map((t) => [t.fileId, t]));
           return ids
             .map((id) => map.get(id))
@@ -1548,32 +1580,32 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
       replaceFileNameInvalidCharacters,
       getFileIcon: resolveFileIconComponent,
       isRenderedMarkdownFile:
-        (rightPaneSelectedFile?.fileExtension === 'md' &&
-          rightPaneShouldRenderMarkdown) ||
-        rightPaneSelectedFile?.fileExtension === BRICK_FILE_EXTENSION,
-      onSplitLeft: (fileId: string) => splitToOtherPane(fileId, 'B'),
-      // Receive a tab dropped from pane A's bar at the hovered position.
-      onCrossPaneDrop: (fileId: string, insertIndex: number): void =>
-        moveTabToOtherPane(fileId, 'A', insertIndex),
+        (rightPanelSelectedFile?.fileExtension === 'md' &&
+          rightPanelShouldRenderMarkdown) ||
+        rightPanelSelectedFile?.fileExtension === BRICK_FILE_EXTENSION,
+      onSplitLeft: (fileId: string) => splitToOtherPanel(fileId, 'B'),
+      // Receive a tab dropped from panel A's bar at the hovered position.
+      onCrossPanelDrop: (fileId: string, insertIndex: number): void =>
+        moveTabToOtherPanel(fileId, 'A', insertIndex),
     };
   };
 
   const tabsBarLogic2 = useCallback(useTabsBarLogic2, [
-    rightPaneTabs,
+    rightPanelTabs,
     selectableMainFile,
-    rightPaneSelectedFile,
-    rightPanePreviewFileId,
-    selectRightPaneFileAndFocus,
+    rightPanelSelectedFile,
+    rightPanelPreviewFileId,
+    selectRightPanelFileAndFocus,
     selectSecretsTab,
-    closeRightPaneTab,
-    unsavedFileIds,
+    closeRightPanelTab,
+    unsavedFiles$,
     hasSetHeightOnHover,
     addAppFile,
     renameAppFile,
     deleteAppFile,
-    splitToOtherPane,
-    rightPaneShouldRenderMarkdown,
-    moveTabToOtherPane,
+    splitToOtherPanel,
+    rightPanelShouldRenderMarkdown,
+    moveTabToOtherPanel,
   ]);
 
   const useSecretsEditorLogic = (): ReturnType<SecretsEditorLogic> => {
@@ -1612,6 +1644,24 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
   );
 
   const useEditorPanelLogic = (): ReturnType<EditorPanelLogic> => {
+    // A markdown preview reads its text when this renders, so a file in view reloaded from disk (an agent's edit) must re-render it.
+    useObservableSelector(getCodeReloadSubject(), (reload) =>
+      reload?.fileId === selectedFile?.fileId ||
+      reload?.fileId === rightPanelSelectedFile?.fileId
+        ? reload?.id
+        : undefined,
+    );
+    // Booleans, so EditorPanel re-renders only when the selected file's own flag changes.
+    const selectedFileIsUnsaved = useObservableSelector(
+      unsavedFiles$,
+      (ids) => !!selectedFile?.fileId && !!ids?.has(selectedFile.fileId),
+    );
+    const rightPanelSelectedFileIsUnsaved = useObservableSelector(
+      unsavedFiles$,
+      (ids) =>
+        !!rightPanelSelectedFile?.fileId &&
+        !!ids?.has(rightPanelSelectedFile.fileId),
+    );
     const controlsProps = {
       hideControls: true,
     } as EditorControlsProps;
@@ -1638,42 +1688,39 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
       markdownCanBeRendered: true,
       setShouldRenderMarkdown,
       openExternalLink,
-      canSwitchMarkdownMode: !(
-        selectedFile?.fileId && unsavedFileIds?.has(selectedFile?.fileId)
-      ),
+      canSwitchMarkdownMode: !selectedFileIsUnsaved,
       readOnly,
       isSplit,
       openOrPushToSplit,
-      splitToOtherPane,
-      moveTabToOtherPane,
-      openFileInPane,
-      activePane,
-      setActivePane: handleSetActivePane,
-      paneATabsCount: tabs.length,
-      splitPaneCodeEditorLogic: codeEditorLogic2,
-      splitPaneTabsBarLogic: tabsBarLogic2,
-      splitPaneFileId: rightPaneSelectedFile?.fileId,
-      splitPaneFile: rightPaneSelectedFile
+      splitToOtherPanel,
+      moveTabToOtherPanel,
+      openFileInPanel,
+      activeEditorPanel,
+      setActiveEditorPanel: handleSetActiveEditorPanel,
+      panelATabsCount: tabs.length,
+      splitPanelCodeEditorLogic: codeEditorLogic2,
+      splitPanelTabsBarLogic: tabsBarLogic2,
+      splitPanelFileId: rightPanelSelectedFile?.fileId,
+      splitPanelFile: rightPanelSelectedFile
         ? {
-            id: rightPaneSelectedFile.fileId,
-            ext: rightPaneSelectedFile.fileExtension,
-            getData: getDataFromFile(rightPaneSelectedFile, appPath),
-            error: rightPaneSelectedFile.error,
+            id: rightPanelSelectedFile.fileId,
+            ext: rightPanelSelectedFile.fileExtension,
+            getData: getDataFromFile(rightPanelSelectedFile, appPath),
+            error: rightPanelSelectedFile.error,
           }
         : undefined,
-      splitPaneShouldRenderMarkdown: rightPaneShouldRenderMarkdown,
-      splitPaneSetShouldRenderMarkdown: setRightPaneShouldRenderMarkdown,
+      splitPanelShouldRenderMarkdown: rightPanelShouldRenderMarkdown,
+      splitPanelSetShouldRenderMarkdown: setRightPanelShouldRenderMarkdown,
       brickSelectedTab,
       setBrickSelectedTab,
-      splitPaneBrickDetailLogic: brickDetailLogic,
-      splitPaneBrickSelectedTab: rightPaneBrickSelectedTab,
-      splitPaneSetBrickSelectedTab: setRightPaneBrickSelectedTab,
-      splitPaneCanSwitchMarkdownMode: !(
-        rightPaneSelectedFile?.fileId &&
-        unsavedFileIds?.has(rightPaneSelectedFile.fileId)
-      ),
+      splitPanelBrickDetailLogic: brickDetailLogic,
+      splitPanelBrickSelectedTab: rightPanelBrickSelectedTab,
+      splitPanelSetBrickSelectedTab: setRightPanelBrickSelectedTab,
+      splitPanelCanSwitchMarkdownMode: !rightPanelSelectedFileIsUnsaved,
       storedSplitProportionLeft: openFilesStore?.splitProportionLeft,
       onSplitResize: handleSplitResize,
+      onToggleAgentPanel,
+      agentPanelOpen,
     };
   };
 
@@ -1687,39 +1734,41 @@ export const useCreateEditorPanelLogic: UseCreateEditorPanelLogic = function (
     shouldRenderMarkdown,
     setShouldRenderMarkdown,
     openExternalLink,
-    unsavedFileIds,
+    unsavedFiles$,
     readOnly,
     isSplit,
     openOrPushToSplit,
-    splitToOtherPane,
-    moveTabToOtherPane,
-    openFileInPane,
-    activePane,
-    handleSetActivePane,
+    splitToOtherPanel,
+    moveTabToOtherPanel,
+    openFileInPanel,
+    activeEditorPanel,
+    handleSetActiveEditorPanel,
     tabs.length,
     codeEditorLogic2,
     tabsBarLogic2,
-    rightPaneSelectedFile,
-    rightPaneShouldRenderMarkdown,
-    setRightPaneShouldRenderMarkdown,
+    rightPanelSelectedFile,
+    rightPanelShouldRenderMarkdown,
+    setRightPanelShouldRenderMarkdown,
     brickSelectedTab,
     setBrickSelectedTab,
-    rightPaneBrickSelectedTab,
-    setRightPaneBrickSelectedTab,
+    rightPanelBrickSelectedTab,
+    setRightPanelBrickSelectedTab,
     openFilesStore?.splitProportionLeft,
     handleSplitResize,
+    onToggleAgentPanel,
+    agentPanelOpen,
   ]);
 
   return {
     editorPanelLogic,
-    openFileInPane,
-    getActivePane,
-    activePane,
-    rightPaneSelectedFile,
-    rightPaneTabs,
-    renameRightPaneTab,
-    closeRightPaneTab,
-    closeFileFromPaneA,
+    openFileInPanel,
+    getActiveEditorPanel,
+    activeEditorPanel,
+    rightPanelSelectedFile,
+    rightPanelTabs,
+    renameRightPanelTab,
+    closeRightPanelTab,
+    closeFileFromPanelA,
     openBrickAiModelsTab,
   };
 };

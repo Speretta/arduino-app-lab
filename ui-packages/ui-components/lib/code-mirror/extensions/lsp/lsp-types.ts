@@ -96,3 +96,11 @@ export type LspProgressParams = {
   token: ProgressToken;
   value: LspWorkDoneProgress;
 };
+
+/**
+ * Coerces an LSP diagnostic message to a plain string.
+ * Since LSP 3.18 `Diagnostic.message` can be a `MarkupContent`.
+ */
+export const lspDiagnosticMessage = (
+  message: LspDiagnostic['message'],
+): string => (typeof message === 'string' ? message : message.value);

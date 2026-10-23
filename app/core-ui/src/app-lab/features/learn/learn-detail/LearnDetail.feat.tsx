@@ -9,6 +9,8 @@ import {
 import styles from './learn-detail.module.scss';
 import { useLearnDetailLogic } from './learnDetail.logic';
 
+const MARKDOWN_READER_CLASSES = { reader: styles['markdown-reader'] };
+
 interface LearnDetailProps {
   resourceId: string;
 }
@@ -47,7 +49,7 @@ const LearnDetail: React.FC<LearnDetailProps> = (props: LearnDetailProps) => {
             </div>
           </div>
           <MarkdownReader
-            classes={{ reader: styles['markdown-reader'] }}
+            classes={MARKDOWN_READER_CLASSES}
             content={resource?.content || ''}
             onOpenExternalLink={openExternalLink}
             onOpenInternalLink={openInternalLink}

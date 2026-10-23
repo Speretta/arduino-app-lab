@@ -19,14 +19,12 @@ export const MOCK_BASICS_EXAMPLES_RESPONSE: MockType = {
           path: '01.Basics/Blink/Blink.txt',
         },
       ],
-      folder: '01.Basics',
       ino: {
         name: 'Blink.ino',
         path: '01.Basics/Blink/Blink.ino',
       },
       name: 'Blink',
       path: '01.Basics/Blink',
-      types: ['builtin'],
     },
     {
       files: [
@@ -43,14 +41,12 @@ export const MOCK_BASICS_EXAMPLES_RESPONSE: MockType = {
           path: '01.Basics/AnalogReadSerial/schematic.png',
         },
       ],
-      folder: '01.Basics',
       ino: {
         name: 'AnalogReadSerial.ino',
         path: '01.Basics/AnalogReadSerial/AnalogReadSerial.ino',
       },
       name: 'AnalogReadSerial',
       path: '01.Basics/AnalogReadSerial',
-      types: ['builtin'],
     },
     {
       files: [
@@ -67,14 +63,12 @@ export const MOCK_BASICS_EXAMPLES_RESPONSE: MockType = {
           path: '01.Basics/ReadAnalogVoltage/schematic.png',
         },
       ],
-      folder: '01.Basics',
       ino: {
         name: 'ReadAnalogVoltage.ino',
         path: '01.Basics/ReadAnalogVoltage/ReadAnalogVoltage.ino',
       },
       name: 'ReadAnalogVoltage',
       path: '01.Basics/ReadAnalogVoltage',
-      types: ['builtin'],
     },
   ],
 };
@@ -98,14 +92,12 @@ export const EXPECTED_BASICS_EXAMPLES_FOLDERS: ExamplesFolder[] = [
             path: '01.Basics/AnalogReadSerial/schematic.png',
           },
         ],
-        folder: '01.Basics',
         ino: {
           name: 'AnalogReadSerial.ino',
           path: '01.Basics/AnalogReadSerial/AnalogReadSerial.ino',
         },
         name: 'AnalogReadSerial',
         path: '01.Basics/AnalogReadSerial',
-        types: ['builtin'],
       },
 
       {
@@ -115,14 +107,12 @@ export const EXPECTED_BASICS_EXAMPLES_FOLDERS: ExamplesFolder[] = [
             path: '01.Basics/Blink/Blink.txt',
           },
         ],
-        folder: '01.Basics',
         ino: {
           name: 'Blink.ino',
           path: '01.Basics/Blink/Blink.ino',
         },
         name: 'Blink',
         path: '01.Basics/Blink',
-        types: ['builtin'],
       },
       {
         files: [
@@ -139,14 +129,12 @@ export const EXPECTED_BASICS_EXAMPLES_FOLDERS: ExamplesFolder[] = [
             path: '01.Basics/ReadAnalogVoltage/schematic.png',
           },
         ],
-        folder: '01.Basics',
         ino: {
           name: 'ReadAnalogVoltage.ino',
           path: '01.Basics/ReadAnalogVoltage/ReadAnalogVoltage.ino',
         },
         name: 'ReadAnalogVoltage',
         path: '01.Basics/ReadAnalogVoltage',
-        types: ['builtin'],
       },
     ],
     examplesNumber: 3,
@@ -170,14 +158,12 @@ export const MOCK_DIGITAL_EXAMPLES_RESPONSE: MockType = {
           path: '02.Digital/DigitalInputPullup/schematic.png',
         },
       ],
-      folder: '02.Digital',
       ino: {
         name: 'DigitalInputPullup.ino',
         path: '02.Digital/DigitalInputPullup/DigitalInputPullup.ino',
       },
       name: 'DigitalInputPullup',
       path: '02.Digital/DigitalInputPullup',
-      types: ['builtin'],
     },
   ],
 };
@@ -201,14 +187,12 @@ export const EXPECTED_DIGITAL_EXAMPLES_FOLDERS: ExamplesFolder[] = [
             path: '02.Digital/DigitalInputPullup/schematic.png',
           },
         ],
-        folder: '02.Digital',
         ino: {
           name: 'DigitalInputPullup.ino',
           path: '02.Digital/DigitalInputPullup/DigitalInputPullup.ino',
         },
         name: 'DigitalInputPullup',
         path: '02.Digital/DigitalInputPullup',
-        types: ['builtin'],
       },
     ],
     examplesNumber: 1,
@@ -232,14 +216,12 @@ export const MOCK_USB_EXAMPLES_RESPONSE: MockType = {
           path: '09.USB/Mouse/ButtonMouseControl/schematic.png',
         },
       ],
-      folder: '09.USB/Mouse',
       ino: {
         name: 'ButtonMouseControl.ino',
         path: '09.USB/Mouse/ButtonMouseControl/ButtonMouseControl.ino',
       },
       name: 'ButtonMouseControl',
       path: '09.USB/Mouse/ButtonMouseControl',
-      types: ['builtin'],
     },
     {
       files: [
@@ -248,14 +230,12 @@ export const MOCK_USB_EXAMPLES_RESPONSE: MockType = {
           path: '09.USB/Keyboard/KeyboardLogout/KeyboardLogout.txt',
         },
       ],
-      folder: '09.USB/Keyboard',
       ino: {
         name: 'KeyboardLogout.ino',
         path: '09.USB/Keyboard/KeyboardLogout/KeyboardLogout.ino',
       },
       name: 'KeyboardLogout',
       path: '09.USB/Keyboard/KeyboardLogout',
-      types: ['builtin'],
     },
     {
       files: [
@@ -272,14 +252,12 @@ export const MOCK_USB_EXAMPLES_RESPONSE: MockType = {
           path: '09.USB/KeyboardAndMouseControl/schematic.png',
         },
       ],
-      folder: '09.USB',
       ino: {
         name: 'KeyboardAndMouseControl.ino',
         path: '09.USB/KeyboardAndMouseControl/KeyboardAndMouseControl.ino',
       },
       name: 'KeyboardAndMouseControl',
       path: '09.USB/KeyboardAndMouseControl',
-      types: ['builtin'],
     },
     {
       files: [
@@ -296,14 +274,12 @@ export const MOCK_USB_EXAMPLES_RESPONSE: MockType = {
           path: '09.USB/Mouse/JoystickMouseControl/schematic.png',
         },
       ],
-      folder: '09.USB/Mouse',
       ino: {
         name: 'JoystickMouseControl.ino',
         path: '09.USB/Mouse/JoystickMouseControl/JoystickMouseControl.ino',
       },
       name: 'JoystickMouseControl',
       path: '09.USB/Mouse/JoystickMouseControl',
-      types: ['builtin'],
     },
   ],
 };
@@ -322,14 +298,12 @@ export const EXPECTED_USB_EXAMPLES_FOLDERS: ExamplesFolder[] = [
                 path: '09.USB/Keyboard/KeyboardLogout/KeyboardLogout.txt',
               },
             ],
-            folder: '09.USB/Keyboard',
             ino: {
               name: 'KeyboardLogout.ino',
               path: '09.USB/Keyboard/KeyboardLogout/KeyboardLogout.ino',
             },
             name: 'KeyboardLogout',
             path: '09.USB/Keyboard/KeyboardLogout',
-            types: ['builtin'],
           },
         ],
         examplesNumber: 1,
@@ -349,14 +323,12 @@ export const EXPECTED_USB_EXAMPLES_FOLDERS: ExamplesFolder[] = [
             path: '09.USB/KeyboardAndMouseControl/schematic.png',
           },
         ],
-        folder: '09.USB',
         ino: {
           name: 'KeyboardAndMouseControl.ino',
           path: '09.USB/KeyboardAndMouseControl/KeyboardAndMouseControl.ino',
         },
         name: 'KeyboardAndMouseControl',
         path: '09.USB/KeyboardAndMouseControl',
-        types: ['builtin'],
       },
       {
         name: 'Mouse',
@@ -376,14 +348,12 @@ export const EXPECTED_USB_EXAMPLES_FOLDERS: ExamplesFolder[] = [
                 path: '09.USB/Mouse/ButtonMouseControl/schematic.png',
               },
             ],
-            folder: '09.USB/Mouse',
             ino: {
               name: 'ButtonMouseControl.ino',
               path: '09.USB/Mouse/ButtonMouseControl/ButtonMouseControl.ino',
             },
             name: 'ButtonMouseControl',
             path: '09.USB/Mouse/ButtonMouseControl',
-            types: ['builtin'],
           },
           {
             files: [
@@ -400,14 +370,12 @@ export const EXPECTED_USB_EXAMPLES_FOLDERS: ExamplesFolder[] = [
                 path: '09.USB/Mouse/JoystickMouseControl/schematic.png',
               },
             ],
-            folder: '09.USB/Mouse',
             ino: {
               name: 'JoystickMouseControl.ino',
               path: '09.USB/Mouse/JoystickMouseControl/JoystickMouseControl.ino',
             },
             name: 'JoystickMouseControl',
             path: '09.USB/Mouse/JoystickMouseControl',
-            types: ['builtin'],
           },
         ],
         examplesNumber: 2,

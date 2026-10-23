@@ -2,7 +2,9 @@ package board
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -27,9 +29,32 @@ const (
 )
 
 var (
-	appFileRootsMu    sync.Mutex
-	appFileRootsCache = map[string][]string{}
+	orchestratorConfigMu    sync.Mutex
+	orchestratorConfigCache = map[string]*orchestratorConfig{}
 )
+
+// cachedOrchestratorConfig reads /v1/config once per orchestrator origin. Only a
+// config that names at least one usable root is cached, so an orchestrator still
+// coming up is asked again.
+func cachedOrchestratorConfig(ctx context.Context, origin string) (*orchestratorConfig, error) {
+	orchestratorConfigMu.Lock()
+	cached, ok := orchestratorConfigCache[origin]
+	orchestratorConfigMu.Unlock()
+	if ok {
+		return cached, nil
+	}
+
+	cfg, err := fetchOrchestratorConfig(ctx, origin)
+	if err != nil {
+		return nil, err
+	}
+	if len(reportedAppFileRoots(cfg)) > 0 {
+		orchestratorConfigMu.Lock()
+		orchestratorConfigCache[origin] = cfg
+		orchestratorConfigMu.Unlock()
+	}
+	return cfg, nil
+}
 
 // AppFileRoots returns the directories that may legitimately hold app files:
 // user apps, the orchestrator data dir and the bundled examples. Reads
@@ -49,14 +74,7 @@ func (b *Board) AppFileRoots(ctx context.Context) []string {
 		return defaultAppFileRoots()
 	}
 
-	appFileRootsMu.Lock()
-	cached, ok := appFileRootsCache[origin]
-	appFileRootsMu.Unlock()
-	if ok {
-		return cached
-	}
-
-	cfg, err := fetchOrchestratorConfig(ctx, origin)
+	cfg, err := cachedOrchestratorConfig(ctx, origin)
 	if err != nil {
 		return defaultAppFileRoots()
 	}
@@ -65,11 +83,6 @@ func (b *Board) AppFileRoots(ctx context.Context) []string {
 	if len(roots) == 0 {
 		return defaultAppFileRoots()
 	}
-
-	appFileRootsMu.Lock()
-	appFileRootsCache[origin] = roots
-	appFileRootsMu.Unlock()
-
 	return roots
 }
 
@@ -91,6 +104,14 @@ func reportedAppFileRoots(cfg *orchestratorConfig) []string {
 		roots = append(roots, clean)
 	}
 	return dedupe(roots)
+}
+
+// OwnAppFileRoots returns the app file roots of the board this process runs on:
+// the apps dir and the data dir that holds the bundled examples. It answers
+// without asking the orchestrator, from the same environment the orchestrator
+// reads, so it is only meaningful when IsSBC.
+func OwnAppFileRoots() []string {
+	return defaultAppFileRoots()
 }
 
 func defaultAppFileRoots() []string {
@@ -137,4 +158,36 @@ func IsWithinAnyDir(target string, dirs []string) bool {
 	return slices.ContainsFunc(dirs, func(dir string) bool {
 		return IsWithinDir(target, dir)
 	})
+}
+
+// UserAppsDir returns the board's apps dir as its orchestrator reports it, from
+// the same cached config as AppFileRoots. An unreachable orchestrator is an
+// error, not the default: on a board with its own apps dir the default would
+// make every user app read-only, and the checkout would keep that verdict.
+func UserAppsDir(ctx context.Context, origin string) (string, error) {
+	cfg, err := cachedOrchestratorConfig(ctx, origin)
+	if err != nil {
+		return "", fmt.Errorf("read the board's apps dir: %w", err)
+	}
+	// path.Clean("") is ".", which IsAbs rejects.
+	dir := path.Clean(cfg.Directories.Apps)
+	if !path.IsAbs(dir) || dir == "/" {
+		return defaultUserAppsDir(), nil
+	}
+	return dir, nil
+}
+
+func defaultUserAppsDir() string {
+	if IsSBC() {
+		return envOr(appsDirEnv, AppsRootDir)
+	}
+	return AppsRootDir
+}
+
+// IsUserAppPath reports whether an app's board path is inside the user's apps
+// dir. Built-in examples and installed releases live outside it, and only an app
+// inside it may be written.
+func IsUserAppPath(appPath, appsDir string) bool {
+	// Board paths are POSIX whatever the host, so path, not filepath.
+	return strings.HasPrefix(path.Clean(appPath), path.Clean(appsDir)+"/")
 }

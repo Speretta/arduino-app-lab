@@ -19,10 +19,10 @@ import {
 } from '@cloud-editor-mono/domain';
 import { USER_CLAIM_ID } from '@cloud-editor-mono/infrastructure';
 import { useQuery } from '@tanstack/react-query';
-import { useContext } from 'react';
+import { useContext, useEffect } from 'react';
 
 import { useSketchParams } from '../../../cloud-editor/features/main/hooks/sketch';
-import { useObservable } from '../../../common/hooks/useObservable';
+import { useObservable } from '../../hooks/useObservable';
 import { ComponentContext } from '../component/componentContext';
 import { AuthContextValue } from './authContext';
 
@@ -52,33 +52,35 @@ export function useAuth(
     injectedProfile || (!injectedProfile && injectedProfileLoading),
   );
 
-  const { data: client } = useQuery(['auth-init'], getAuthClient, {
+  const { data: client } = useQuery<AuthClient | undefined>({
+    queryKey: ['auth-init'],
+    queryFn: getAuthClient,
     enabled: !isAuthInjected,
   });
 
-  const { data: token } = useQuery(
-    ['auth-token'],
-    () =>
+  const { data: token } = useQuery({
+    queryKey: ['auth-token'],
+
+    queryFn: () =>
       getAccessToken(
         undefined,
         true,
         isReadOnlyAndAuthorized || doNotForceLogin,
       ),
-    {
-      enabled: !isAuthInjected && !!client,
-    },
-  );
+
+    enabled: !isAuthInjected && !!client,
+  });
   const getTokenDone = Boolean(token || token === '');
 
-  const { data: userIsAuthenticated } = useQuery(
-    ['auth-check'],
-    isAuthenticated,
-    {
-      enabled: getTokenDone,
-    },
-  );
+  const { data: userIsAuthenticated } = useQuery({
+    queryKey: ['auth-check'],
+    queryFn: isAuthenticated,
+    enabled: getTokenDone,
+  });
 
-  useQuery(['auth-login'], login, {
+  useQuery({
+    queryKey: ['auth-login'],
+    queryFn: login,
     enabled:
       getTokenDone &&
       userIsAuthenticated === false &&
@@ -86,35 +88,39 @@ export function useAuth(
       !doNotForceLogin,
   });
 
-  const { data: profileResponse } = useQuery(['auth-user'], retrieveAuth0User, {
+  const { data: profileResponse } = useQuery({
+    queryKey: ['auth-user'],
+    queryFn: () => retrieveAuth0User(),
     enabled: getTokenDone && userIsAuthenticated === true,
   });
 
   const profile = injectedProfile || profileResponse || undefined;
 
-  const { data: restrictionsResponse } = useQuery(
-    ['user-restrictions-recap', profile?.[USER_CLAIM_ID]],
-    () => retrieveUserRestrictionsRecap(profile?.[USER_CLAIM_ID]),
-    {
-      enabled: !!profile,
-    },
-  );
+  const { data: restrictionsResponse } = useQuery({
+    queryKey: [
+      'user-restrictions-recap',
+      (profile as ArduinoUser)?.[USER_CLAIM_ID],
+    ],
+    queryFn: () =>
+      retrieveUserRestrictionsRecap((profile as ArduinoUser)?.[USER_CLAIM_ID]),
+    enabled: !!profile,
+  });
 
-  useQuery(
-    ['analytics', profile?.[USER_CLAIM_ID]],
-    () => (profile ? analyticsBootstrap(profile) : Promise.reject()),
-    {
-      enabled: !!profile && !isIotComponent,
-      onSuccess: async () => {
-        if (profile && !initEventEmitted) {
-          ga4Emitter({
-            type: 'INIT',
-          });
-          initEventEmitted = true;
-        }
-      },
-    },
-  );
+  const { isSuccess: analyticsSuccess } = useQuery({
+    queryKey: ['analytics', (profile as ArduinoUser)?.[USER_CLAIM_ID]],
+    queryFn: () => (profile ? analyticsBootstrap(profile) : Promise.reject()),
+    enabled: !!profile && !isIotComponent,
+  });
+
+  // Handle successful analytics bootstrap
+  useEffect(() => {
+    if (analyticsSuccess && profile && !initEventEmitted) {
+      ga4Emitter({
+        type: 'INIT',
+      });
+      initEventEmitted = true;
+    }
+  }, [analyticsSuccess, profile]);
 
   return {
     client,

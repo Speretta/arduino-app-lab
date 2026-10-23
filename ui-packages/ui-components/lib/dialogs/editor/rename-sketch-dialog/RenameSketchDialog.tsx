@@ -99,7 +99,6 @@ const RenameDialog: React.FC<RenameDialogProps> = (
             </Medium>
             <div className={styles.relative}>
               <Input
-                // eslint-disable-next-line jsx-a11y/no-autofocus
                 autoFocus
                 value={name}
                 onChange={handleChange}

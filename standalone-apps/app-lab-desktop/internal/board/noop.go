@@ -42,6 +42,10 @@ func (c *noopConnection) Stats(string) (remote.FileInfo, error) {
 	return remote.FileInfo{}, ErrNoConn
 }
 
+func (c *noopConnection) Move(string, string) error {
+	return ErrNoConn
+}
+
 type noCmder struct{}
 
 var _ remote.Cmder = (*noCmder)(nil)

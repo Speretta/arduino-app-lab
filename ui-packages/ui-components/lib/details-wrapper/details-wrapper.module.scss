@@ -1,5 +1,7 @@
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
+
 .details-wrapper {
-  outline: 1px solid #c9d2d2;
+  outline: 1px solid var(--border-default);
   border-radius: 4px;
   display: grid;
   align-items: center;

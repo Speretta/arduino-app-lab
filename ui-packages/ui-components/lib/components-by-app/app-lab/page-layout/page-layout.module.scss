@@ -9,14 +9,10 @@
   overflow: clip;
   display: flex;
   flex-direction: column;
-  color: var(--color-text-default, #fff);
+  color: var(--text-default);
 
   .header {
-    border-bottom: 1px solid var(--color-border, #232B2E);
-  }
-
-  .header-content {
-    padding: 0 16px;
+    border-bottom: 1px solid var(--border-inverted);
   }
 
   .content {
@@ -27,5 +23,11 @@
     padding: 16px 16px 0 16px;
     display: flex;
     flex-direction: column;
+
+    // the child owns the scrolling: its own top spacing goes inside its
+    // scroller so the scrollbar runs from the header to the footer
+    &.flush-top {
+      padding-top: 0;
+    }
   }
 }

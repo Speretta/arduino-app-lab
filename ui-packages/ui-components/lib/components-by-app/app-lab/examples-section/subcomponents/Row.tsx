@@ -25,6 +25,11 @@ export const Row = ({
   const { props: titleTooltipProps, renderTooltip: renderTitleTooltip } =
     useTooltip({ content: title, timeout: 0 });
 
+  const {
+    props: descriptionTooltipProps,
+    renderTooltip: renderDescriptionTooltip,
+  } = useTooltip({ content: description, timeout: 0 });
+
   const { props: arrowTooltipProps, renderTooltip: renderArrowTooltip } =
     useTooltip({ content: formatMessage(messages.openExample), timeout: 0 });
 
@@ -41,7 +46,10 @@ export const Row = ({
           </XXSmall>
           {renderTitleTooltip()}
         </div>
-        <div className={styles['examples-row-description']}>
+        <div
+          {...descriptionTooltipProps}
+          className={styles['examples-row-description']}
+        >
           {description && (
             <XXSmall
               truncate
@@ -50,6 +58,7 @@ export const Row = ({
               {description}
             </XXSmall>
           )}
+          {description && renderDescriptionTooltip()}
         </div>
         <div {...arrowTooltipProps} className={styles['examples-row-arrow']}>
           <IconNavigationArrowRight />

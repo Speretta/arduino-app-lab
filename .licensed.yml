@@ -4,9 +4,15 @@ sources:
   npm: true
   go: true
 
+# Explicit `name` pins the cache path (.licenses/<name>/...) so it never depends
+# on the checkout directory basename, which differs between local clones, forks,
+# and CI. Without it, `licensed` derives the name from the directory and the whole
+# cache silently relocates, causing spurious "out of sync" diffs.
 apps:
-  - source_path: .
-  - source_path: standalone-apps/app-lab-desktop
+  - name: cloud-editor-mono
+    source_path: .
+  - name: app-lab-desktop
+    source_path: standalone-apps/app-lab-desktop
 
 ignored:
   npm:
@@ -16,10 +22,13 @@ ignored:
 
     # The following packages have some optional (architecture native) packages.
     - "@esbuild/**"                           # packages released under MIT license
-    - "@rollup/**"                            # packages released under MIT license
+    - "@rolldown/binding-**"                  # architecture native for rolldown bundler, released under MIT license (https://github.com/rolldown/rolldown/blob/main/LICENSE)
+    - "lightningcss-**"                       # architecture native for lightningcss packages, released under MPL-2.0 license https://github.com/parcel-bundler/lightningcss?tab=MPL-2.0-1-ov-file
     - "@parcel/watcher-**"                    # ignored in favor of parent package "@parcel-watcher"
     - "fsevents"                              # optional package for file watching, released under MIT license (https://www.npmjs.com/package/fsevents)
     - "@img/sharp-**"                         # optional packages for image processing, released under Apache-2.0 license (https://github.com/lovell/sharp/blob/main/LICENSE)
+    - "@oxc-parser/binding-**"                # bindings for oxc-parser, released under MIT license (https://github.com/oxc-project/oxc/blob/main/LICENSE)
+    - "@oxc-resolver/binding-**"              # bindings for oxc-resolver, released under MIT license (https://github.com/oxc-project/oxc-resolver/blob/main/LICENSE)
 
     # Transitive dependencies of the platform-native optionals above, present in
     # node_modules only on macOS installs. Ignored so a cache refresh run on a Mac
@@ -30,6 +39,52 @@ ignored:
     - "nan"
 
     - "spdx-exceptions"                       # list of SPDX standard license exceptions, released under CC-BY-3.0 (https://github.com/jslicense/spdx-exceptions.json?tab=readme-ov-file#copyright-and-licensing)
+
+    # Not a package. Running vitest in a workspace leaves a `node_modules/.vite`
+    # cache behind, and the npm source then enumerates that bare directory as a
+    # dependency named "node_modules" with no version and no license — which fails
+    # the license check and, worse, only appears on machines where the tests have
+    # been run. CI never has it, so the cache would differ by machine.
+    - "node_modules"
+
+# Several records under .licenses/ carry a hand-set `license:` field, because licensed
+# detects them as "other" and `task general:check-dep-licenses` fails on that outright —
+# before `licensed status` runs, so `reviewed:` here would not help. The remedy the
+# tooling template names is to define the license in the record itself:
+#
+#   express-rate-limit  -> mit           package.json says MIT; its license.md starts
+#                                        with a BOM and a Markdown "# MIT License"
+#                                        heading, which is what defeats the matcher.
+#   json-schema-typed   -> bsd-2-clause  package.json says BSD-2-Clause; LICENSE.md
+#                                        opens with the BSD-2 header and then adds an
+#                                        attribution line.
+#   sass                -> mit           package.json says MIT; its LICENSE concatenates
+#                                        the Dart SDK BSD text after the MIT grant, so
+#                                        the matcher sees a compound file and gives up.
+#   terser              -> bsd-2-clause  package.json says BSD-2-Clause; its LICENSE
+#                                        adds a copyright preamble before the BSD-2 body.
+#   go-toml/v2/internal/parserbridge -> mit
+#                                        its LICENSE is the verbatim MIT text, matched
+#                                        as mit on the parent module and every sibling
+#                                        under internal/; the matcher only falls back to
+#                                        "other" on this one sub-package.
+#   golang.org/x/crypto/{blake2s,hkdf}, golang.org/x/net/internal/httpcommon,
+#   ProtonMail/go-crypto/openpgp/{mldsa_eddsa,mlkem_ecdh,slhdsa}
+#                       -> bsd-3-clause  the BSD-3 LICENSE matches; the PATENTS file
+#                                        beside it matches nothing, and two files that
+#                                        disagree give "other". Sibling records of the
+#                                        same module already say bsd-3-clause.
+#   cloudflare/circl/{kem,pke,sign,simd,xof}/...
+#                       -> bsd-3-clause  LICENSE matches BSD-3; README.md is read as a
+#                                        second license file and matches nothing.
+#   arduino-cli/internal/cleanup -> gpl-3.0
+#                                        LICENSE.txt matches GPL-3.0; license_header.tpl
+#                                        and README.md are read as license files too.
+#
+# `licensed cache` keeps an existing record while its version matches, so the edits
+# survive regeneration. They do NOT survive a version bump: licensed re-detects, the
+# field goes back to "other", and CI fails again — re-set it after checking the new
+# package still declares the same license.
 
 # Source: https://github.com/arduino/tooling-project-assets/blob/main/workflow-templates/assets/check-dependencies/GPL-3.0/.licensed.yml
 allowed:

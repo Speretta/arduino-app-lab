@@ -1,3 +1,5 @@
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
+
 .label {
   display: flex;
   align-items: center;
@@ -11,7 +13,7 @@
     }
 
     .input {
-      background: #008184;
+      background: var(--accent-default);
       border: none;
     }
   }
@@ -24,16 +26,16 @@
 .input {
   width: 14px;
   height: 14px;
-  border: 1px solid #7f8c8d;
+  border: 1px solid var(--text-subtle);
   border-radius: 2px;
-  background: #ffffff;
+  background: var(--text-on-accent);
   display: flex;
   justify-content: center;
   align-items: center;
   box-sizing: border-box;
 
   &.focus-visible {
-    outline: 2px solid #7fcbcd;
+    outline: 2px solid var(--border-accent-strong);
   }
 }
 
@@ -43,6 +45,6 @@
   height: 8px;
 
   * {
-    fill: #ffffff;
+    fill: var(--icon-on-accent);
   }
 }

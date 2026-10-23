@@ -42,7 +42,7 @@
 
 .associated-device-port-text {
   display: flex;
-  color: #4e5b61;
+  color: var(--text-subtle);
   align-items: center;
 
   & > svg {
@@ -53,14 +53,14 @@
 .divider {
   height: 100%;
   width: 1px;
-  background: rgba(201, 210, 210, 1);
+  background: var(--border-default);
   margin: 0px 20px;
 }
 
 .small-divider {
   height: calc(100% - 24px);
   width: 1px;
-  background: rgba(201, 210, 210, 1);
+  background: var(--border-default);
   margin: 0px 20px;
 }
 
@@ -85,8 +85,8 @@
   left: 8px;
   z-index: shared.$zIndex3;
   padding: 16px;
-  background: #fff;
-  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.25);
+  background: var(--surface-bg-above);
+  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.25); // TODO: Create suitable variable
   border-radius: 3px;
 }
 
@@ -133,14 +133,14 @@
 
 .manual-selection-info-icon-container {
   @extend .info-icon-container;
-  background: #fff;
+  background: var(--surface-bg-above);
 
   &:hover {
-    background-color: rgba(55, 65, 70, 1);
+    background-color: var(--text-default);
 
     & > svg {
       & > path {
-        fill: #fff;
+        fill: var(--icon-on-accent);
       }
     }
   }

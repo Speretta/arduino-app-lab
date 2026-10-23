@@ -1,6 +1,7 @@
 package board
 
 import (
+	"app-lab-desktop/internal/boardsession"
 	"app-lab-desktop/internal/tunnel"
 	"bufio"
 	"context"
@@ -8,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -26,6 +28,25 @@ const (
 	FQBNUnoQ     = "arduino:zephyr:unoq"
 	FQBNVentunoQ = "arduino:zephyr:ventunoq"
 )
+
+// FlasherTarget is how arduino-flasher-cli names a board and the OS
+// distribution to flash on it. The OS is fixed per board for now.
+type FlasherTarget struct {
+	Board string
+	OS    string
+}
+
+var flasherTargets = map[string]FlasherTarget{
+	FQBNUnoQ:     {Board: "unoq", OS: "debian"},
+	FQBNVentunoQ: {Board: "ventunoq", OS: "ubuntu"},
+}
+
+// FlasherTargetFor returns the flasher-cli target for an FQBN. An unknown FQBN
+// gives an empty target, which is what requests carried before targeting existed:
+// flasher-cli then lists every image and flashes its default board.
+func FlasherTargetFor(fqbn string) FlasherTarget {
+	return flasherTargets[fqbn]
+}
 
 var supportedBoards = []string{FQBNUnoQ, FQBNVentunoQ}
 
@@ -152,6 +173,7 @@ func (b *Board) EstablishConnection(ctx context.Context, optPassword string) err
 		if err != nil {
 			return fmt.Errorf("failed to connect to board: %w", err)
 		}
+		conn = boardsession.Wrap(conn)
 		if _, err := b.StartTunnel(ctx, conn, orchestratorTunnelTag, boardOrchestratorPort); err != nil {
 			return fmt.Errorf("failed to start tunnel: %w", err)
 		}
@@ -191,8 +213,13 @@ func (b *Board) IsLocalFS() bool {
 	return IsSBC() || b.Info.Protocol == board.LocalProtocol
 }
 
+// IsNetwork reports a board reached over the network (mDNS/IP) rather than USB or the local filesystem. Its serial is no proxy for this: GetBoards gives a network board the serial mDNS advertises when the property is there.
+func (b *Board) IsNetwork() bool {
+	return b != nil && b.Info.Protocol == board.NetworkProtocol
+}
+
 func (b *Board) GetName(ctx context.Context) (string, error) {
-	return board.GetCustomName(ctx, b.Conn)
+	return board.GetCustomName(b.Conn)
 }
 
 func (b *Board) SetName(ctx context.Context, name string) error {
@@ -210,7 +237,7 @@ func (b *Board) IsUserPasswordSet(ctx context.Context) (bool, error) {
 }
 
 func (b *Board) SetUserPassword(ctx context.Context, password string) error {
-	return board.SetUserPassword(ctx, b.Conn, password)
+	return board.SetUserPassword(b.Conn, password)
 }
 
 func (b *Board) GetKeyboardLayout(ctx context.Context) (string, error) {
@@ -241,11 +268,11 @@ func (b *Board) GetNetworkModeStatus(ctx context.Context) (bool, error) {
 }
 
 func (b *Board) EnableNetworkMode(ctx context.Context, password string) error {
-	return board.EnableNetworkMode(ctx, b.Conn, password)
+	return board.EnableNetworkMode(b.Conn, password)
 }
 
 func (b *Board) DisableNetworkMode(ctx context.Context, password string) error {
-	return board.DisableNetworkMode(ctx, b.Conn, password)
+	return board.DisableNetworkMode(b.Conn, password)
 }
 
 func (b *Board) GetOrchestratorURL() (string, error) {
@@ -309,7 +336,7 @@ const (
 func (b *Board) IsR0Build() bool {
 	var version string
 	for attempt := 0; attempt < r0CheckRetries; attempt++ {
-		version = board.GetOSImageVersion(b.Conn)
+		version = b.GetOSImageVersion()
 		if version != board.R0_IMAGE_VERSION_ID {
 			return false
 		}
@@ -321,9 +348,13 @@ func (b *Board) IsR0Build() bool {
 }
 
 // GetOSImageVersion returns the OS image version of the board.
-// It will return R0 image version in case of any error.
 func (b *Board) GetOSImageVersion() string {
-	return board.GetOSImageVersion(b.Conn)
+	version, err := board.GetOSImageVersion(b.Conn)
+	if err != nil {
+		slog.Warn("Unable to read the OS image version", "err", err)
+		return ""
+	}
+	return version
 }
 
 func (b *Board) GetKernelVersion(ctx context.Context) (string, error) {

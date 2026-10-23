@@ -1,9 +1,9 @@
 ---
 name: "@react-stately/list"
-version: 3.11.2
+version: 3.14.1
 type: npm
 summary: Spectrum UI components in React
-homepage: 
+homepage:
 license: apache-2.0
 licenses:
 - sources: LICENSE

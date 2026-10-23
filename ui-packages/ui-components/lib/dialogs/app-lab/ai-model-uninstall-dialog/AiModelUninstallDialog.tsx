@@ -1,8 +1,8 @@
 import { TriangleSharpOutline } from '@cloud-editor-mono/images/assets/icons';
 
 import {
+  AiModelImpulse,
   AiModelProps,
-  BrickDetailModelImpulse,
   Button,
   ButtonSize,
   ButtonVariant,
@@ -17,7 +17,7 @@ type AiModelUninstallDialogProps = {
   open: boolean;
   isEdgeImpulse: boolean;
   modelId: string;
-  selectedImpulse?: BrickDetailModelImpulse;
+  selectedImpulse?: AiModelImpulse;
   onOpenChange: (open: boolean) => void;
   removeModel?: AiModelProps['removeModel'];
 };

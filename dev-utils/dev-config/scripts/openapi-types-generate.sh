@@ -4,7 +4,7 @@ CONVERTER_URL=https://converter.swagger.io/api/convert
 # Required: uncomment the definition url you want to use, or add your own
 # DEFINITION_URL=<YOUR_DEFINITION_URL>
 # e.g.
-DEFINITION_URL=https://raw.githubusercontent.com/arduino/arduino-app-cli/refs/heads/rename-to-builtin/internal/api/docs/openapi.yaml
+DEFINITION_URL=https://raw.githubusercontent.com/arduino/arduino-app-cli/refs/heads/main/internal/api/docs/openapi.yaml
 
 # Required: Add your desidered service name
 SERVICE_NAME=orchestrator-api # e.g. iot-api, users-api, etc.

@@ -1,9 +1,9 @@
 ---
 name: "@react-aria/utils"
-version: 3.27.0
+version: 3.34.1
 type: npm
 summary: Spectrum UI components in React
-homepage: 
+homepage:
 license: apache-2.0
 licenses:
 - sources: LICENSE

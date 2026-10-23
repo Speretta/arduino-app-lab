@@ -1,3 +1,4 @@
+import { getInitials } from '@cloud-editor-mono/ui-components/lib/common/utils';
 import { SidePanelLogic } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useLocation } from '@tanstack/react-router';
 import { useCallback, useContext, useMemo } from 'react';
@@ -6,18 +7,6 @@ import { UseBoards } from '../../hooks/useBoards';
 import { AuthContext } from '../../providers/auth/authContext';
 import { useCreateAppDialogStore } from '../../store/createAppDialog';
 import { useImportAppDialogStore } from '../../store/importAppDialog';
-
-// Up to 2 initials from the user's full name, e.g. "Agustin Rujana" -> "AR"
-const getInitials = (name?: string): string | undefined => {
-  const parts = name?.trim().split(/\s+/).filter(Boolean) || [];
-  if (parts.length === 0) {
-    return undefined;
-  }
-  return parts
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('');
-};
 
 // Factory (not a hook) returns the inner hook, matching createUseSettingsLogic;
 // lets useMainLogic inject it without tripping rules-of-hooks at the call site.

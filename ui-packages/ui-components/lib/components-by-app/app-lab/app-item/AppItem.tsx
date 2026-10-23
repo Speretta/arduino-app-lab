@@ -1,7 +1,9 @@
 import {
+  AppRelease,
   Bin,
   Download,
   Duplicate,
+  InfoIconOutline,
   Pencil,
   Power,
   ThreeDots,
@@ -16,6 +18,11 @@ import { useI18n } from '../../../i18n/useI18n';
 import { Skeleton } from '../../../skeleton';
 import { XXSmall } from '../../../typography';
 import { getBackgroundIcon } from '../../../utils';
+import {
+  appReleaseMessages,
+  CreateReleaseDisabledItem,
+  ReleaseBadge,
+} from '../app-release';
 import { AppAction } from '../app-title';
 import { EmojiPreview } from '../emoji-picker/sub-components/EmojiPreview';
 import { Toggle } from '../essential/toggle';
@@ -37,6 +44,10 @@ const AppItem: React.FC<AppItemProps> = (props: AppItemProps) => {
     onRename,
     onDuplicate,
     onExport,
+    onCreateRelease,
+    createReleaseDisabledReason,
+    onReleaseInfo,
+    releaseBadge,
     onSetAsDefault,
     onDelete,
     onMenuOpen,
@@ -46,7 +57,13 @@ const AppItem: React.FC<AppItemProps> = (props: AppItemProps) => {
   const { formatMessage } = useI18n();
 
   const hasActions =
-    onRename || onDuplicate || onExport || onSetAsDefault || onDelete;
+    onRename ||
+    onDuplicate ||
+    onExport ||
+    onCreateRelease ||
+    onReleaseInfo ||
+    onSetAsDefault ||
+    onDelete;
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [isHovered, setIsHovered] = React.useState(false);
 
@@ -85,6 +102,12 @@ const AppItem: React.FC<AppItemProps> = (props: AppItemProps) => {
         break;
       case AppAction.Export:
         onExport?.();
+        break;
+      case AppAction.CreateRelease:
+        onCreateRelease?.();
+        break;
+      case AppAction.ReleaseInfo:
+        onReleaseInfo?.();
         break;
       case AppAction.Delete:
         onDelete?.();
@@ -164,6 +187,23 @@ const AppItem: React.FC<AppItemProps> = (props: AppItemProps) => {
                         {
                           name: 'Actions',
                           items: [
+                            ...(onReleaseInfo
+                              ? [
+                                  {
+                                    id: AppAction.ReleaseInfo,
+                                    label: formatMessage(
+                                      appReleaseMessages.actionReleaseInfo,
+                                    ),
+                                    labelPrefix: (
+                                      <span
+                                        className={styles['context-menu-icon']}
+                                      >
+                                        <InfoIconOutline />
+                                      </span>
+                                    ),
+                                  },
+                                ]
+                              : []),
                             ...(onRename && canRenameAppTitle
                               ? [
                                   {
@@ -195,6 +235,37 @@ const AppItem: React.FC<AppItemProps> = (props: AppItemProps) => {
                                         <Duplicate />
                                       </span>
                                     ),
+                                  },
+                                ]
+                              : []),
+                            ...(onCreateRelease
+                              ? [
+                                  {
+                                    id: AppAction.CreateRelease,
+                                    label: formatMessage(
+                                      appReleaseMessages.actionCreateRelease,
+                                    ),
+                                    ...(createReleaseDisabledReason
+                                      ? {
+                                          node: (
+                                            <CreateReleaseDisabledItem
+                                              reason={
+                                                createReleaseDisabledReason
+                                              }
+                                            />
+                                          ),
+                                        }
+                                      : {
+                                          labelPrefix: (
+                                            <span
+                                              className={
+                                                styles['context-menu-icon']
+                                              }
+                                            >
+                                              <AppRelease />
+                                            </span>
+                                          ),
+                                        }),
                                   },
                                 ]
                               : []),
@@ -236,6 +307,13 @@ const AppItem: React.FC<AppItemProps> = (props: AppItemProps) => {
                                         <div
                                           className={
                                             styles[
+                                              'default-app-menu-item-divider'
+                                            ]
+                                          }
+                                        />
+                                        <div
+                                          className={
+                                            styles[
                                               'default-app-menu-item-title'
                                             ]
                                           }
@@ -253,6 +331,7 @@ const AppItem: React.FC<AppItemProps> = (props: AppItemProps) => {
                                             )}
                                           </XXSmall>
                                           <Toggle
+                                            elementType="span"
                                             className={
                                               styles['default-app-toggle']
                                             }
@@ -300,16 +379,33 @@ const AppItem: React.FC<AppItemProps> = (props: AppItemProps) => {
                         dropdownMenuItem: styles['dropdownMenuItem'],
                         dropdownMenuList: styles['dropdownMenuList'],
                       }}
+                      disabledKeys={
+                        createReleaseDisabledReason
+                          ? [AppAction.CreateRelease]
+                          : undefined
+                      }
                       onAction={(key): void => handleAction(key as AppAction)}
                       onOpen={handleMenuOpen}
                       buttonChildren={<ThreeDots width={14} height={14} />}
-                      //this prop enables automatic positioning to prevent menu overflow and clipping
+                      // react-aria computes the position against the viewport, which
+                      // only matches where the popover is placed when it is portaled.
                       useStaticPosition={false}
+                      usePortal
                     />
                   </div>
                 )}
               </div>
               <div className={styles['content-description']}>{description}</div>
+              {releaseBadge ? (
+                <div className={styles['release']}>
+                  <ReleaseBadge label={releaseBadge.label} />
+                  {releaseBadge.createdAt ? (
+                    <span className={styles['release-date']}>
+                      {releaseBadge.createdAt}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           )}
           {variant === 'skeleton' && (
@@ -331,6 +427,20 @@ const AppItem: React.FC<AppItemProps> = (props: AppItemProps) => {
             className={styles['context-menu-content']}
             onClick={(e): void => e.stopPropagation()}
           >
+            {onReleaseInfo && (
+              <ContextMenu.Item
+                className={styles['context-menu-item']}
+                onSelect={(): void => onReleaseInfo()}
+                onPointerDown={(e): void => e.stopPropagation()}
+              >
+                <span className={styles['context-menu-icon']}>
+                  <InfoIconOutline />
+                </span>
+                <XXSmall>
+                  {formatMessage(appReleaseMessages.actionReleaseInfo)}
+                </XXSmall>
+              </ContextMenu.Item>
+            )}
             {onRename && canRenameAppTitle && (
               <ContextMenu.Item
                 className={styles['context-menu-item']}
@@ -357,6 +467,29 @@ const AppItem: React.FC<AppItemProps> = (props: AppItemProps) => {
                 </XXSmall>
               </ContextMenu.Item>
             )}
+            {onCreateRelease && (
+              <ContextMenu.Item
+                className={styles['context-menu-item']}
+                disabled={Boolean(createReleaseDisabledReason)}
+                onSelect={(): void => onCreateRelease()}
+                onPointerDown={(e): void => e.stopPropagation()}
+              >
+                {createReleaseDisabledReason ? (
+                  <CreateReleaseDisabledItem
+                    reason={createReleaseDisabledReason}
+                  />
+                ) : (
+                  <>
+                    <span className={styles['context-menu-icon']}>
+                      <AppRelease />
+                    </span>
+                    <XXSmall>
+                      {formatMessage(appReleaseMessages.actionCreateRelease)}
+                    </XXSmall>
+                  </>
+                )}
+              </ContextMenu.Item>
+            )}
             {onExport && (
               <ContextMenu.Item
                 className={styles['context-menu-item']}
@@ -371,7 +504,7 @@ const AppItem: React.FC<AppItemProps> = (props: AppItemProps) => {
             )}
             {onSetAsDefault && (
               <ContextMenu.Item
-                className={styles['context-menu-item']}
+                className={clsx(styles['context-menu-item'], styles['divider'])}
                 onSelect={(): void => onSetAsDefault()}
                 onPointerDown={(e): void => e.stopPropagation()}
               >

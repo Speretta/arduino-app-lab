@@ -91,7 +91,7 @@ export const messages = defineMessages({
   },
   changeDevice: {
     id: 'toolbar.changeDeviceTooltip',
-    defaultMessage: 'Change Associated Device',
+    defaultMessage: 'Change associated device',
     description:
       'Text shown in the tooltip shown when hovering the button to change the associated device',
   },
@@ -136,16 +136,6 @@ export const messages = defineMessages({
     description:
       'Description shown in the toolbar serial monitor button tooltip when the serial port is busy',
   },
-  deviceFoundTitle: {
-    id: 'toolbar.device-found-title',
-    defaultMessage: 'New device found',
-    description: 'Shown when a single new device is available',
-  },
-  devicesFoundTitle: {
-    id: 'toolbar.devices-found-title',
-    defaultMessage: 'New devices found',
-    description: 'Shown when a multiple new devices are available',
-  },
   manyDevicesFoundLabel: {
     id: 'toolbar.many-matching-devices-found-label',
     defaultMessage: 'Multiple devices found',
@@ -167,11 +157,6 @@ export const messages = defineMessages({
     defaultMessage: 'Configure Flavour',
     description: 'Label for the button used to open the flavour config',
   },
-  shareSketch: {
-    id: 'toolbar.shareSketch',
-    defaultMessage: 'Share Sketch',
-    description: 'Label for the button used to share the sketch',
-  },
   downloadSketch: {
     id: 'toolbar.downloadSketch',
     defaultMessage: 'Download Sketch',
@@ -184,13 +169,8 @@ export const messages = defineMessages({
   },
   iotSetupTabMessage: {
     id: 'toolbar.iotSetupTabMessage',
-    defaultMessage: 'Change the associated device from the {iotSetupTabLink}',
+    defaultMessage: 'Change the associated device from the device panel',
     description: 'Message to show a quick link to the setup page',
-  },
-  iotSetupTabLink: {
-    id: 'toolbar.iotSetupTabLink',
-    defaultMessage: 'Setup tab',
-    description: 'Link to the setup tab',
   },
 });
 

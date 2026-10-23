@@ -19,6 +19,10 @@ export interface RowProps {
   trailing?: ReactNode;
   // reveal the trailing element only on row hover (e.g. session actions menu)
   revealTrailingOnHover?: boolean;
+  // the trailing element is a control of its own (e.g. a menu button), so it must not act as the row
+  trailingIsInteractive?: boolean;
+  ariaExpanded?: boolean;
+  ariaControls?: string;
   className?: string;
 }
 
@@ -32,6 +36,9 @@ export const Row = ({
   dimmed,
   trailing,
   revealTrailingOnHover,
+  trailingIsInteractive,
+  ariaExpanded,
+  ariaControls,
   className,
 }: RowProps): JSX.Element => {
   const { props: tooltipProps, renderTooltip } = useTooltip({
@@ -48,6 +55,21 @@ export const Row = ({
         {renderTooltip()}
       </div>
     </>
+  );
+
+  const trailingNode = trailing ? (
+    <div
+      className={clsx(styles['trailing'], {
+        [styles['trailing-reveal']]: revealTrailingOnHover,
+      })}
+    >
+      {trailing}
+    </div>
+  ) : null;
+
+  // The whole row is the click target; only a trailing that owns its clicks, or a link's, stays outside it.
+  const trailingInsideClickTarget = Boolean(
+    trailing && onClick && !route && !trailingIsInteractive,
   );
 
   return (
@@ -75,25 +97,20 @@ export const Row = ({
           className={styles['link']}
           role="button"
           tabIndex={0}
+          aria-expanded={ariaExpanded}
+          aria-controls={ariaControls}
           onClick={onClick}
           onKeyUp={(e): void => {
             if (e.key === 'Enter' || e.key === ' ') onClick();
           }}
         >
           {content}
+          {trailingInsideClickTarget && trailingNode}
         </div>
       ) : (
         <div className={styles['link']}>{content}</div>
       )}
-      {trailing && (
-        <div
-          className={clsx(styles['trailing'], {
-            [styles['trailing-reveal']]: revealTrailingOnHover,
-          })}
-        >
-          {trailing}
-        </div>
-      )}
+      {!trailingInsideClickTarget && trailingNode}
     </div>
   );
 };

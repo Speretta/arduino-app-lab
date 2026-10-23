@@ -50,17 +50,17 @@ $skeletonChildren: 8;
   display: flex;
   align-items: center;
   justify-content: center;
-  $color: shared.theme-var(--button-primary-label);
-  $bg: shared.theme-var(--button-primary-background) !important;
+  $color: var(--text-on-accent);
+  $bg: var(--accent-default) !important;
   color: $color;
   background-color: $bg;
   border-radius: 32px;
 
   &:hover, &.dropdown-menu-button-open {
-    background-color: shared.theme-var(--button-primary-background-hover);
+    background-color: var(--accent-default-strong);
   }
   &:focus {
-    outline: 2px solid shared.theme-var(--button-primary-border-active);
+    outline: 2px solid var(--border-accent-strong);
   }
 }
 .files-action-button-content {
@@ -81,11 +81,11 @@ $skeletonChildren: 8;
   height: 32px;
   
   &:hover {
-    background-color: #ecf1f1;
+    background-color: var(--sidebar-panel-code-container);
   }
 
   &.file-selected {
-    background-color: #dae3e3;
+    background-color: var(--sidebar-item-background-hover);
   }
 
   .unsaved-badge {

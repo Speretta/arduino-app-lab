@@ -1,5 +1,15 @@
 {
   "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "moduleResolution": "Bundler",
+    "resolvePackageJsonExports": true,
+    "resolvePackageJsonImports": false,
+    "paths": {
+      "react": ["../../../node_modules/@types/react"],
+      "@bcmi-labs/art-auth": ["../../../node_modules/@bcmi-labs/art-auth/dist/index.d.ts"]
+    }
+  },
   "exclude": ["dist"],
   "include": ["**/*.ts", "**/*.tsx", "../../../types/*.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]

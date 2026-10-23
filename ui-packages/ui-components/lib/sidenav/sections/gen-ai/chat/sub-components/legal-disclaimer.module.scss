@@ -6,7 +6,7 @@
   flex-direction: column;
   align-items: flex-start;
   margin-top: 19px;
-  color: shared.theme-var(--sidebar-panel-foreground);
+  color: var(--text-default);
   gap: 28px;
   overflow: auto;
 
@@ -41,6 +41,10 @@
         justify-content: center;
         align-items: center;
         aspect-ratio: 1/1;
+
+        path {
+          fill: var(--accent-default);
+        }
       }
     }
   }

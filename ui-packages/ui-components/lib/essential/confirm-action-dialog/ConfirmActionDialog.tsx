@@ -14,6 +14,7 @@ export interface ConfirmActionDialogProps {
   dialogMessage: string | JSX.Element;
   dialogCancelButtonLabel: string | JSX.Element;
   dialogConfirmButtonLabel: string | JSX.Element;
+  containerClasses?: string;
 }
 
 const ConfirmActionDialog: React.FC<ConfirmActionDialogProps> = (
@@ -27,6 +28,7 @@ const ConfirmActionDialog: React.FC<ConfirmActionDialogProps> = (
     dialogMessage,
     dialogCancelButtonLabel,
     dialogConfirmButtonLabel,
+    containerClasses,
   } = props;
 
   const { reactModalProps, setIsOpen, confirmAction, cancelAction, isLoading } =
@@ -40,6 +42,7 @@ const ConfirmActionDialog: React.FC<ConfirmActionDialogProps> = (
       reactModalProps={reactModalProps}
       themeClass={themeClass}
       setIsOpen={setIsOpen}
+      classes={{ container: containerClasses }}
     >
       <>
         <GenericDialog.Header

@@ -10,12 +10,12 @@ import {
   finalize,
   interval,
   map,
+  merge,
   NEVER,
   Observable,
   pairwise,
   scan,
   shareReplay,
-  startWith,
   Subject,
 } from 'rxjs';
 
@@ -297,15 +297,22 @@ export function createCodeSubject(
   };
   const codeChange$ = new BehaviorSubject<CodeChange>(initialValue);
 
-  const lastCodeUpdate$ = codeChange$.pipe(
-    lastChangeInTimeFrame(debounceInterval),
-    // `startWith(initialValue)` needed to fill buffer for pairwise,
-    // this is to avoid a save call when the first change results in no
-    // actual change in code value
-    startWith(initialValue),
+  // What the next edit is compared against: the debounced user edits, and every
+  // reload as it arrives. A reload (the initial value, an external change, a
+  // refetch) is what the file holds now, so an edit that returns to the opened
+  // content after one is a real change, not a no-op.
+  const settledChange$ = merge(
+    codeChange$.pipe(filter((change) => !isCodeChangeWithCtx(change))),
+    codeChange$.pipe(lastChangeInTimeFrame(debounceInterval)),
+  );
+
+  const lastCodeUpdate$ = settledChange$.pipe(
     pairwise(),
-    // emits `CodeChange`s only when code value changes
-    filter(isEffectualEmission),
+    // emits user edits only, and only when the code value changes
+    filter(
+      (pair): pair is [CodeChange, CodeChangeWithCtx] =>
+        isCodeChangeWithCtx(pair[1]) && isEffectualEmission(pair),
+    ),
     map(([, curr]) => curr),
     finalize(() => {
       lastCodeUpdateSub.unsubscribe();
@@ -344,11 +351,10 @@ export function createCodeSubject(
     },
   );
 
-  const lastIneffectualCodeChange$ = codeChange$.pipe(
-    lastChangeInTimeFrame(debounceInterval),
+  const lastIneffectualCodeChange$ = settledChange$.pipe(
     scan(
       (prev, curr) => ({
-        isSameCode: !valueHasChanged(prev, curr),
+        isSameCode: isCodeChangeWithCtx(curr) && !valueHasChanged(prev, curr),
         value: curr.value,
         fileId: curr.fileId,
         meta: { doc: curr.meta.doc },
@@ -527,14 +533,14 @@ export function codeSubjectNext(
   });
 }
 
-export let getAppFileTree: ArduinoAppFilesService['getAppFileTree'] =
+export let listAppDirectory: ArduinoAppFilesService['listAppDirectory'] =
   async function () {
-    throw new Error('getAppFileTree method not implemented');
+    throw new Error('listAppDirectory method not implemented');
   };
 
-export let getAppFiles: ArduinoAppFilesService['getAppFiles'] =
+export let statAppPath: ArduinoAppFilesService['statAppPath'] =
   async function () {
-    throw new Error('getAppFiles method not implemented');
+    throw new Error('statAppPath method not implemented');
   };
 
 export let getAppFileContent: ArduinoAppFilesService['getAppFileContent'] =
@@ -564,11 +570,6 @@ export let renameAppFile: ArduinoAppFilesService['renameAppFile'] =
 export let removeAppFile: ArduinoAppFilesService['removeAppFile'] =
   async function () {
     throw new Error('deleteSketchFile method not implemented');
-  };
-
-export let moveAppFile: ArduinoAppFilesService['moveAppFile'] =
-  async function () {
-    throw new Error('moveAppFile method not implemented');
   };
 
 export let createAppFolder: ArduinoAppFilesService['createAppFolder'] =
@@ -622,13 +623,12 @@ export function onWatcherRefresh(
 export const setArduinoAppFilesService = (
   service: ArduinoAppFilesService,
 ): void => {
-  getAppFileTree = service.getAppFileTree;
-  getAppFiles = service.getAppFiles;
+  listAppDirectory = service.listAppDirectory;
+  statAppPath = service.statAppPath;
   getAppFileContent = service.getAppFileContent;
   saveAppFile = service.saveAppFile;
   createAppFile = service.createAppFile;
   renameAppFile = service.renameAppFile;
-  moveAppFile = service.moveAppFile;
   removeAppFile = service.removeAppFile;
   createAppFolder = service.createAppFolder;
   selectResourcePathToImport = service.selectResourcePathToImport;

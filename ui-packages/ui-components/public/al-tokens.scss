@@ -1,0 +1,278 @@
+// Vendored design tokens — App Lab (DARK theme only).
+//
+// Self-contained copy of the shared design-system dark token set (sourced from
+// a private UI dependency). Vendored here so App Lab ships its design tokens
+// without importing that dependency at all. App Lab always renders in dark
+// mode, so ONLY the dark token set is included — there are no light values in
+// this file. The dark set is a superset of the common palette, so no separate
+// common-token file is needed.
+//
+// AUTO-GENERATED UPSTREAM — do not hand-edit token values. To re-sync, replace
+// the declarations below with the compiled dark-theme CSS custom properties
+// from the design-token package.
+//
+// ── Adding light mode in the future ──────────────────────────────────────────
+// These tokens are declared unconditionally on :root, which is correct only
+// because App Lab is dark-only today. To support a light theme:
+//   1. Vendor the light token set the same way (copy the compiled light-theme
+//      CSS custom properties from the design-token package).
+//   2. Scope each set to a theme so they don't both apply at :root, e.g. put
+//      the dark vars under `[data-art-theme="dark"]` and the light vars under
+//      `[data-art-theme="light"]` (App Lab's theme provider already sets
+//      `data-art-theme` on its wrapper — see AppLabThemeProvider).
+//   3. Make the provider emit `data-art-theme="light"` when the user/OS selects
+//      light, instead of hardcoding "dark".
+// Keep both sets as vendored snapshots; re-sync them together when upstream
+// tokens change.
+//
+// Cloud-Editor-owned tokens that have no design-system equivalent are imported
+// from ce-tokens.scss below (delivered via [data-art-theme]); App Lab's wrapper
+// carries data-art-theme="dark", so the dark set applies.
+@use "./ce-tokens.scss";
+
+// App Lab-owned tokens (dark-only) with no colorino equivalent. AL-only — not in
+// ce-tokens.scss. See al-custom-tokens.scss header.
+@use "./al-custom-tokens.scss";
+
+:root {
+  --grayscale-concrete: #95a5a6;
+  --grayscale-asbestos: #7f8c8d;
+  --grayscale-smoke: #c9d2d2;
+  --grayscale-black: #000000;
+  --grayscale-silver: #bdc7c7;
+  --grayscale-rich-black: #090f11;
+  --grayscale-onyx: #171e21;
+  --grayscale-ash-grey: #aeb8b8;
+  --grayscale-outer-space: #232b2e;
+  --grayscale-concrete-40: rgba(149, 165, 166, 0.4);
+  --grayscale-ash-grey-15: rgba(174, 184, 184, 0.15);
+  --grayscale-charcoal: #2c353a;
+  --grayscale-jet-15: rgba(55, 65, 70, 0.15);
+  --grayscale-fog: #dae3e3;
+  --grayscale-jet: #374146;
+  --grayscale-gris: #4e5b61;
+  --grayscale-dust: #434f54;
+  --grayscale-sirocco: #6d7a7b;
+  --grayscale-cloud: #ecf1f1;
+  --grayscale-nevada: #5d6a6b;
+  --grayscale-white: #ffffff;
+  --grayscale-feather-to-be-removed: #f7f9f9;
+  --grayscale-black-50: rgba(0, 0, 0, 0.5);
+  --grayscale-white-40: rgba(255, 255, 255, 0.4);
+  --grayscale-black-40: rgba(0, 0, 0, 0.4);
+  --tealscale-teal-8: rgba(0, 129, 132, 0.08);
+  --tealscale-deep: #003133;
+  --tealscale-ocean: #00979d;
+  --tealscale-teal-20: rgba(0, 129, 132, 0.2);
+  --tealscale-dark: #006d70;
+  --tealscale-sapphire-8: rgba(37, 194, 199, 0.08);
+  --tealscale-sapphire-20: rgba(37, 194, 199, 0.2);
+  --tealscale-sapphire: #25c2c7;
+  --tealscale-turquoise: #7fcbcd;
+  --tealscale-teal: #008184;
+  --tealscale-forest: #005c5f;
+  --tealscale-aqua: #0ca1a6;
+  --tealscale-pastel-turquoise: #c8e9ea;
+  --green-iguana: #2ac62b;
+  --green-mist: #dcf2ed;
+  --green-leaf-20: rgba(33, 156, 34, 0.2);
+  --green-leaf: #219c22;
+  --green-emerald: #16a588;
+  --green-pine: #213d3c;
+  --green-iguana-20: rgba(42, 198, 43, 0.2);
+  --red-peach: #f6d9d5;
+  --red-apricot: #ffbdb4;
+  --red-crimson-20: rgba(230, 25, 94, 0.2);
+  --red-brick: #702419;
+  --red-carmine: #aa4335;
+  --red-raspberry: #eb477e;
+  --red-coral: #ff8878;
+  --red-crimson: #e6195e;
+  --red-cherry: #611005;
+  --red-raspberry-20: rgba(235, 71, 126, 0.2);
+  --red-carmine-20: rgba(170, 67, 53, 0.2);
+  --red-coral-20: rgba(255, 136, 120, 0.2);
+  --orange-paprika: #e05a00;
+  --orange-clay-20: rgba(231, 127, 96, 0.2);
+  --orange-paprika-20: rgba(224, 90, 0, 0.2);
+  --orange-clay: #e77f60;
+  --yellow-saffron: #c1ab15;
+  --yellow-harvest: #938210;
+  --yellow-harvest-20: rgba(147, 130, 16, 0.2);
+  --yellow-golden-yellow: #ecc00e;
+  --yellow-terra-brown: #5f5824;
+  --yellow-banana: #f9ecb7;
+  --yellow-pale-butter: #fff5cc;
+  --yellow-saffron-20: rgba(193, 171, 21, 0.2);
+  --blue-cobalt: #15addf;
+  --blue-cerulean-20: rgba(17, 138, 178, 0.2);
+  --blue-cerulean: #118ab2;
+  --blue-cobalt-20: rgba(21, 173, 223, 0.2);
+  --purple-orchid: #bc38eb;
+  --purple-amethyst-20: rgba(150, 28, 193, 0.2);
+  --purple-amethyst: #961cc1;
+  --purple-orchid-20: rgba(188, 56, 235, 0.2);
+  --social-linkedin: #006699;
+  --social-discord: #5865f2;
+  --social-youtube: #ff0000;
+  --social-github: #000000;
+  --social-pinterest: #e60023;
+  --social-facebook: #1978f2;
+  --social-twitter: #1da1f2;
+  --social-rss: #ffa500;
+  --social-flickr: #ff47a4;
+  --social-instagram: #db3075;
+  --edu-bronze-lighter: #bcac99;
+  --edu-tangerine: #f26727;
+  --edu-bronze-secondary: #9e846d;
+  --edu-sun-flowers: #f1c40f;
+  --edu-light-bronze-secondary: #bcac99;
+  --edu-carrot-secondary: #f39c12;
+  --edu-orange: #f39c12;
+  --edu-tangerine-20: rgba(242, 103, 39, 0.2);
+  --pro-electric-lime: #def154;
+  --pro-dark-lime: #798215;
+  --pro-pro-concrete: #b2b2b2;
+  --pro-pro-dust: #58585a;
+  --pro-pro-charcoal: #2f2f2f;
+  --pro-light-lime: #f5ffad;
+  --pro-pro-onyx: #202020;
+  --pro-pro-black: #111111;
+  --pro-electric-lime-20: rgba(222, 241, 84, 0.2);
+  --pro-light-lime-20: rgba(245, 255, 173, 0.2);
+  --pro-light-lime-8: rgba(245, 255, 173, 0.08);
+  --widgets-color-red-red-70: #bd4c41;
+  --widgets-color-red-red-100: #ff5a49;
+  --widgets-color-red-red-30: #7b3e39;
+  --widgets-color-blue-blue-100: #568eff;
+  --widgets-color-blue-blue-70: #4770c0;
+  --widgets-color-blue-blue-30: #375382;
+  --widgets-color-teal-teal-100: #25c2c7;
+  --widgets-color-teal-teal-70: #249599;
+  --widgets-color-teal-teal-30: #24676b;
+  --widgets-color-gray-gray-70: #738082;
+  --widgets-color-gray-gray-100: #95a5a6;
+  --widgets-color-gray-gray-30: #515c5e;
+  --widgets-color-orange-orange-100: #fe9b4f;
+  --widgets-color-orange-orange-70: #bc7945;
+  --widgets-color-orange-orange-30: #7b583b;
+  --widgets-color-purple-purple-70: #8b5ac0;
+  --widgets-color-purple-purple-100: #b86eff;
+  --widgets-color-purple-purple-30: #5f4682;
+  --widgets-color-yellow-yellow-100: #ffd15c;
+  --widgets-color-yellow-yellow-70: #bd9f4e;
+  --widgets-color-yellow-yellow-30: #7b6d40;
+  --widgets-color-green-green-100: #16a534;
+  --widgets-color-green-green-70: #1a8032;
+  --widgets-color-green-green-30: #1e5c30;
+  --widgets-color-sticky-note-white: #ffffff;
+  --widgets-color-sticky-note-pink: #ffbedd;
+  --widgets-color-sticky-note-orange: #ffcb9a;
+  --widgets-color-sticky-note-cyan: #a0eeff;
+  --widgets-color-sticky-note-yellow: #ffeaa1;
+  --widgets-color-sticky-note-green: #b4ffd6;
+  --accent-default: var(--tealscale-sapphire);
+  --accent-default-strong: var(--tealscale-turquoise);
+  --accent-edu-primary: var(--edu-tangerine);
+  --accent-pro-primary: var(--pro-electric-lime);
+  --accent-pro-primary-strong: var(--pro-dark-lime);
+  --accent-edu-secondary: var(--edu-sun-flowers);
+  --accent-subtle: var(--tealscale-teal);
+  --accent-alpha: var(--tealscale-sapphire-20);
+  --accent-alpha-subtle: var(--tealscale-sapphire-8);
+  --surface-bg-above: var(--grayscale-jet);
+  --surface-bg-baseline: var(--grayscale-outer-space);
+  --surface-bg-below-1: var(--grayscale-onyx);
+  --surface-bg-below-2: var(--grayscale-rich-black);
+  --component-bg-flexible: var(--grayscale-ash-grey-15);
+  --component-bg-scrim: var(--grayscale-black-50);
+  --component-bg-inverted: var(--grayscale-cloud);
+  --component-bg-banner-edu: var(--edu-tangerine-20);
+  --component-bg-neutral: var(--grayscale-gris);
+  --text-default: var(--grayscale-white);
+  --text-subtle: var(--grayscale-smoke);
+  --text-inverted: var(--grayscale-onyx);
+  --text-inverted-subtle: var(--grayscale-nevada);
+  --text-on-accent: var(--grayscale-onyx);
+  --border-default: var(--grayscale-dust);
+  --border-strong: var(--grayscale-asbestos);
+  --border-inverted: var(--grayscale-outer-space);
+  --feedback-neutral-default: var(--grayscale-ash-grey);
+  --feedback-neutral-strong: var(--grayscale-fog);
+  --feedback-neutral-selected: var(--grayscale-ash-grey);
+  --feedback-success-default: var(--green-emerald);
+  --feedback-success-subtle: var(--green-pine);
+  --feedback-success-strong: var(--green-mist);
+  --feedback-success-selected: var(--green-pine);
+  --feedback-warning-default: var(--yellow-saffron);
+  --feedback-warning-strong: var(--yellow-pale-butter);
+  --feedback-warning-subtle: var(--yellow-harvest);
+  --feedback-warning-selected: var(--yellow-terra-brown);
+  --feedback-error-default: var(--red-coral);
+  --feedback-error-subtle: var(--red-brick);
+  --feedback-error-strong: var(--red-apricot);
+  --feedback-error-selected: var(--red-carmine);
+  --feedback-error-flexible: var(--red-coral-20);
+  --feedback-notification-default: var(--red-coral);
+  --feedback-positive-default: var(--green-emerald);
+  --feedback-positive-subtle: var(--green-pine);
+  --feedback-positive-strong: var(--green-mist);
+  --feedback-positive-selected: var(--green-pine);
+  --cloud-assets-thing: var(--orange-clay);
+  --cloud-assets-thing-bg: var(--orange-clay-20);
+  --cloud-assets-device: var(--blue-cobalt);
+  --cloud-assets-device-bg: var(--blue-cobalt-20);
+  --cloud-assets-sketch: var(--green-iguana);
+  --cloud-assets-sketch-bg: var(--green-iguana-20);
+  --cloud-assets-dashboard: var(--purple-orchid);
+  --cloud-assets-dashboard-bg: var(--purple-orchid-20);
+  --cloud-assets-trigger: var(--yellow-saffron);
+  --cloud-assets-trigger-bg: var(--yellow-saffron-20);
+  --cloud-assets-template: var(--red-raspberry);
+  --cloud-assets-template-bg: var(--red-raspberry-20);
+  --widgets-advanced-chart-point-overlay: var(--grayscale-white-40);
+  --global-snackbar-warning-text: var(--grayscale-outer-space);
+  --global-snackbar-warning-icon: var(--grayscale-outer-space);
+  --global-scrollbar-default: var(--grayscale-asbestos);
+  --global-toggle-background-inactive: var(--grayscale-concrete);
+  --global-toggle-handle-inactive: var(--grayscale-white);
+  --global-toggle-handle-active: var(--grayscale-white);
+  --dashboards-grid-point: var(--grayscale-gris);
+  --component-bg-above: var(--surface-bg-above);
+  --component-bg-baseline: var(--surface-bg-baseline);
+  --component-bg-below-1: var(--surface-bg-below-1);
+  --component-bg-below-2: var(--surface-bg-below-2);
+  --component-bg-accent: var(--accent-default);
+  --component-bg-accent-strong: var(--accent-default-strong);
+  --component-bg-hover: var(--accent-alpha-subtle);
+  --component-bg-selected: var(--accent-alpha);
+  --component-bg-banner: var(--accent-alpha);
+  --text-accent-strong: var(--accent-default-strong);
+  --text-accent: var(--accent-default);
+  --text-link-strong: var(--accent-default-strong);
+  --text-link: var(--accent-default);
+  --text-selected: var(--accent-subtle);
+  --icon-default: var(--text-default);
+  --icon-subtle: var(--text-subtle);
+  --icon-inverted: var(--text-inverted);
+  --icon-inverted-subtle: var(--text-inverted-subtle);
+  --icon-on-accent: var(--text-on-accent);
+  --border-accent: var(--accent-default);
+  --border-accent-strong: var(--accent-default-strong);
+  --border-selected: var(--accent-subtle);
+  --border-selected-inverted: var(--accent-default-strong);
+  --feedback-neutral-subtle: var(--component-bg-flexible);
+  --global-chip-warning-text-selected: var(--text-inverted);
+  --global-chip-error-text-selected: var(--text-inverted);
+  --global-chip-focus-text-selected: var(--text-inverted);
+  --global-snackbar-success-text: var(--text-default);
+  --icon-accent: var(--text-accent);
+  --icon-accent-strong: var(--text-accent-strong);
+  --icon-link: var(--text-link);
+  --icon-link-strong: var(--text-link-strong);
+  --icon-selected: var(--text-selected);
+  --global-chip-warning-icon-selected: var(--icon-inverted);
+  --global-chip-error-icon-selected: var(--icon-inverted);
+  --global-chip-focus-icon-selected: var(--icon-inverted);
+  --global-snackbar-success-icon: var(--icon-default);
+}

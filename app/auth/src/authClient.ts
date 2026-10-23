@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Auth0Client } from '@auth0/auth0-spa-js';
-import { type JwtPayload, jwtDecode } from 'jwt-decode';
 
 import { checkResponse, unauthenticatedUser } from './provider/provider';
 import { ArduinoUser, AuthClientOptions, Customization } from './types';
@@ -135,16 +134,7 @@ class AuthClient extends Auth0Client {
   }
 
   public async checkTosAcceptance(): Promise<boolean> {
-    if (!this.customConfig) {
-      console.warn('[AuthClient] Custom configuration not available.');
-      return true;
-    }
-
-    // Get JWT token and parse it. Will throw an error if the token is not available/user is not authenticated.
-    const decodedToken = jwtDecode<JwtPayload & { tos_accepted?: boolean }>(
-      await this.getTokenSilently(),
-    );
-    return Boolean(decodedToken.tos_accepted);
+    return true;
   }
 
   private async validateTos(): Promise<void> {
@@ -175,7 +165,6 @@ class AuthClient extends Auth0Client {
     }
     return res;
   }
-
 
   public override async getUser(
     ...args: Parameters<Auth0Client['getUser']>

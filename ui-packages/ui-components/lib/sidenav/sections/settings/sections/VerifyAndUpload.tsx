@@ -6,7 +6,7 @@ import { XSmall, XXSmall } from '../../../../typography';
 import { SettingsContext } from '../context/settingsContext';
 import { messages } from '../messages';
 import styles from '../settings.module.scss';
-import { Preferences } from '../settings.type';
+import { Preferences, PreferenceValue } from '../settings.type';
 
 const VerifyAndUpload: React.FC = () => {
   const { getPreference, setPreference } = useContext(SettingsContext);
@@ -25,7 +25,10 @@ const VerifyAndUpload: React.FC = () => {
             defaultValue={consoleOutput}
             value={consoleOutput}
             onChange={(consoleOutput): void => {
-              setPreference(Preferences.ConsoleOutput, consoleOutput);
+              setPreference(
+                Preferences.ConsoleOutput,
+                consoleOutput as PreferenceValue,
+              );
             }}
           >
             <Radio

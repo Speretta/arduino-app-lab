@@ -154,6 +154,9 @@ func registerAppBricksAdd(srv *mcp.Server, access BoardAccess) {
 		if appID == "" || brickID == "" {
 			return nil, nil, fmt.Errorf("app id and brick id are required")
 		}
+		if err := requireUserApp(ctx, access, appID); err != nil {
+			return nil, nil, err
+		}
 		body, err := in.body()
 		if err != nil {
 			return nil, nil, err
@@ -170,7 +173,7 @@ func registerAppBricksAdd(srv *mcp.Server, access BoardAccess) {
 func registerAppBricksUpdate(srv *mcp.Server, access BoardAccess) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "app_bricks_update",
-		Description: "Update a Brick already configured in an app: change its selected AI model and/or its config variables. Mutating — asks the user for permission. Pass the app id, the brick id (app_bricks_list), and the fields to change.",
+		Description: "Update a Brick already configured in an app: change its selected AI model and/or its config variables. Mutating — asks the user for permission. Pass the app id, the brick id (app_bricks_list), and the fields to change. On an installed App release only secret variables can be set: its model and other variables are frozen.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in appBrickWriteInput) (*mcp.CallToolResult, any, error) {
 		appID, brickID := strings.TrimSpace(in.AppID), strings.TrimSpace(in.BrickID)
 		if appID == "" || brickID == "" {
@@ -203,6 +206,9 @@ func registerAppBricksRemove(srv *mcp.Server, access BoardAccess) {
 		appID, brickID := strings.TrimSpace(in.AppID), strings.TrimSpace(in.BrickID)
 		if appID == "" || brickID == "" {
 			return nil, nil, fmt.Errorf("app id and brick id are required")
+		}
+		if err := requireUserApp(ctx, access, appID); err != nil {
+			return nil, nil, err
 		}
 		path := "/v1/apps/" + url.PathEscape(appID) + "/bricks/" + url.PathEscape(brickID)
 		if _, err := orchestratorRequest(ctx, access, http.MethodDelete, path, nil); err != nil {

@@ -1,8 +1,8 @@
 ---
 name: "@radix-ui/react-use-effect-event"
-version: 0.0.2
+version: 0.0.5
 type: npm
-summary: 
+summary:
 homepage: https://radix-ui.com/primitives
 license: mit
 licenses:

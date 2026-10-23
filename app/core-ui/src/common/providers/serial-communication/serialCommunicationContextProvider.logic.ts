@@ -4,6 +4,7 @@ import {
   UploadStatus,
 } from '@cloud-editor-mono/board-communication-tools';
 import {
+  AgentPort,
   connectToAgent,
   daemonState,
   discoverPorts,
@@ -18,21 +19,23 @@ import {
   isChromeOs,
   MappedPort,
 } from '@cloud-editor-mono/domain';
+import { GetAgentMetadataResponseData } from '@cloud-editor-mono/infrastructure';
 import { ArduinoBuilderV2CompilationsResponse_BuilderApi } from '@cloud-editor-mono/infrastructure';
 import {
   listPorts,
   requestPort,
   setWebSerialState,
+  WebSerialPort,
   webSerialState,
   WebSerialStateKeys,
 } from '@cloud-editor-mono/web-board-communication';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { isEqual } from 'lodash-es';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useSketchParams } from '../../../cloud-editor/features/main/hooks/sketch';
-import { useCompileComputeAndUpload } from '../../../common/hooks/queries/builder';
-import { CompilePayload } from '../../../common/hooks/queries/builder.type';
+import { useCompileComputeAndUpload } from '../../hooks/queries/builder';
+import { CompilePayload } from '../../hooks/queries/builder.type';
 import {
   MappedPorts,
   UseAgent,
@@ -290,48 +293,45 @@ export const useSerialCommunication: UseSerialCommunication =
 const useAgent: UseAgent = function (
   agentEnabled: boolean,
 ): ReturnType<UseAgent> {
-  const poolForAgent = useRef(true);
-
-  const { data: agentMetadata } = useQuery(
-    ['agent-metadata'],
-    getAgentMetadata,
-    { enabled: agentEnabled },
-  );
+  const { data: agentMetadata } = useQuery<GetAgentMetadataResponseData>({
+    queryKey: ['agent-metadata'],
+    queryFn: getAgentMetadata,
+    enabled: agentEnabled,
+  });
   const agentMetadataRetrieved = Boolean(agentMetadata);
 
-  const { data: agentConnected } = useQuery(
-    ['agent-connect'],
-    () =>
+  const { data: agentConnected } = useQuery({
+    queryKey: ['agent-connect'],
+
+    queryFn: () =>
       agentMetadata?.version
         ? connectToAgent(agentMetadata.version)
         : Promise.reject(
             new Error('Tried to connect to Agent without metadata'),
           ),
-    {
-      enabled: agentMetadataRetrieved,
-      onSuccess() {
-        poolForAgent.current = false;
-      },
-      ...(poolForAgent.current && {
-        refetchInterval: 2000,
-      }),
-    },
-  );
+
+    enabled: agentMetadataRetrieved,
+
+    // Poll until the first resolved connection attempt, then stop. Each
+    // attempt re-runs the agent search, update check and socket setup.
+    refetchInterval: (query) =>
+      query.state.status === 'success' ? false : 2000,
+  });
   const agentConnectedDone = Boolean(agentConnected);
 
-  const { data: defaultDownloadsResponse } = useQuery(
-    ['install-tools'],
-    downloadDefaultTools,
-    {
-      enabled: agentConnectedDone,
-    },
-  );
+  const { data: defaultDownloadsResponse } = useQuery({
+    queryKey: ['install-tools'],
+    queryFn: downloadDefaultTools,
+    enabled: agentConnectedDone,
+  });
   const defaultDownloadsDone = Boolean(defaultDownloadsResponse);
 
-  const { data: agentPorts } = useQuery(['list-ports'], discoverPorts, {
+  const { data: agentPorts } = useQuery<AgentPort[]>({
+    queryKey: ['list-ports'],
+    queryFn: discoverPorts,
     enabled: agentConnectedDone && defaultDownloadsDone,
     refetchInterval: 1500,
-    cacheTime: 0,
+    gcTime: 0,
   });
 
   return {
@@ -342,10 +342,12 @@ const useAgent: UseAgent = function (
 const useWebSerial: UseWebSerial = function (
   agentEnabled: boolean,
 ): ReturnType<UseWebSerial> {
-  const { data: webSerialPorts } = useQuery(['web-serial-ports'], listPorts, {
+  const { data: webSerialPorts } = useQuery<WebSerialPort[]>({
+    queryKey: ['web-serial-ports'],
+    queryFn: listPorts,
     enabled: !agentEnabled,
     refetchInterval: 1500,
-    cacheTime: 0,
+    gcTime: 0,
   });
 
   setWebSerialState({ [WebSerialStateKeys.Ports]: webSerialPorts });

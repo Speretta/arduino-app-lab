@@ -11,4 +11,9 @@
   &.disabled {
     cursor: not-allowed;
   }
+
+  &.span {
+    display: inline-flex;
+    align-items: center;
+  }
 }

@@ -2,6 +2,7 @@ import { Extension } from '@codemirror/state';
 
 import { FormatMessage } from '../../../../i18n/useI18n';
 import { CustomLspClient } from '../lsp-client/lsp-client-types';
+import { LspReferencesPanelActions } from '../lsp-references/lsp-references-types';
 import { LspLang } from '../lsp-types';
 import { getLspClientExtension } from './extensions/lsp-client/lsp-client-extension';
 import { getLspClientKeymapExtension } from './extensions/lsp-client/lsp-client-keymap-extension';
@@ -14,7 +15,7 @@ import { getLspRenamePanelBlurExtension } from './extensions/lsp-rename-panel/ls
 import { getLspRenamePanelPositionExtension } from './extensions/lsp-rename-panel/lsp-rename-panel-position-extension';
 import { getLspTooltipsExtension } from './extensions/lsp-tooltip-extension';
 
-interface GetLspExtensionsParams {
+type GetLspExtensionsParams = {
   client: CustomLspClient;
   fileId: string;
   lang: LspLang;
@@ -22,7 +23,7 @@ interface GetLspExtensionsParams {
   formatMessage: FormatMessage;
   onHoverLinkClick?: (url: string) => void;
   readOnly?: boolean;
-}
+} & LspReferencesPanelActions;
 
 export const getLspExtensions = ({
   client,
@@ -32,11 +33,22 @@ export const getLspExtensions = ({
   formatMessage,
   onHoverLinkClick,
   readOnly = false,
+  showLspReferences,
+  closeLspReferences,
 }: GetLspExtensionsParams): Extension => {
   const extensions: Extension[] = [
     getLspClientExtension({ client, fileId, lang, workspaceUri }),
-    getLspClientKeymapExtension({ formatMessage, readOnly }),
-    getLspNavigationFeatureExtension({ client }),
+    getLspClientKeymapExtension({
+      formatMessage,
+      readOnly,
+      showLspReferences,
+      closeLspReferences,
+    }),
+    getLspNavigationFeatureExtension({
+      client,
+      formatMessage,
+      showLspReferences,
+    }),
     getLspDocumentHighlightExtension({ client }),
     getLspLinkExtension({ onHoverLinkClick }),
     getLspTooltipsExtension(),

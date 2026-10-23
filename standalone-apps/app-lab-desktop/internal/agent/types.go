@@ -25,6 +25,16 @@ type SessionSummary struct {
 	UpdatedAt string `json:"updatedAt,omitempty"` // ISO 8601 last-activity timestamp
 	Status    string `json:"status,omitempty"`    // last-turn outcome overlaid by App Lab: "error" or empty (idle); live states are FE-only
 	Pinned    bool   `json:"pinned,omitempty"`    // client-side: user pinned this session to the top of the sidebar
+	// WorkspaceAppID is the app the session was opened for; empty is the general workspace, which sees the whole board.
+	WorkspaceAppID string `json:"workspaceAppId,omitempty"`
+	// WorkspaceName is that app's name when the session was opened, so the UI can still name an app the board no longer lists.
+	WorkspaceName string `json:"workspaceName,omitempty"`
+}
+
+// SessionWorkspace scopes a session to one app the user picked; the zero value is the general workspace (whole board).
+type SessionWorkspace struct {
+	AppID string
+	Name  string // display name, for the system prompt; the id alone reads as noise to the model
 }
 
 // NewSessionResult is a new session's id plus the models and modes the agent advertised at creation.
@@ -38,29 +48,33 @@ type NewSessionResult struct {
 
 // Update mirrors the TS AgentUpdate union, flattened for JSON to the webview.
 type Update struct {
-	Type        string         `json:"type"`                  // message_chunk | thinking | tool_call | tool_call_update | checklist | model_change | mode_change
-	Delta       string         `json:"delta,omitempty"`       // message_chunk, thinking
-	ToolCall    *ToolCall      `json:"toolCall,omitempty"`    // tool_call
-	ID          string         `json:"id,omitempty"`          // tool_call_update
-	Status      string         `json:"status,omitempty"`      // tool_call_update
-	Output      string         `json:"output,omitempty"`      // tool_call_update
-	Input       any            `json:"input,omitempty"`       // tool_call_update (refined args)
-	Checklist   *Checklist     `json:"checklist,omitempty"`   // checklist
-	Choices     *ChoiceRequest `json:"choices,omitempty"`     // choices (form elicitation)
-	ModelID     string         `json:"modelId,omitempty"`     // model_change
-	Models      []AgentModel   `json:"models,omitempty"`      // model_change
-	ModeID      string         `json:"modeId,omitempty"`      // mode_change
-	UsedTokens  int            `json:"usedTokens,omitempty"`  // usage
-	ContextSize int            `json:"contextSize,omitempty"` // usage
+	Type             string         `json:"type"`                       // message_chunk | thinking | tool_call | tool_call_update | checklist | model_change | mode_change
+	Delta            string         `json:"delta,omitempty"`            // message_chunk, thinking
+	ToolCall         *ToolCall      `json:"toolCall,omitempty"`         // tool_call
+	ID               string         `json:"id,omitempty"`               // tool_call_update
+	Status           string         `json:"status,omitempty"`           // tool_call_update
+	Output           string         `json:"output,omitempty"`           // tool_call_update
+	Input            any            `json:"input,omitempty"`            // tool_call_update (refined args)
+	OutsideWorkspace bool           `json:"outsideWorkspace,omitempty"` // tool_call_update: the call turned out to act on another app
+	Checklist        *Checklist     `json:"checklist,omitempty"`        // checklist
+	Choices          *ChoiceRequest `json:"choices,omitempty"`          // choices (form elicitation)
+	ModelID          string         `json:"modelId,omitempty"`          // model_change
+	Models           []AgentModel   `json:"models,omitempty"`           // model_change
+	ModeID           string         `json:"modeId,omitempty"`           // mode_change
+	UsedTokens       int            `json:"usedTokens,omitempty"`       // usage
+	ContextSize      int            `json:"contextSize,omitempty"`      // usage
 }
 
 type ToolCall struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Kind   string `json:"kind,omitempty"`
-	Status string `json:"status"`
-	Input  any    `json:"input,omitempty"` // the tool's raw arguments (ACP rawInput)
-	Output string `json:"output,omitempty"`
+	ID     string   `json:"id"`
+	Title  string   `json:"title"`
+	Kind   string   `json:"kind,omitempty"`
+	Status string   `json:"status"`
+	Input  any      `json:"input,omitempty"` // the tool's raw arguments (ACP rawInput)
+	Paths  []string `json:"paths,omitempty"` // files the call touches, as the agent declared them (ACP locations)
+	// True when the call acts outside the session's workspace app; resolved host-side so badge, prompt and auto-approval are one decision.
+	OutsideWorkspace bool   `json:"outsideWorkspace,omitempty"`
+	Output           string `json:"output,omitempty"`
 }
 
 type ChecklistItem struct {

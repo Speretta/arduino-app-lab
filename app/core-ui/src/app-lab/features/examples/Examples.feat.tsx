@@ -1,5 +1,6 @@
 import {
   AppLabExamples,
+  PageLayout,
   TopBar,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useCallback } from 'react';
@@ -11,16 +12,11 @@ const Examples: React.FC = () => {
   const examplesLogic = useCallback(() => createUseExamplesLogic()(), []);
 
   return (
-    <section className={styles['main']}>
-      <div className={styles['header']}>
-        <TopBar pathItems={['examples']} />
+    <PageLayout header={<TopBar pathItems={['examples']} />}>
+      <div className={styles['content']}>
+        <AppLabExamples examplesLogic={examplesLogic} />
       </div>
-      <div className={styles['body']}>
-        <div className={styles['content']}>
-          <AppLabExamples examplesLogic={examplesLogic} />
-        </div>
-      </div>
-    </section>
+    </PageLayout>
   );
 };
 export default Examples;

@@ -35,7 +35,7 @@ export let Config = {
   DIGITAL_STORE_URL: import.meta.env.VITE_DIGITAL_STORE_URL,
   CLOUD_CDN_URL: import.meta.env.VITE_CLOUD_CDN_URL,
   API_URL: import.meta.env.VITE_API_URL,
-  WL_API_URL: import.meta.env.VITE_WL_API_URL,
+  API2_URL: import.meta.env.VITE_API2_URL,
   // Domain vars - for spaces
   DOMAIN: import.meta.env.VITE_DOMAIN,
   COOKIES_DOMAIN: import.meta.env.VITE_COOKIES_DOMAIN,
@@ -58,11 +58,12 @@ export let Config = {
   ORGANIZATIONS_LOGO_URL: import.meta.env.VITE_ORGANIZATIONS_LOGO_URL,
   PROVISIONING_API_URL: import.meta.env.VITE_PROVISIONING_API_URL,
   GEN_AI_API_URL: import.meta.env.VITE_GEN_AI_API_URL,
+  PROJECT_HUB_API_URL: import.meta.env.VITE_PROJECT_HUB_API_URL,
+  PROJECT_HUB_URL: import.meta.env.VITE_PROJECT_HUB_URL,
   // Misc backends
   CODE_FORMATTER_API_URL: import.meta.env.VITE_CODE_FORMATTER_API_URL,
   // Optin-out
   WEB_IDE_URL: import.meta.env.VITE_WEB_IDE_URL,
-  BYPASS_OPTIN: import.meta.env.VITE_BYPASS_OPTIN,
   // Agent
   AGENT_FIRST_POSSIBLE_PORT: import.meta.env.VITE_AGENT_FIRST_POSSIBLE_PORT,
   AGENT_LAST_POSSIBLE_PORT: import.meta.env.VITE_AGENT_LAST_POSSIBLE_PORT,

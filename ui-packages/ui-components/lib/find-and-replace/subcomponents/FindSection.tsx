@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from '@cloud-editor-mono/images/assets/icons';
+import { ChevronDown } from '@cloud-editor-mono/images/assets/icons';
 import clsx from 'clsx';
 
 import { IconButton } from '../../essential/icon-button';
@@ -35,9 +35,10 @@ const FindSection: React.FC<FindSectionProps> = (props: FindSectionProps) => {
     <section className={styles['row']}>
       <div className={styles['find']}>
         <BasicInput
-          // eslint-disable-next-line jsx-a11y/no-autofocus
           autoFocus
           className={styles['input']}
+          blurOnEnter={false}
+          onEnter={selectNextMatch}
           value={searchState.searchValue}
           onChange={(value): void => {
             setSearchState((prev) => ({
@@ -81,7 +82,7 @@ const FindSection: React.FC<FindSectionProps> = (props: FindSectionProps) => {
           classes={{
             button: styles['prev'],
           }}
-          Icon={ChevronUp}
+          Icon={ChevronDown}
         />
         <IconButton
           title="Next"

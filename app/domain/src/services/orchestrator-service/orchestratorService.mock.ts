@@ -1,13 +1,13 @@
 import {
-  AIModel,
   AIModelItem,
+  AppBrickDetails,
+  AppBrickListItem,
   AppConfig,
   AppDetailedInfo,
   AppInfo,
   AppPort,
   BrickCreateUpdateRequest,
   BrickDetails,
-  BrickInstance,
   BrickListItem,
   CloneAppRequest,
   CreateAppRequest,
@@ -21,10 +21,7 @@ import {
   UpdateCheckResult,
   WebSocketHandlers,
 } from '@cloud-editor-mono/infrastructure';
-import {
-  ImportResourceResult,
-  TreeNode,
-} from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
+import { ImportResourceResult } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 
 import { OrchestratorService } from './orchestrator-service.type';
 
@@ -115,123 +112,10 @@ export const mockApps: AppInfo[] = [
   },
 ];
 
-const mockFileTree: TreeNode = {
-  name: 'myapp',
-  path: '/myapp',
-  type: 'folder',
-  createdAt: '2023-01-01T10:00:00Z',
-  modifiedAt: '2024-05-01T12:00:00Z',
-  children: [
-    {
-      name: 'README.md',
-      path: '/myapp/README.md',
-      type: 'file',
-      extension: '.md',
-      mimeType: 'text/markdown',
-      size: 2048,
-      createdAt: '2023-01-02T09:00:00Z',
-      modifiedAt: new Date(Date.now() - 86400000).toISOString(),
-    },
-    {
-      name: 'python',
-      path: '/myapp/python',
-      type: 'folder',
-      createdAt: '2023-02-01T11:00:00Z',
-      modifiedAt: '2024-03-15T14:00:00Z',
-      children: [
-        {
-          name: 'main.py',
-          path: '/myapp/python/main.py',
-          type: 'file',
-          extension: '.py',
-          mimeType: 'text/x-python',
-          size: 1024,
-          createdAt: '2023-02-02T10:00:00Z',
-          modifiedAt: '2024-03-10T16:00:00Z',
-        },
-        {
-          name: 'requirements.txt',
-          path: '/myapp/python/requirements.txt',
-          type: 'file',
-          extension: '.txt',
-          mimeType: 'text/plain',
-          size: 512,
-          createdAt: '2023-02-03T12:00:00Z',
-          modifiedAt: '2024-03-12T09:00:00Z',
-        },
-      ],
-    },
-    {
-      name: 'sketch',
-      path: '/myapp/sketch',
-      type: 'folder',
-      createdAt: '2023-03-01T08:00:00Z',
-      modifiedAt: new Date().toISOString(),
-      children: [
-        {
-          name: 'sketch.ino',
-          path: '/myapp/sketch/sketch.ino',
-          type: 'file',
-          extension: '.ino',
-          mimeType: 'text/ino',
-          size: 3072,
-          createdAt: '2023-03-02T07:00:00Z',
-          modifiedAt: new Date().toISOString(),
-        },
-        {
-          name: 'utils.h',
-          path: '/myapp/sketch/utils.h',
-          type: 'file',
-          extension: '.h',
-          mimeType: 'text/x-chdr',
-          size: 768,
-          createdAt: '2023-03-03T10:00:00Z',
-          modifiedAt: '2024-05-08T11:00:00Z',
-        },
-      ],
-    },
-    {
-      name: 'data',
-      path: '/myapp/data',
-      type: 'folder',
-      createdAt: '2023-04-01T09:00:00Z',
-      modifiedAt: '2024-04-20T10:00:00Z',
-      children: [
-        {
-          name: 'image.png',
-          path: '/myapp/data/image.png',
-          type: 'file',
-          extension: '.png',
-          mimeType: 'image/png',
-          size: 4096,
-          createdAt: '2023-04-02T08:00:00Z',
-          modifiedAt: '2025-04-18T13:00:00Z',
-        },
-        {
-          name: 'data.json',
-          path: '/myapp/data/data.json',
-          type: 'file',
-          extension: '.json',
-          mimeType: 'application/json',
-          size: 1536,
-          createdAt: '2023-04-03T11:00:00Z',
-          modifiedAt: '2025-04-19T14:00:00Z',
-        },
-      ],
-    },
-    {
-      name: 'app.yaml',
-      path: '/myapp/app.yaml',
-      type: 'file',
-      extension: '.yaml',
-      mimeType: 'text/yaml',
-      size: 256,
-      createdAt: '2023-01-05T13:00:00Z',
-      modifiedAt: '2024-05-01T12:30:00Z',
-    },
-  ],
-};
-const mockAppBricksByAppId: Record<string, Record<string, BrickInstance>> = {};
+const mockAppBricksByAppId: Record<
+  string,
+  Record<string, AppBrickDetails>
+> = {};
 
 const mockLibraries = [
   {
@@ -464,16 +348,28 @@ opencv-python`;
   return '# mock file\n';
 };
 
-const mockedEIModels: AIModel[] = [
+const mockedEIModels: AIModelItem[] = [
   {
     id: '1',
+    id_decoded: '1',
     name: 'My custom object detection',
     description: 'My custom made edge impulse model',
+    runner: '',
+    brick_ids: [],
+    is_builtin: false,
+    origin: 'edge-impulse-user-project',
+    status: 'not-installed',
   },
   {
     id: '2',
+    id_decoded: '2',
     name: 'My custom image classification',
     description: 'My custom made edge impulse model',
+    runner: '',
+    brick_ids: [],
+    is_builtin: false,
+    origin: 'edge-impulse-user-project',
+    status: 'not-installed',
   },
 ];
 
@@ -483,7 +379,10 @@ const mockedInstalledModel: AIModelItem = {
   description: 'My custom made edge impulse model',
   size: 50000,
   id: '1',
+  id_decoded: '1',
+  status: 'installed',
   is_builtin: false,
+  origin: 'edge-impulse-user-project',
   metadata: {
     'ei-project-id': '1',
     'ei-impulse-id': '2',
@@ -632,10 +531,6 @@ export const MockOrchestratorService: OrchestratorService = {
     }
     mockApps.splice(index, 1);
     return true;
-  },
-
-  async getFiles(_path: string): Promise<TreeNode[]> {
-    return [{ ...mockFileTree }];
   },
 
   async getFileContent(path: string): Promise<string> {
@@ -855,7 +750,7 @@ export const MockOrchestratorService: OrchestratorService = {
     return true;
   },
 
-  async getAppBricks(appId: string): Promise<BrickInstance[]> {
+  async getAppBricks(appId: string): Promise<AppBrickListItem[]> {
     const map = mockAppBricksByAppId[appId];
     if (!map) return [];
     return Object.values(map);
@@ -864,7 +759,7 @@ export const MockOrchestratorService: OrchestratorService = {
   async getAppBrickInstance(
     appId: string,
     brickId: string,
-  ): Promise<BrickInstance> {
+  ): Promise<AppBrickDetails> {
     const map = mockAppBricksByAppId[appId];
     const instance = map?.[brickId];
 
@@ -915,12 +810,22 @@ export const MockOrchestratorService: OrchestratorService = {
     appId: string,
     brickId: string,
     params: { name: string },
-  ): Promise<boolean> {
-    if (!mockAppBricksByAppId[appId]) return false;
+  ): Promise<string | null> {
+    if (!mockAppBricksByAppId[appId]) return null;
     const brick = mockAppBricksByAppId[appId][brickId];
-    if (!brick) return false;
-    brick.name = params.name;
-    return true;
+    if (!brick) return null;
+    const newBrickId =
+      params.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || brickId;
+    delete mockAppBricksByAppId[appId][brickId];
+    mockAppBricksByAppId[appId][newBrickId] = {
+      ...brick,
+      id: newBrickId,
+      name: params.name,
+    };
+    return newBrickId;
   },
 
   async getBricks(): Promise<BrickListItem[]> {
@@ -1087,12 +992,52 @@ export const MockOrchestratorService: OrchestratorService = {
     return Promise.resolve({ id: '1', name: 'app' });
   },
 
+  startReleaseBuild() {
+    return Promise.resolve(new Blob());
+  },
+
+  chooseReleaseSavePath() {
+    return Promise.resolve(undefined);
+  },
+
+  writeReleaseFile() {
+    return Promise.resolve();
+  },
+
+  readReleaseManifest() {
+    return Promise.resolve({ name: 'Release', created_at: '' });
+  },
+
+  readReleaseArchive() {
+    return Promise.resolve(new Blob());
+  },
+
+  installRelease() {
+    return Promise.resolve({ id: '1', name: 'app' });
+  },
+
+  prepareApp() {
+    return Promise.resolve();
+  },
+
+  getReleaseBuildEvents() {
+    return Promise.resolve();
+  },
+
   exportApp(
     _id: string,
     _appName: string,
     _includeData: boolean,
   ): Promise<boolean> {
     return Promise.resolve(true);
+  },
+
+  exportAppArchive(
+    _id: string,
+    _includeData: boolean,
+    _abortController?: AbortController,
+  ): Promise<Blob> {
+    return Promise.resolve(new Blob(['mock-zip'], { type: 'application/zip' }));
   },
 
   getAIModels() {
@@ -1107,7 +1052,11 @@ export const MockOrchestratorService: OrchestratorService = {
     return Promise.resolve();
   },
 
-  uploadAIModel() {
+  installAIModel() {
+    return Promise.resolve();
+  },
+
+  downloadAIModel() {
     return Promise.resolve();
   },
 };

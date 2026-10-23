@@ -28,17 +28,17 @@ export const messages = defineMessages({
   },
   learnAndExploreLabel: {
     id: 'sidePanel.learnAndExplore',
-    defaultMessage: 'Learn and Explore',
-    description: 'Label for the Learn and Explore accordion',
+    defaultMessage: 'Learn and explore',
+    description: 'Label for the Learn and explore accordion',
   },
   bricksManagerLabel: {
     id: 'sidePanel.bricksManager',
-    defaultMessage: 'Bricks Manager',
-    description: 'Label for the Bricks Manager accordion',
+    defaultMessage: 'Bricks manager',
+    description: 'Label for the Bricks manager accordion',
   },
   createAppTooltip: {
     id: 'sidePanel.createApp',
-    defaultMessage: 'Create new app',
+    defaultMessage: 'Create new App',
     description: 'Tooltip for the create app trailing action on the Apps item',
   },
   boardSwitcherTooltip: {

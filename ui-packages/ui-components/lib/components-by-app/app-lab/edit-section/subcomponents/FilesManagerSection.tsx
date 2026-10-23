@@ -1,6 +1,5 @@
 import {
   AddBrick as AddBrickIcon,
-  AddLibrary as AddLibraryIcon,
   CaretDown as CaretDownIcon,
   FileAdd as FileAddIcon,
   FolderAdd as FolderAddIcon,
@@ -21,7 +20,6 @@ import {
   DuplicateFileDialog,
   FileTree,
   FileTreeApi,
-  FolderNode,
   IconButton,
   ImportResourceDialog,
   LibraryItem,
@@ -38,7 +36,14 @@ import styles from '../app-lab-edit-section.module.scss';
 import { useAppFilesSectionLogic } from '../appFiles';
 import { FilesManagerSectionLogic } from '../appLabEditSection.type';
 import { messages } from '../messages';
+import {
+  AddSketchLibraryButton,
+  AddSketchLibraryPopover,
+} from './AddSketchLibraryButton';
 import { FilesManagerContextMenu } from './FilesManagerContextMenu';
+
+// File names, shown as they are on disk.
+const SKETCH_FILE_NAMES = ['sketch.ino', 'sketch.yaml'];
 
 interface FilesManagerSectionProps {
   logic: FilesManagerSectionLogic;
@@ -92,8 +97,22 @@ export const FilesManagerSection = ({
     onBrickDragStart,
     onBrickDragEnd,
     onDragOverFolderChange,
-    onValidationError,
+    onFolderExpand,
+    checkPathConflict,
+    closeFolder,
+    sendAppLabNotification,
+    hasSketch,
+    boardOffline,
+    boardType,
+    addSketch,
+    openNetworkSettings,
   } = logic();
+
+  const isRelease = app?.release === true;
+  const isReadOnly = isRelease || section !== 'my-apps';
+  const readOnlyMessage = isRelease
+    ? messages.releaseReadonly
+    : messages.exampleReadonly;
   const { openFiles } = appLabEditorPanelLogic();
 
   const { formatMessage } = useI18n();
@@ -110,16 +129,38 @@ export const FilesManagerSection = ({
     [renameFileHandler],
   );
 
+  const canAddSketchLibrary =
+    !isReadOnly && hasSketch === true && !boardOffline;
+
+  // No sketch takes priority: creating one needs no internet.
+  const addSketchLibraryPopover: AddSketchLibraryPopover | undefined =
+    isReadOnly
+      ? undefined
+      : hasSketch === false
+      ? {
+          text: formatMessage(messages.noSketchPopoverText),
+          listItems: SKETCH_FILE_NAMES,
+          actionLabel: formatMessage(messages.addSketchFolderButton),
+          onAction: addSketch,
+        }
+      : hasSketch === true && boardOffline
+      ? {
+          text: formatMessage(messages.offlinePopoverText, {
+            boardType:
+              boardType || formatMessage(messages.offlinePopoverBoardFallback),
+          }),
+          actionLabel: formatMessage(messages.offlinePopoverConnectButton),
+          onAction: openNetworkSettings,
+        }
+      : undefined;
+
   const fileTreeRef = useRef<FileTreeApi>(null);
   const fileTreeContainerRef = useRef<HTMLDivElement>(null);
-
-  // Omit the root folder
-  const files =
-    fileTree && fileTree[0] ? (fileTree[0] as FolderNode).children : undefined;
 
   const {
     addAppBrickDialogLogic,
     openAddAppBrickDialog,
+    openCreateAppBrickDialog,
     deleteAppBrickDialogLogic,
     openDeleteAppBrickDialog,
     renameAppBrickDialogLogic,
@@ -136,6 +177,7 @@ export const FilesManagerSection = ({
     configureAppBrickDialogLogic,
     addAppCustomBrick,
     renameAppCustomBrick,
+    sendAppLabNotification,
   });
 
   return (
@@ -162,26 +204,25 @@ export const FilesManagerSection = ({
             appearance={ButtonAppearance.LowContrast}
             Icon={AddBrickIcon}
             label={
-              section !== 'my-apps'
-                ? formatMessage(messages.exampleReadonly)
+              isReadOnly
+                ? formatMessage(readOnlyMessage)
                 : formatMessage(messages.addBrickButton)
             }
             onClick={openAddAppBrickDialog}
-            disabled={section !== 'my-apps'}
+            disabled={isReadOnly}
           />
 
-          <IconButton
-            size={ButtonSize.XSmall}
-            variant={ButtonVariant.Secondary}
-            appearance={ButtonAppearance.LowContrast}
-            Icon={AddLibraryIcon}
+          <AddSketchLibraryButton
             label={
-              section !== 'my-apps'
-                ? formatMessage(messages.exampleReadonly)
+              isReadOnly
+                ? formatMessage(readOnlyMessage)
                 : formatMessage(messages.addSketchLibraryButton)
             }
             onClick={openAddSketchLibraryDialog}
-            disabled={section !== 'my-apps'}
+            disabled={isReadOnly}
+            // Unknown while the sketch listing loads or failed.
+            unavailable={!isReadOnly && hasSketch === undefined}
+            popover={addSketchLibraryPopover}
           />
           <DropdownMenuButton
             sections={[
@@ -230,8 +271,8 @@ export const FilesManagerSection = ({
                 appearance={ButtonAppearance.LowContrast}
                 Icon={FileAddIcon}
                 label={
-                  section !== 'my-apps'
-                    ? formatMessage(messages.exampleReadonly)
+                  isReadOnly
+                    ? formatMessage(readOnlyMessage)
                     : formatMessage(messages.addFileButton)
                 }
                 hideTooltip={isOpen}
@@ -260,7 +301,7 @@ export const FilesManagerSection = ({
             // caps its stacking order, so the menu must be portaled out of it.
             useStaticPosition={false}
             usePortal
-            disabled={section !== 'my-apps'}
+            disabled={isReadOnly}
           />
           <IconButton
             classes={{
@@ -294,67 +335,59 @@ export const FilesManagerSection = ({
                 <CaretDownIcon className={styles['header-button-icon']} />
               </button>
               {!collapseBricks && (
-                <>
-                  {appBricks && appBricks.length > 0 && (
-                    <div className={styles['app-list']}>
-                      {appBricks.map((brick) => (
-                        <BrickItem
-                          key={brick.id}
-                          brick={brick}
-                          selected={brick.id === selectedFile?.fileId}
-                          onClick={(): void =>
-                            setSelectedFile(brick.id ?? '', true)
-                          }
-                          onDoubleClick={(): void =>
-                            setSelectedFile(brick.id ?? '')
-                          }
-                          onDelete={
-                            section === 'my-apps'
-                              ? (): void => openDeleteAppBrickDialog(brick)
-                              : undefined
-                          }
-                          onRename={
-                            section === 'my-apps' && brick.author === 'App'
-                              ? (): void => openRenameAppBrickDialog(brick)
-                              : undefined
-                          }
-                          onAddBrick={
-                            section === 'my-apps'
-                              ? (): void => openAddAppBrickDialog()
-                              : undefined
-                          }
-                          onDragStart={onBrickDragStart}
-                          onDragEnd={onBrickDragEnd}
-                          missingConfig={brick.status === 'not_found'}
-                        />
-                      ))}
+                <ContextMenu.Root>
+                  <ContextMenu.Trigger
+                    asChild
+                    onContextMenu={(e): false | void =>
+                      isReadOnly && e.preventDefault()
+                    } // disable native context menu
+                    disabled={isReadOnly}
+                  >
+                    <div>
+                      {appBricks && appBricks.length > 0 && (
+                        <div className={styles['app-list']}>
+                          {appBricks.map((brick) => (
+                            <BrickItem
+                              key={brick.id}
+                              brick={brick}
+                              selected={brick.id === selectedFile?.fileId}
+                              onClick={(): void =>
+                                setSelectedFile(brick.id ?? '', true)
+                              }
+                              onDoubleClick={(): void =>
+                                setSelectedFile(brick.id ?? '')
+                              }
+                              onDelete={
+                                !isReadOnly
+                                  ? (): void => openDeleteAppBrickDialog(brick)
+                                  : undefined
+                              }
+                              onRename={
+                                !isReadOnly && brick.author === 'App'
+                                  ? (): void => openRenameAppBrickDialog(brick)
+                                  : undefined
+                              }
+                              onAddBrick={
+                                !isReadOnly
+                                  ? (): void => openAddAppBrickDialog()
+                                  : undefined
+                              }
+                              onDragStart={onBrickDragStart}
+                              onDragEnd={onBrickDragEnd}
+                              missingConfig={brick.status === 'not_found'}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {appBricks && !appBricks.length && (
+                        <XXSmall className={styles['app-empty']} truncate>
+                          {formatMessage(messages.noBricksAddedYet)}
+                        </XXSmall>
+                      )}
                     </div>
-                  )}
-                  {appBricks && !appBricks.length && (
-                    <XXSmall className={styles['app-empty']} truncate>
-                      {formatMessage(messages.noBricksAddedYet)}
-                    </XXSmall>
-                  )}
-                  {appBricks && (
-                    <div className={styles['app-list-context-menu']}>
-                      <ContextMenu.Root>
-                        <ContextMenu.Trigger
-                          onContextMenu={(e): false | void =>
-                            section !== 'my-apps' && e.preventDefault()
-                          } // disable native context menu
-                          disabled={section !== 'my-apps'}
-                        >
-                          <div
-                            className={styles['app-list-context-menu-trigger']}
-                          />
-                        </ContextMenu.Trigger>
-                        <FilesManagerContextMenu
-                          onAddBrick={openAddAppBrickDialog}
-                        />
-                      </ContextMenu.Root>
-                    </div>
-                  )}
-                </>
+                  </ContextMenu.Trigger>
+                  <FilesManagerContextMenu onAddBrick={openAddAppBrickDialog} />
+                </ContextMenu.Root>
               )}
             </div>
 
@@ -374,56 +407,50 @@ export const FilesManagerSection = ({
                 <CaretDownIcon className={styles['header-button-icon']} />
               </button>
               {!collapseLibraries && (
-                <>
-                  {appLibraries && appLibraries.length > 0 && (
-                    <div className={styles['app-list']}>
-                      {appLibraries.map((lib) => (
-                        <LibraryItem
-                          key={lib.id}
-                          name={lib.id}
-                          version={lib.version}
-                          onDelete={
-                            section === 'my-apps'
-                              ? (): Promise<void> =>
-                                  deleteSketchLibrary(
-                                    `${lib.id}@${lib.version}`,
-                                  )
-                              : undefined
-                          }
-                          onAddLibrary={
-                            section === 'my-apps'
-                              ? (): void => openAddSketchLibraryDialog()
-                              : undefined
-                          }
-                        />
-                      ))}
+                <ContextMenu.Root>
+                  <ContextMenu.Trigger
+                    asChild
+                    onContextMenu={(e): false | void =>
+                      !canAddSketchLibrary && e.preventDefault()
+                    } // disable native context menu
+                    disabled={!canAddSketchLibrary}
+                  >
+                    <div>
+                      {appLibraries && appLibraries.length > 0 && (
+                        <div className={styles['app-list']}>
+                          {appLibraries.map((lib) => (
+                            <LibraryItem
+                              key={lib.id}
+                              name={lib.id}
+                              version={lib.version}
+                              onDelete={
+                                !isReadOnly
+                                  ? (): Promise<void> =>
+                                      deleteSketchLibrary(
+                                        `${lib.id}@${lib.version}`,
+                                      )
+                                  : undefined
+                              }
+                              onAddLibrary={
+                                !isReadOnly
+                                  ? (): void => openAddSketchLibraryDialog()
+                                  : undefined
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {(!appLibraries || !appLibraries.length) && (
+                        <XXSmall className={styles['app-empty']} truncate>
+                          {formatMessage(messages.noSketchLibrariesAddedYet)}
+                        </XXSmall>
+                      )}
                     </div>
-                  )}
-                  {(!appLibraries || !appLibraries.length) && (
-                    <XXSmall className={styles['app-empty']} truncate>
-                      {formatMessage(messages.noSketchLibrariesAddedYet)}
-                    </XXSmall>
-                  )}
-                  {appLibraries && (
-                    <div className={styles['app-list-context-menu']}>
-                      <ContextMenu.Root>
-                        <ContextMenu.Trigger
-                          onContextMenu={(e): false | void =>
-                            section !== 'my-apps' && e.preventDefault()
-                          } // disable native context menu
-                          disabled={section !== 'my-apps'}
-                        >
-                          <div
-                            className={styles['app-list-context-menu-trigger']}
-                          />
-                        </ContextMenu.Trigger>
-                        <FilesManagerContextMenu
-                          onAddSketchLibrary={openAddSketchLibraryDialog}
-                        />
-                      </ContextMenu.Root>
-                    </div>
-                  )}
-                </>
+                  </ContextMenu.Trigger>
+                  <FilesManagerContextMenu
+                    onAddSketchLibrary={openAddSketchLibraryDialog}
+                  />
+                </ContextMenu.Root>
               )}
             </div>
 
@@ -449,7 +476,7 @@ export const FilesManagerSection = ({
                     <FileTree
                       ref={fileTreeRef}
                       height={height}
-                      nodes={files}
+                      nodes={fileTree}
                       selectedNode={selectedNode}
                       selectedFolder={selectedFolder}
                       selectedFileChange={setSelectedFile}
@@ -461,7 +488,7 @@ export const FilesManagerSection = ({
                       onFileMove={moveFileHandler}
                       onFolderCreate={addFolderHandler}
                       onResourceImport={openImportFileDialog}
-                      isReadOnly={section !== 'my-apps'}
+                      isReadOnly={isReadOnly}
                       isBricksSelected={
                         selectedFile?.fileExtension === BRICK_FILE_EXTENSION
                       }
@@ -471,11 +498,19 @@ export const FilesManagerSection = ({
                       onDuplicateConflict={onDuplicateConflict}
                       duplicateFileDialogLogic={duplicateFileDialogLogic}
                       onAddBrick={openAddAppBrickDialog}
-                      onAddSketchLibrary={openAddSketchLibraryDialog}
+                      onCreateBrick={openCreateAppBrickDialog}
+                      onAddSketch={hasSketch === false ? addSketch : undefined}
+                      onAddSketchLibrary={
+                        canAddSketchLibrary
+                          ? openAddSketchLibraryDialog
+                          : undefined
+                      }
                       onFileDragStart={onFileDragStart}
                       onMoveBlocked={onMoveBlocked}
                       onDragOverFolderChange={onDragOverFolderChange}
-                      onValidationError={onValidationError}
+                      onFolderExpand={onFolderExpand}
+                      checkPathConflict={checkPathConflict}
+                      closeFolder={closeFolder}
                     />
                   </div>
                 </div>

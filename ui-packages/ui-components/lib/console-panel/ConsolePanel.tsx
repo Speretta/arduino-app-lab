@@ -1,12 +1,14 @@
+import { Button, IconButton, ProgressBar } from '@bcmi-labs/art-ui/components';
 import { Config, setCSSVariable } from '@cloud-editor-mono/common';
-import { Copy, Sparkle } from '@cloud-editor-mono/images/assets/icons';
+import {
+  ChevronUp,
+  Copy,
+  Sparkle,
+} from '@cloud-editor-mono/images/assets/icons';
 import { Plans, TransmissionTag } from '@cloud-editor-mono/infrastructure';
 import clsx from 'clsx';
 
 import { ViewInstances } from '../code-mirror/codeMirrorViewInstances';
-import { Button } from '../essential/button';
-import { IconButton } from '../essential/icon-button';
-import { ProgressBar } from '../essential/progress-bar';
 import { useI18n } from '../i18n/useI18n';
 import { useTooltip } from '../tooltip';
 import { Link, XSmall, XXSmall } from '../typography';
@@ -56,8 +58,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
 
   //Messages and console UI icons
   const {
-    collapseLabel,
-    collapseIcon,
+    collapseIcon: CollapseIcon,
     consoleLabel,
     StatusBarMessage,
     fixErrorWithAI,
@@ -124,7 +125,9 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
   return (
     <div className={clsx(styles['console-panel'], statusClass)}>
       <div>
-        <ProgressBar active={busy} progress={progress} />
+        {busy ? (
+          <ProgressBar percentage={progress ? progress : undefined} />
+        ) : null}
         <div className={styles['status-bar']}>
           <div className={styles['status-bar-content']}>
             <XSmall monospace>{consoleLabel}</XSmall>
@@ -136,21 +139,23 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
             ) : null}
           </div>
           <IconButton
-            onPress={onCollapse}
-            label={collapseLabel}
-            Icon={collapseIcon}
-            classes={{ button: styles['collapse-button'] }}
-          />
+            onClick={onCollapse}
+            variant="tertiary"
+            behavior="neutral"
+          >
+            <CollapseIcon />
+          </IconButton>
         </div>
       </div>
       <div className={styles['console-output']}>
         {output ? (
           <IconButton
-            Icon={Copy}
-            label={copyTooltipText}
-            onPress={onCopyOutput}
-            classes={{ button: styles['copy-output'] }}
+            onClick={onCopyOutput}
+            className={styles['copy-output']}
+            variant="tertiary"
+            behavior="neutral"
           >
+            <Copy />
             {copyTooltipText ? (
               <div
                 role="tooltip"
@@ -167,6 +172,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
             ) : null}
           </IconButton>
         ) : null}
+
         <div className={styles['console-output-wrapper']}>
           <div
             className={clsx(styles['console-output-content-wrapper'], {
@@ -199,15 +205,13 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
               })}
             >
               <Button
-                Icon={Sparkle}
-                iconPosition="left"
+                icon={<Sparkle />}
                 onClick={(): void => {
                   sendTextMessage(
                     fixThisError,
                     TransmissionTag.ErrorFixRequest,
                   );
                 }}
-                classes={{ button: styles['fix-error-button'] }}
               >
                 <XXSmall bold>{fixErrorWithAI}</XXSmall>
               </Button>

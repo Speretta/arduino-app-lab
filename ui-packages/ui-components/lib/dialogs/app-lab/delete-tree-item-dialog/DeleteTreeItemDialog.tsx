@@ -86,7 +86,6 @@ export const DeleteTreeItemDialog: React.FC<DeleteTreeItemDialogProps> = ({
             loading={loading}
             iconPosition="right"
             type="submit"
-            /* eslint-disable-next-line jsx-a11y/no-autofocus */
             autoFocus
           >
             {formatMessage(messages.confirmButton)}

@@ -1,7 +1,9 @@
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
+
 .sketch-plan-container {
   height: fit-content;
   border-radius: 6px;
-  border: 1px solid #c9d2d2;
+  border: 1px solid var(--border-default);
   box-sizing: border-box;
   overflow: hidden;
   margin: 10px 18px 16px 18px;
@@ -24,25 +26,25 @@
   .sketch-plan-components {
     @extend .component-libraries-flex;
   }
-  
+
   .sketch-plan-board {
     display: flex;
     align-items: center;
     padding: 2px 4px;
     gap: 6px;
     border-radius: 2px;
-    background-color: #E9ECF5;
-    border: 1px solid #c9d2d2;
+    background-color: rgba(233, 236, 245, 1); // TODO: Create suitable variable
+    border: 1px solid var(--border-default);
   }
-  
+
   .sketch-plan-libraries {
     @extend .component-libraries-flex;
-  
+
     svg {
-      color: black;
+      color: var(--text-default);
     }
   }
-  
+
   .sketch-plan-instructions {
     padding: 8px 0;
     ul {
@@ -54,7 +56,7 @@
 }
 
 .sketch-plan-actions {
-  background: white;
+  background: var(--component-bg-baseline);
   padding: 8px 10px;
   display: flex;
   gap: 12px;
@@ -63,12 +65,12 @@
     height: 28px;
     width: 28px;
     border-radius: 50%;
-    background-color: #ECF1F1;
+    background-color: var(--component-bg-below-1);
     display: flex;
     align-items: center;
     justify-content: center;
     svg {
-      color: #374146;
+      color: var(--text-subtle);
       height: 12px;
       width: 12px;
     }

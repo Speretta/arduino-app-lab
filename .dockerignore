@@ -4,3 +4,24 @@ dist-ssr/
 .DS_Store
 standalone-apps/cloud-editor-standalone/dev-dist/
 build/
+**/node_modules
+
+
+# Developer credentials. The build passes the token in as a BuildKit secret, which is a tmpfs
+# mount that never reaches a layer — but `COPY . /app` in the builder stage would copy these
+# straight into one, defeating that entirely. The build does not need them: CI has neither, and
+# the Dockerfile keeps the credential in RUN-local environment only — NPM_TOKEN exported from
+# the secret mount for yarn, GIT_CONFIG_* env vars for the Go module fetches. Nothing writes a
+# .env or .npmrc inside the image; do not "restore" such a write, it would persist the token
+# into a layer.
+.npmrc
+.env
+.env.*
+!.env.example
+
+# Host git and dependency state. From a git worktree `.git` is a *file* pointing at a gitdir on
+# the host, so inside the container every git command — including `git config --global` — dies
+# with "fatal: not a git repository" and the wails stage exits 128. Nothing in the build reads
+# this repo's history, and node_modules is reinstalled from the lockfile in the image anyway.
+.git
+node_modules

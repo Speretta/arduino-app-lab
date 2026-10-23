@@ -1,7 +1,13 @@
-@use "../../public/shared.module.scss";
+@use "@cloud-editor-mono/ui-components/public/shared.module.scss";
 
+// Pre-migration warning orange; --editor-notification is the teal tint used by
+// the settings opt-out box, not this banner.
 $warning--color: #ffa500;
-$cm-gutters-width: calc((var(--editor-font-size) + var(--line-numbers-gutter-width) - 4) * 1px);
+// Full width of the CodeMirror gutter (line numbers + fold gutter + padding).
+// `.cm-gutters` has a 48px min-width at the default 12px font size; this calc
+// resolves to 48px there and scales up with the editor font size so the border
+// stays flush against the left edge of the code, not the gutter.
+$cm-gutters-width: calc((var(--editor-font-size) + var(--line-numbers-gutter-width) + 6) * 1px);
 
 .notifications-border {
     content: "";
@@ -32,17 +38,6 @@ $cm-gutters-width: calc((var(--editor-font-size) + var(--line-numbers-gutter-wid
         bottom: 0px;
         right: 24px;
         cursor: pointer;
-    }
-
-    &-tooltip {
-        top: unset;
-        right: unset;
-        width: auto;
-        max-width: unset;
-
-        //Correct with position origin
-        bottom: 36px;
-        left: 0px;
     }
 
     &--warning {

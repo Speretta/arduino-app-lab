@@ -1039,7 +1039,7 @@ export const useBoardsConfig: UseBoardsConfig = function (
           selectedSerialBoard.fqbn,
         );
         matchingBoard = iotDevices.find((d) =>
-          _deviceHasStableSerialNumber
+          _deviceHasStableSerialNumber && d.serialNumber
             ? d.serialNumber === selectedSerialBoard.serialNumber
             : d.fqbn === selectedSerialBoard.fqbn,
         );
@@ -1153,8 +1153,12 @@ export const useBoardsConfig: UseBoardsConfig = function (
     ];
 
     for (const iotDevice of iotDevices) {
-      const matchingSNPorts = mappedPorts.filter(
-        (p) => p.serialNumber === iotDevice.serialNumber,
+      // ** BLE-provisioned devices (Provisioning 2.0) have no serial in iot-api, so match
+      // ** by FQBN in that case to keep the USB port name consistent with the IoT device name.
+      const matchingSNPorts = mappedPorts.filter((p) =>
+        iotDevice.serialNumber
+          ? p.serialNumber === iotDevice.serialNumber
+          : Boolean(iotDevice.fqbn) && p.fqbn === iotDevice.fqbn,
       );
       for (const mappedPort of matchingSNPorts) {
         if (iotDevice.name && iotDevice.name !== mappedPort.name) {
@@ -1406,15 +1410,20 @@ const findMatchingSerialPort = (
   );
 
   // ** AVOID FALLBACK TO FQBN IF SERIAL NUMBER IS "STABLE"
-  if (!serialPort && isDeviceSerialNumberStable) {
+
+  if (!serialPort && isDeviceSerialNumberStable && device.serialNumber) {
     return undefined;
   }
 
   if (!serialPort) {
-    serialPort = mappedPorts.find((p) => p.fqbn === device.fqbn);
+    serialPort = device.fqbn
+      ? mappedPorts.find((p) => p.fqbn && p.fqbn === device.fqbn)
+      : undefined;
   }
-  if (!serialPort) {
-    // Try to assign first port only for unknown boards
+  if (!serialPort && (device.serialNumber || !isDeviceSerialNumberStable)) {
+    // Try to assign first port only for unknown boards. A stable-serial board
+    // without a serial number is recognised by fqbn, so an unknown port is not
+    // its own; third-party boards (ESP32) are only ever seen as unknown ports.
     serialPort = mappedPorts.filter((p) => p.isUnknownBoard === true)[0];
   }
 

@@ -11,6 +11,40 @@
   }
 }
 
+.board {
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+.sessions {
+  flex: 1;
+  margin-right: -8px;
+  padding-right: 8px;
+}
+
+.folder-caret {
+  display: block;
+  width: 16px;
+  height: 16px;
+  color: var(--text-subtle, #c9d2d2);
+  transition: transform 0.05s;
+}
+
+.folder-caret-collapsed {
+  transform: rotate(-90deg);
+}
+
+.folder,
+.folder-sessions {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.folder-sessions {
+  padding-left: 16px;
+}
+
 // Inline rename input, shown in place of a session row while editing its title.
 .edit {
   width: 100%;

@@ -4,8 +4,8 @@ import { ElementContent } from 'react-markdown/lib/ast-to-react';
 import { ReactMarkdownProps } from 'react-markdown/lib/complex-types';
 
 import { useI18n } from '../../../../../i18n/useI18n';
-import { useTooltip } from '../../../../../tooltip';
 import { XXSmall } from '../../../../../typography';
+import { useTooltip } from '../../../essential/tooltip';
 import styles from '../../markdown-reader.module.scss';
 import { messages } from '../../messages';
 
@@ -29,7 +29,6 @@ export const MarkdownReaderTagPre = (
       content: 'Copied!',
       timeout: 2000,
       triggerType: 'click',
-      tooltipType: 'title',
     });
 
     const findText = (nodes: ElementContent[]): string => {

@@ -81,7 +81,13 @@ const BoardCard: React.FC<BoardCardProps> = (props: BoardCardProps) => {
       onClick={onClick}
       disabled={disabled || !onClick}
     >
-      <div className={clsx(styles['icon'], isMulti && styles['icon--small'])}>
+      <div
+        className={clsx(
+          styles['icon'],
+          isMulti && styles['icon--small'],
+          isLoading && styles['icon--loading'],
+        )}
+      >
         {isLoading ? <Loader /> : Icon}
       </div>
 

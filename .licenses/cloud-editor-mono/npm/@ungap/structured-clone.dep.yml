@@ -1,6 +1,6 @@
 ---
 name: "@ungap/structured-clone"
-version: 1.3.0
+version: 1.4.0
 type: npm
 summary: A structuredClone polyfill
 homepage: https://github.com/ungap/structured-clone#readme

@@ -15,7 +15,7 @@
     background-color: transparent;
 
     &:hover {
-      background-color: var(--component-bg-hover, #aeb8b826);
+      background-color: var(--component-bg-flexible, #aeb8b826);
     }
 
     &:not(:last-child) {

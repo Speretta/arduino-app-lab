@@ -23,7 +23,7 @@
     .footer-section {
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 16px;
 
         &--left {
             display: flex;
@@ -62,8 +62,22 @@
         align-items: center;
     }
 
+    .app-content {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .app-icon {
+        display: inline-block;
+        vertical-align: middle;
+    }
+
     .app-name {
-        font-weight: 700;
+        display: inline-block;
+        vertical-align: middle;
+        font-family: typography.$open-sans-font-family;
+        font-weight: 600;
         color: var(--text-default, #fff);
         overflow: hidden;
         white-space: nowrap;
@@ -73,25 +87,22 @@
         @include bp.breakpoint(vars.$breakpoint-2xl) {
             max-width: 180px;
         }
+        font-family: typography.$open-sans-font-family;
+        font-weight: 600;
+        color: var(--text-default, #fff);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        max-width: 300px;
 
-        &-container {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background-color: transparent;
-            position: relative;
-            border: none;
-            cursor: pointer;
-            border-radius: 8px;
-            padding: 0px 8px 1px;
-            &:hover {
-                background-color: var(--component-bg-hover, #aeb8b826);
-            }
+
+        @include bp.breakpoint(vars.$breakpoint-2xl) {
+            max-width: 180px;
         }
 
         &-loader {
             svg {
-                height: 14px;
+                height: 12px;
                 animation: spin 1.5s linear infinite;
                 pointer-events: none;
 
@@ -159,10 +170,7 @@
     svg {
         height: 16px;
         width: 16px;
-
-        path {
-            fill: var(--feedback-neutral-default, #aeb8b8);
-        }
+        color: var(--feedback-neutral-default);
     }
 
     .lsp-loading-title {
@@ -182,7 +190,7 @@
 
 .stop-button {
     @include bp.breakpoint(vars.$breakpoint-xl) {
-        padding: 0 6px !important;
+        padding: 0 5px !important;
     }
 
     &-text {

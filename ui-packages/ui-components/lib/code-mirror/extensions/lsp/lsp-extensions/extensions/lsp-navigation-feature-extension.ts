@@ -7,25 +7,30 @@ import {
   EditorView,
 } from '@codemirror/view';
 
+import { FormatMessage } from '../../../../../i18n/useI18n';
+import { lspFindAllReferences } from '../../lsp-client/lsp-client-commands';
 import { CustomLspClient } from '../../lsp-client/lsp-client-types';
 import { normalizeFileUri } from '../../lsp-file-uri';
+import { LspReferencesPanelActions } from '../../lsp-references/lsp-references-types';
 import {
   LspDefinitionParams,
   LspLocation,
   LspPosition,
   LspReferenceParams,
 } from '../../lsp-types';
-import { openReferencesPanel } from './lsp-panel-helpers';
 
-interface GetLspNavigationFeatureExtensionParams {
+type GetLspNavigationFeatureExtensionParams = {
   client: CustomLspClient;
-}
+  formatMessage: FormatMessage;
+} & Pick<LspReferencesPanelActions, 'showLspReferences'>;
 
 /**
  * Extension for highlighting a word when a navigation feature is available(go-to-def, find-all-refs)
  */
 export const getLspNavigationFeatureExtension = ({
   client,
+  formatMessage,
+  showLspReferences,
 }: GetLspNavigationFeatureExtensionParams): Extension => {
   const hoverStateEffect = StateEffect.define<{
     from: number;
@@ -159,7 +164,7 @@ export const getLspNavigationFeatureExtension = ({
         if (!client.serverCapabilities?.referencesProvider) {
           return;
         }
-        const referencesResult = await plugin.client.request<
+        const lspReferencesResult = await plugin.client.request<
           LspReferenceParams,
           LspLocation | LspLocation[] | null
         >('textDocument/references', {
@@ -172,11 +177,12 @@ export const getLspNavigationFeatureExtension = ({
           return;
         }
 
-        const location = getLocation(referencesResult);
+        const location = getLocation(lspReferencesResult);
 
         if (location) {
           dispatchHoverEffect();
-          lspRequest = openReferencesPanel;
+          lspRequest = (v): boolean =>
+            lspFindAllReferences(v, formatMessage, showLspReferences);
         }
       } catch (e) {
         console.error('LSP feature extension error:', e);

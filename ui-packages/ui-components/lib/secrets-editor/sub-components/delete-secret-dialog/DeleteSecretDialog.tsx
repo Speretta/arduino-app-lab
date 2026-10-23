@@ -51,6 +51,7 @@ const DeleteSecretDialog: React.FC<DeleteSecretProps> = (
       headerTitle={formatMessage(messages.dialogTitle)}
       dialogTitle={dialogTitle}
       dialogMessage={dialogMessage}
+      containerClasses={styles['container']}
       dialogCancelButtonLabel={
         <Small uppercase bold>
           {formatMessage(messages.cancelButton)}

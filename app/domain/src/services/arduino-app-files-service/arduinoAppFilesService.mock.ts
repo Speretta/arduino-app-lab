@@ -22,7 +22,6 @@ const mockRoot: FolderNode = {
       type: 'file',
       extension: '.md',
       mimeType: 'text/markdown',
-      size: 2048,
       createdAt: '2023-01-02T09:00:00Z',
       modifiedAt: new Date(Date.now() - 86400000).toISOString(),
     },
@@ -39,7 +38,6 @@ const mockRoot: FolderNode = {
           type: 'file',
           extension: '.py',
           mimeType: 'text/x-python',
-          size: 1024,
           createdAt: '2023-02-02T10:00:00Z',
           modifiedAt: '2024-03-10T16:00:00Z',
         },
@@ -49,7 +47,6 @@ const mockRoot: FolderNode = {
           type: 'file',
           extension: '.txt',
           mimeType: 'text/plain',
-          size: 512,
           createdAt: '2023-02-03T12:00:00Z',
           modifiedAt: '2024-03-12T09:00:00Z',
         },
@@ -68,7 +65,6 @@ const mockRoot: FolderNode = {
           type: 'file',
           extension: '.ino',
           mimeType: 'text/ino',
-          size: 3072,
           createdAt: '2023-03-02T07:00:00Z',
           modifiedAt: new Date().toISOString(),
         },
@@ -78,7 +74,6 @@ const mockRoot: FolderNode = {
           type: 'file',
           extension: '.h',
           mimeType: 'text/x-chdr',
-          size: 768,
           createdAt: '2023-03-03T10:00:00Z',
           modifiedAt: '2024-05-08T11:00:00Z',
         },
@@ -97,7 +92,6 @@ const mockRoot: FolderNode = {
           type: 'file',
           extension: '.png',
           mimeType: 'image/png',
-          size: 4096,
           createdAt: '2023-04-02T08:00:00Z',
           modifiedAt: '2025-04-18T13:00:00Z',
         },
@@ -107,7 +101,6 @@ const mockRoot: FolderNode = {
           type: 'file',
           extension: '.json',
           mimeType: 'application/json',
-          size: 1536,
           createdAt: '2023-04-03T11:00:00Z',
           modifiedAt: '2025-04-19T14:00:00Z',
         },
@@ -119,7 +112,6 @@ const mockRoot: FolderNode = {
       type: 'file',
       extension: '.yaml',
       mimeType: 'text/yaml',
-      size: 256,
       createdAt: '2023-01-05T13:00:00Z',
       modifiedAt: '2024-05-01T12:30:00Z',
     },
@@ -169,19 +161,14 @@ const stripAppRoot = (fullPath: string): string => {
 
 const getNowIso = (): string => new Date().toISOString();
 
-const flattenTreeToFiles = (nodes: TreeNode[]): FileNode[] => {
-  const files: FileNode[] = [];
-
-  const visit = (node: TreeNode): void => {
-    if (node.type === 'file') {
-      files.push(node);
-      return;
-    }
-    node.children.forEach(visit);
-  };
-
-  nodes.forEach(visit);
-  return files;
+// The mock holds a fully listed tree, so no folder in it is ever unlisted.
+// Throws rather than papering over it, since that would mean the fixture is
+// malformed.
+const childrenOf = (folder: FolderNode): TreeNode[] => {
+  if (!folder.children) {
+    throw new Error(`Unlisted folder in mock tree: ${folder.path}`);
+  }
+  return folder.children;
 };
 
 const findFolderNode = (
@@ -197,7 +184,7 @@ const findFolderNode = (
   for (const segment of segments) {
     if (!segment) continue;
     currentPath = currentPath ? `${currentPath}/${segment}` : segment;
-    const child = current.children.find(
+    const child = childrenOf(current).find(
       (n) => n.type === 'folder' && n.path === currentPath,
     ) as FolderNode | undefined;
     if (!child) return null;
@@ -215,7 +202,7 @@ const removeNodeByPath = (root: FolderNode, relativePath: string): void => {
 
   if (!parent || !name) return;
 
-  parent.children = parent.children.filter((n) => n.path !== relativePath);
+  parent.children = childrenOf(parent).filter((n) => n.path !== relativePath);
   parent.modifiedAt = getNowIso();
 };
 
@@ -230,7 +217,7 @@ const findNodeByPath = (
 
   if (!parent || !name) return null;
 
-  return parent.children.find((n) => n.path === relativePath) || null;
+  return childrenOf(parent).find((n) => n.path === relativePath) || null;
 };
 
 const addNodeToPath = (
@@ -249,7 +236,7 @@ const addNodeToPath = (
   node.path = relativePath;
   node.name = name;
 
-  parent.children.push(node);
+  childrenOf(parent).push(node);
   parent.modifiedAt = getNowIso();
 };
 
@@ -270,7 +257,7 @@ const renameNodePath = (node: TreeNode, from: string, to: string): void => {
     node.modifiedAt = getNowIso();
   }
 
-  node.children.forEach((child) => {
+  childrenOf(node).forEach((child) => {
     if (child.path.startsWith(from + '/')) {
       const suffix = child.path.slice(from.length + 1);
       const newChildPath = `${to}/${suffix}`;
@@ -284,17 +271,27 @@ const renameNodePath = (node: TreeNode, from: string, to: string): void => {
 // ------------------ MOCK SERVICE ------------------
 
 export const MockArduinoAppFilesService: ArduinoAppFilesService = {
-  async getAppFileTree(_path: string): Promise<TreeNode[]> {
-    return [mockRoot];
+  async listAppDirectory(
+    _appPath: string,
+    relDirPath = '',
+  ): Promise<TreeNode[]> {
+    const folder = findFolderNode(mockRoot, relDirPath);
+    if (!folder) {
+      throw new Error(`Directory not found: ${relDirPath}`);
+    }
+
+    // A shallow listing says nothing about a subfolder's contents.
+    return childrenOf(folder).map((child) =>
+      child.type === 'folder' ? { ...child, children: null } : { ...child },
+    );
   },
 
-  async getAppFiles(_path: string): Promise<{
-    filesList: FileNode[];
-    fileTree: TreeNode[];
-  }> {
-    const fileTree: TreeNode[] = [mockRoot];
-    const filesList = flattenTreeToFiles(fileTree);
-    return { filesList, fileTree };
+  async statAppPath(path: string): Promise<{ isDir: boolean } | null> {
+    const relative = stripAppRoot(path);
+    if (!relative) return { isDir: true };
+
+    const node = findNodeByPath(mockRoot, relative);
+    return node ? { isDir: node.type === 'folder' } : null;
   },
 
   async getAppFileContent(path: string): Promise<string> {
@@ -329,12 +326,11 @@ export const MockArduinoAppFilesService: ArduinoAppFilesService = {
       type: 'file',
       extension: ext,
       mimeType: '',
-      size: content.length,
       createdAt: getNowIso(),
       modifiedAt: getNowIso(),
     };
 
-    parent.children.push(newNode);
+    childrenOf(parent).push(newNode);
     parent.modifiedAt = getNowIso();
 
     fileContents.set(path, content);
@@ -347,6 +343,14 @@ export const MockArduinoAppFilesService: ArduinoAppFilesService = {
   ): Promise<void> {
     const fromRelative = stripAppRoot(path);
     const toRelative = stripAppRoot(newName);
+    // The target can sit under a different parent, so re-parent the node before
+    // rewriting the paths of everything beneath it.
+    const node = findNodeByPath(mockRoot, fromRelative);
+    if (node) {
+      removeNodeByPath(mockRoot, fromRelative);
+      addNodeToPath(mockRoot, toRelative, node);
+      node.modifiedAt = getNowIso();
+    }
     renameNodePath(mockRoot, fromRelative, toRelative);
     const content = fileContents.get(path);
     if (content !== undefined) {
@@ -372,29 +376,6 @@ export const MockArduinoAppFilesService: ArduinoAppFilesService = {
         fileContents.set(newKey, content);
       }
     });
-  },
-
-  async moveAppFile(fromPath: string, toPath: string): Promise<void> {
-    const fromRelative = stripAppRoot(fromPath);
-    const toRelative = stripAppRoot(toPath);
-
-    // Move the file/folder in the tree structure
-    const nodeToMove = findNodeByPath(mockRoot, fromRelative);
-    if (!nodeToMove) {
-      throw new Error(`File or folder not found: ${fromPath}`);
-    }
-
-    removeNodeByPath(mockRoot, fromRelative);
-    addNodeToPath(mockRoot, toRelative, nodeToMove);
-
-    // Move file content if it's a file
-    if (nodeToMove.type === 'file') {
-      const content = fileContents.get(fromPath);
-      if (content !== undefined) {
-        fileContents.delete(fromPath);
-        fileContents.set(toPath, content);
-      }
-    }
   },
 
   async removeAppFile(path: string): Promise<void> {
@@ -431,7 +412,7 @@ export const MockArduinoAppFilesService: ArduinoAppFilesService = {
       children: [],
     };
 
-    parent.children.push(newFolder);
+    childrenOf(parent).push(newFolder);
     parent.modifiedAt = getNowIso();
   },
 
@@ -469,7 +450,7 @@ export const MockArduinoAppFilesService: ArduinoAppFilesService = {
         modifiedAt: getNowIso(),
         children: [],
       };
-      parent.children.push(newNode);
+      childrenOf(parent).push(newNode);
     } else {
       const ext = finalName.includes('.')
         ? `.${finalName.split('.').pop()}`
@@ -480,11 +461,10 @@ export const MockArduinoAppFilesService: ArduinoAppFilesService = {
         type: 'file',
         extension: ext,
         mimeType: 'text/plain',
-        size: 2048,
         createdAt: getNowIso(),
         modifiedAt: getNowIso(),
       };
-      parent.children.push(newNode);
+      childrenOf(parent).push(newNode);
       fileContents.set(
         targetFullPath,
         `Mock content imported from path: ${filePath}`,

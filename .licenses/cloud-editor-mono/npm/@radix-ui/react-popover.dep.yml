@@ -1,8 +1,8 @@
 ---
 name: "@radix-ui/react-popover"
-version: 1.1.11
+version: 1.1.23
 type: npm
-summary: 
+summary:
 homepage: https://radix-ui.com/primitives
 license: mit
 licenses:

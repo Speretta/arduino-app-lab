@@ -1,9 +1,9 @@
 ---
 name: zod-to-json-schema
-version: 3.24.5
+version: 3.25.2
 type: npm
 summary: Converts Zod schemas to Json Schemas
-homepage: 
+homepage:
 license: isc
 licenses:
 - sources: LICENSE

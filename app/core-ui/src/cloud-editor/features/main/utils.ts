@@ -1,5 +1,4 @@
 import { ArduinoUser } from '@bcmi-labs/art-auth';
-import { Config } from '@cloud-editor-mono/common';
 import {
   createBuilderSecretsFile,
   DEFAULT_SKETCH_NAME,
@@ -145,25 +144,6 @@ export function sketchNameValidation(
     [SketchNameValidation.hasInvalidCharacters]:
       validateFileNameFormat(sketchName),
   };
-}
-
-export async function handleOptedOut(
-  sketchId?: string,
-  username?: string,
-  optOut?: () => Promise<boolean>,
-): Promise<void> {
-  if (optOut) {
-    await optOut();
-  }
-
-  const path =
-    sketchId && username ? `/editor/${username}/${sketchId}` : '/editor';
-
-  window.location.replace(Config.WEB_IDE_URL + path);
-}
-
-export function getDeviceSetupLink(thingId?: string): string {
-  return `${Config.CLOUD_HOME_URL}/things/${thingId}/setup`;
 }
 
 export function isCustomLibAccessedFromSharedSpaceError(

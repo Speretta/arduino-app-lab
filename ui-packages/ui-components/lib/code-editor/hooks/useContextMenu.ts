@@ -1,8 +1,8 @@
+import { Config } from '@cloud-editor-mono/common';
 import {
   readText,
   writeText,
-} from '@bcmi-labs/cloud-editor-domain/src/services/services-by-app/app-lab';
-import { Config } from '@cloud-editor-mono/common';
+} from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
 import {
   indentLess,
   indentMore,
@@ -27,10 +27,8 @@ import {
   lspGoToTypeDefinition,
   lspRename,
 } from '../../code-mirror/extensions/lsp/lsp-client/lsp-client-commands';
-import {
-  closeReferencePanel,
-  closeRenamePanel,
-} from '../../code-mirror/extensions/lsp/lsp-extensions/extensions/lsp-panel-helpers';
+import { closeRenamePanel } from '../../code-mirror/extensions/lsp/lsp-extensions/extensions/lsp-rename-panel/lsp-rename-panel';
+import { LspReferencesPanelActions } from '../../code-mirror/extensions/lsp/lsp-references/lsp-references-types';
 import {
   codeMirrorAnnotationMap,
   getCurrentSelectedStrings,
@@ -91,15 +89,17 @@ const READONLY_DISABLED_ITEMS: ContextMenuItemIds[] = [
   ContextMenuItemIds.Rename,
 ];
 
-type UseContextMenu = (
-  viewInstance: EditorView | null,
-  setCode: OnChangeHandlerSetCode,
-  code?: string | null,
-  isLspEnabled?: boolean,
-  lspClients?: Map<LspId, LspClientRef>,
-  currentFileExt?: string,
-  readOnly?: boolean,
-) => {
+type UseContextMenuParams = {
+  viewInstance: EditorView | null;
+  setCode: OnChangeHandlerSetCode;
+  code?: string | null;
+  isLspEnabled?: boolean;
+  lspClients?: Map<LspId, LspClientRef>;
+  currentFileExt?: string;
+  readOnly?: boolean;
+} & LspReferencesPanelActions;
+
+type UseContextMenu = (params: UseContextMenuParams) => {
   onContextMenuClose: (e: KeyboardEvent) => void;
   containerRef: React.RefObject<HTMLDivElement>;
   clickHandlers: ContextMenuHandlerDictionary;
@@ -109,15 +109,17 @@ type UseContextMenu = (
   setIsOpen: (isOpen: boolean) => void;
 };
 
-export const useContextMenu: UseContextMenu = function (
-  viewInstance: EditorView | null,
-  setCode: OnChangeHandlerSetCode,
-  code?: string | null,
-  isLspEnabled?: boolean,
-  lspClients?: Map<LspId, LspClientRef>,
-  currentFileExt?: string,
-  readOnly?: boolean,
-): ReturnType<UseContextMenu> {
+export const useContextMenu: UseContextMenu = function ({
+  viewInstance,
+  setCode,
+  code,
+  isLspEnabled,
+  lspClients,
+  currentFileExt,
+  readOnly,
+  showLspReferences,
+  closeLspReferences,
+}: UseContextMenuParams): ReturnType<UseContextMenu> {
   const { formatMessage } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [isPasteDisabled, setIsPasteDisabled] = useState(false);
@@ -274,7 +276,7 @@ export const useContextMenu: UseContextMenu = function (
     [ContextMenuItemIds.FindAllReferences]: (): void => {
       if (viewInstance) {
         closeRenamePanel(viewInstance);
-        lspFindAllReferences(viewInstance, formatMessage);
+        lspFindAllReferences(viewInstance, formatMessage, showLspReferences);
       }
     },
     [ContextMenuItemIds.Format]: (): void => {
@@ -284,7 +286,7 @@ export const useContextMenu: UseContextMenu = function (
     },
     [ContextMenuItemIds.Rename]: (): void => {
       if (viewInstance) {
-        closeReferencePanel(viewInstance);
+        closeLspReferences?.();
         lspRename(viewInstance, formatMessage);
       }
     },

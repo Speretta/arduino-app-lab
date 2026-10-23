@@ -1,7 +1,6 @@
-import { SplitView } from '@cloud-editor-mono/images/assets/icons';
 import clsx from 'clsx';
 import { debounce } from 'lodash-es';
-import { memo, useCallback, useEffect, useMemo } from 'react';
+import { memo, Suspense, useCallback, useEffect, useMemo } from 'react';
 import type { Layout } from 'react-resizable-panels';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 
@@ -12,9 +11,13 @@ import {
   unlinkSplitEditors,
   ViewInstances,
 } from '../code-mirror/codeMirrorViewInstances';
-import { BrickDetail, MarkdownReader } from '../components-by-app/app-lab';
-import SplitEditorPane from '../components-by-app/app-lab/editor-panel/SplitEditorPane';
-import { useTooltip } from '../components-by-app/app-lab/essential/tooltip';
+import {
+  BrickDetail,
+  MarkdownReader,
+} from '../components-by-app/app-lab/editor-panel/lazyViews';
+// A static import: linkSplitEditors copies the document only into an editor
+// that is already mounted, so this panel must mount together with the panel.
+import SplitEditorPanel from '../components-by-app/app-lab/editor-panel/SplitEditorPanel';
 import EditorControls from '../editor-controls/EditorControls';
 import EditorImage from '../editor-image/EditorImage';
 import { EditorStatus } from '../editor-status';
@@ -77,29 +80,31 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
     readOnly,
     isSplit = false,
     openOrPushToSplit,
-    splitToOtherPane,
-    moveTabToOtherPane,
-    setActivePane,
-    paneATabsCount,
-    splitPaneCodeEditorLogic,
-    splitPaneTabsBarLogic,
-    splitPaneFileId,
-    splitPaneFile,
-    splitPaneShouldRenderMarkdown,
-    splitPaneSetShouldRenderMarkdown,
-    splitPaneCanSwitchMarkdownMode,
-    splitPaneBrickDetailLogic,
-    splitPaneBrickSelectedTab,
-    splitPaneSetBrickSelectedTab,
+    splitToOtherPanel,
+    moveTabToOtherPanel,
+    setActiveEditorPanel,
+    panelATabsCount,
+    splitPanelCodeEditorLogic,
+    splitPanelTabsBarLogic,
+    splitPanelFileId,
+    splitPanelFile,
+    splitPanelShouldRenderMarkdown,
+    splitPanelSetShouldRenderMarkdown,
+    splitPanelCanSwitchMarkdownMode,
+    splitPanelBrickDetailLogic,
+    splitPanelBrickSelectedTab,
+    splitPanelSetBrickSelectedTab,
     brickSelectedTab,
     setBrickSelectedTab,
     storedSplitProportionLeft: rawStoredSplitProportionLeft,
     onSplitResize,
+    onToggleAgentPanel,
+    agentPanelOpen,
     ...rest
   } = editorPanelLogic();
 
   // Reject out-of-range persisted values (e.g. a `100` left over from a
-  // prior bug that wrote single-pane layouts into the split key).
+  // prior bug that wrote single-panel layouts into the split key).
   const storedSplitProportionLeft =
     typeof rawStoredSplitProportionLeft === 'number' &&
     rawStoredSplitProportionLeft >= 10 &&
@@ -113,8 +118,8 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
   const debouncedSplitResize = useMemo(
     () =>
       onSplitResize
-        ? debounce((leftPanePercent: number) => {
-            onSplitResize(leftPanePercent);
+        ? debounce((leftPanelPercent: number) => {
+            onSplitResize(leftPanelPercent);
           }, 250)
         : undefined,
     [onSplitResize],
@@ -123,7 +128,7 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
   const handlePanelLayout = useCallback(
     (layout: Layout) => {
       if (!debouncedSplitResize) return;
-      // Only persist while both panes exist — when collapsed to single,
+      // Only persist while both panels exist — when collapsed to single,
       // `split-left` reports 100 and would overwrite the saved split ratio.
       if (!isSplit) return;
       const left = layout['split-left'];
@@ -134,10 +139,10 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
   );
 
   const handleDropToSplit = useCallback(
-    (fileId: string, fromPane: 'A' | 'B') => {
-      moveTabToOtherPane && moveTabToOtherPane(fileId, fromPane);
+    (fileId: string, fromPanel: 'A' | 'B') => {
+      moveTabToOtherPanel && moveTabToOtherPanel(fileId, fromPanel);
     },
-    [moveTabToOtherPane],
+    [moveTabToOtherPanel],
   );
 
   const handleSplitToggleClick = useCallback(() => {
@@ -145,32 +150,41 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
   }, [openOrPushToSplit]);
 
   const handleSplitToggleClickFromB = useCallback(() => {
-    if (!splitToOtherPane) return;
-    splitToOtherPane(splitPaneFileId, 'B');
-  }, [splitToOtherPane, splitPaneFileId]);
+    if (!splitToOtherPanel) return;
+    splitToOtherPanel(splitPanelFileId, 'B');
+  }, [splitToOtherPanel, splitPanelFileId]);
+
+  const agentPanelToggle = onToggleAgentPanel
+    ? {
+        label: formatMessage(messages.agentPanelButton),
+        isOpen: agentPanelOpen,
+        onToggle: onToggleAgentPanel,
+      }
+    : undefined;
 
   // Top-level tabs bar is only shown for the secrets view. Image, brick,
-  // and markdown files use the per-pane tabs bar inside the split layout
-  // so each pane stays independently navigable.
+  // and markdown files use the per-panel tabs bar inside the split layout
+  // so each panel stays independently navigable.
   const isNonCodeFile = !!selectedFile && selectedFile.ext === 'secrets';
 
   // Manage the real-time sync link between the two CodeMirror instances.
-  // Link only when both panes show the same file AND both are rendering the
+  // Link only when both panels show the same file AND both are rendering the
   // CodeEditor (i.e. neither is showing MarkdownReader/EditorImage/
   // BrickDetail). Re-evaluating on render-mode toggles ensures Editor2 is
   // re-linked when it (re)mounts.
   const leftIsImage =
     !!selectedFile && SUPPORTED_IMAGE_TYPES.includes(`.${selectedFile.ext}`);
   const rightIsImage =
-    !!splitPaneFile && SUPPORTED_IMAGE_TYPES.includes(`.${splitPaneFile.ext}`);
+    !!splitPanelFile &&
+    SUPPORTED_IMAGE_TYPES.includes(`.${splitPanelFile.ext}`);
   const leftIsBrick =
     !!selectedFile &&
     selectedFile.ext === BRICK_FILE_EXTENSION &&
     !!brickDetailLogic;
   const rightIsBrick =
-    !!splitPaneFile &&
-    splitPaneFile.ext === BRICK_FILE_EXTENSION &&
-    !!splitPaneBrickDetailLogic;
+    !!splitPanelFile &&
+    splitPanelFile.ext === BRICK_FILE_EXTENSION &&
+    !!splitPanelBrickDetailLogic;
   const leftShowsCodeEditor =
     !leftIsImage &&
     !leftIsBrick &&
@@ -178,7 +192,7 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
   const rightShowsCodeEditor =
     !rightIsImage &&
     !rightIsBrick &&
-    (splitPaneFile?.ext !== 'md' || !splitPaneShouldRenderMarkdown);
+    (splitPanelFile?.ext !== 'md' || !splitPanelShouldRenderMarkdown);
   useEffect(() => {
     if (!isSplit) {
       unlinkSplitEditors();
@@ -186,7 +200,7 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
     }
     if (
       selectedFile?.id &&
-      selectedFile.id === splitPaneFileId &&
+      selectedFile.id === splitPanelFileId &&
       leftShowsCodeEditor &&
       rightShowsCodeEditor
     ) {
@@ -200,17 +214,10 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
   }, [
     isSplit,
     selectedFile?.id,
-    splitPaneFileId,
+    splitPanelFileId,
     leftShowsCodeEditor,
     rightShowsCodeEditor,
   ]);
-
-  const { props: splitTooltipProps, renderTooltip: renderSplitTooltip } =
-    useTooltip({
-      content: formatMessage(messages.splitViewButton),
-      timeout: 0,
-      renderDelay: 500,
-    });
 
   const renderContent = (): JSX.Element => {
     if (selectedFile && selectedFile.ext === 'secrets') {
@@ -243,45 +250,39 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
         >
           <Panel
             id="split-left"
+            className={styles['code-panel']}
             minSize={200}
             defaultSize={`${storedSplitProportionLeft ?? 50}%`}
             groupResizeBehavior="preserve-pixel-size"
           >
             <div
-              className={styles['code-pane']}
+              className={styles['code-panel-content']}
               onMouseDownCapture={
-                isSplit ? (): void => setActivePane?.('A') : undefined
+                isSplit ? (): void => setActiveEditorPanel?.('A') : undefined
               }
               onFocusCapture={
-                isSplit ? (): void => setActivePane?.('A') : undefined
+                isSplit ? (): void => setActiveEditorPanel?.('A') : undefined
               }
             >
               {!hideTabs && (
                 <EditorTabsBar
                   tabsBarLogic={tabsBarLogic}
-                  paneId="A"
+                  panelId="A"
                   classes={{
                     container: classes?.tabsBar,
                     selected: classes?.selectedTab,
                     tab: classes?.tab,
                   }}
+                  splitToggle={
+                    openOrPushToSplit && !isSplit
+                      ? {
+                          label: formatMessage(messages.splitViewButton),
+                          onToggle: handleSplitToggleClick,
+                        }
+                      : undefined
+                  }
+                  agentPanel={isSplit ? undefined : agentPanelToggle}
                 />
-              )}
-              {openOrPushToSplit && !isSplit && (
-                <div
-                  {...splitTooltipProps}
-                  className={styles['split-toggle-wrapper']}
-                >
-                  <button
-                    type="button"
-                    className={clsx(styles['split-toggle'])}
-                    onClick={handleSplitToggleClick}
-                    aria-label={formatMessage(messages.splitViewButton)}
-                  >
-                    <SplitView />
-                  </button>
-                  {renderSplitTooltip()}
-                </div>
               )}
               {selectedFile?.ext === 'md' && markdownCanBeRendered && (
                 <EditorToolbar
@@ -311,21 +312,25 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
                 />
               ) : leftIsBrick && selectedFile && brickDetailLogic ? (
                 <div className={styles['brick-container']}>
-                  <BrickDetail
-                    brickId={selectedFile.id}
-                    brickDetailLogic={brickDetailLogic}
-                    selectedTab={brickSelectedTab}
-                    onSelectedTabChange={setBrickSelectedTab}
-                  />
+                  <Suspense fallback={null}>
+                    <BrickDetail
+                      brickId={selectedFile.id}
+                      brickDetailLogic={brickDetailLogic}
+                      selectedTab={brickSelectedTab}
+                      onSelectedTabChange={setBrickSelectedTab}
+                    />
+                  </Suspense>
                 </div>
               ) : selectedFile?.ext === 'md' && shouldRenderMarkdown ? (
                 <div className={styles['markdown-container']}>
-                  <MarkdownReader
-                    key={selectedFile.id}
-                    content={selectedFile.getData()}
-                    onOpenExternalLink={openExternalLink}
-                    onCopyCode={onCopyCode}
-                  />
+                  <Suspense fallback={null}>
+                    <MarkdownReader
+                      key={selectedFile.id}
+                      content={selectedFile.getData()}
+                      onOpenExternalLink={openExternalLink}
+                      onCopyCode={onCopyCode}
+                    />
+                  </Suspense>
                 </div>
               ) : (
                 <CodeEditor
@@ -343,11 +348,12 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
               )}
             </div>
           </Panel>
-          {isSplit && splitPaneCodeEditorLogic && splitPaneTabsBarLogic && (
+          {isSplit && splitPanelCodeEditorLogic && splitPanelTabsBarLogic && (
             <>
               <Separator className={styles['split-separator']} />
               <Panel
                 id="split-right"
+                className={styles['code-panel']}
                 minSize={200}
                 defaultSize={`${
                   storedSplitProportionLeft !== undefined
@@ -356,26 +362,27 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
                 }%`}
                 groupResizeBehavior="preserve-pixel-size"
               >
-                <SplitEditorPane
-                  codeEditorLogic={splitPaneCodeEditorLogic}
-                  tabsBarLogic={splitPaneTabsBarLogic}
+                <SplitEditorPanel
+                  codeEditorLogic={splitPanelCodeEditorLogic}
+                  tabsBarLogic={splitPanelTabsBarLogic}
                   getKeywords={getKeywords}
                   renderBanner={renderBanner}
-                  selectedFile={splitPaneFile}
-                  onActivate={(): void => setActivePane?.('B')}
-                  shouldRenderMarkdown={splitPaneShouldRenderMarkdown}
-                  setShouldRenderMarkdown={splitPaneSetShouldRenderMarkdown}
-                  canSwitchMarkdownMode={splitPaneCanSwitchMarkdownMode}
-                  brickDetailLogic={splitPaneBrickDetailLogic}
-                  brickSelectedTab={splitPaneBrickSelectedTab}
-                  onBrickSelectedTabChange={splitPaneSetBrickSelectedTab}
+                  selectedFile={splitPanelFile}
+                  onActivate={(): void => setActiveEditorPanel?.('B')}
+                  shouldRenderMarkdown={splitPanelShouldRenderMarkdown}
+                  setShouldRenderMarkdown={splitPanelSetShouldRenderMarkdown}
+                  canSwitchMarkdownMode={splitPanelCanSwitchMarkdownMode}
+                  brickDetailLogic={splitPanelBrickDetailLogic}
+                  brickSelectedTab={splitPanelBrickSelectedTab}
+                  onBrickSelectedTabChange={splitPanelSetBrickSelectedTab}
                   openExternalLink={openExternalLink}
                   onCopyCode={onCopyCode}
                   readOnly={readOnly}
                   onFileError={onFileError}
                   onSplitClick={
-                    splitToOtherPane ? handleSplitToggleClickFromB : undefined
+                    splitToOtherPanel ? handleSplitToggleClickFromB : undefined
                   }
+                  agentPanel={agentPanelToggle}
                   classes={{
                     tabsBar: classes?.tabsBar,
                     selectedTab: classes?.selectedTab,
@@ -388,10 +395,10 @@ const EditorPanel: React.FC<EditorPanelProps> = (props: EditorPanelProps) => {
             </>
           )}
         </Group>
-        {moveTabToOtherPane && (
+        {moveTabToOtherPanel && (
           <EditorSplitDropZone
             isSplit={isSplit}
-            paneATabsCount={paneATabsCount ?? 0}
+            panelATabsCount={panelATabsCount ?? 0}
             onMove={handleDropToSplit}
           />
         )}

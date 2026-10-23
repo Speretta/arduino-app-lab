@@ -1,6 +1,6 @@
 ---
 name: use-isomorphic-layout-effect
-version: 1.2.0
+version: 1.2.1
 type: npm
 summary: A React helper hook for scheduling a layout effect with a fallback to a regular
   effect for environments where layout effects should not be used (such as server-side

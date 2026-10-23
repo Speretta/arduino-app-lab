@@ -8,7 +8,7 @@ import {
   GetLibraries_Response,
   LibraryDetails_Response,
 } from '@cloud-editor-mono/infrastructure';
-import { FlavourOptions } from '@cloud-editor-mono/ui-components';
+import { FlavourOptions } from '@cloud-editor-mono/ui-components/lib/dialogs/editor/flavour-config-dialog/flavourConfigDialog.type';
 import { WebSerialPort } from '@cloud-editor-mono/web-board-communication';
 
 export interface SelectableBoardInfo {

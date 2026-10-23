@@ -10,7 +10,6 @@ import { Text } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { FileChangeType } from 'vscode-languageserver-protocol';
 
-import { FileNode } from '../../../../file-tree';
 import { contentToText } from '../../../utils';
 import { LSP_LANGS } from '../lsp-consts';
 import {
@@ -19,8 +18,10 @@ import {
   normalizeFileUri,
   relativeUriPath,
 } from '../lsp-file-uri';
+import { toDocOffset } from '../lsp-positions';
 import {
   LspDiagnostic,
+  lspDiagnosticMessage,
   LspDidChangeTextDocumentParams,
   LspDidChangeWatchedFilesParams,
   LspFileEvent,
@@ -50,6 +51,9 @@ const isHighSurrogate = (code: number): boolean =>
 const isLowSurrogate = (code: number): boolean =>
   code >= 0xdc00 && code <= 0xdfff;
 
+const sameFileUri = (a: string, b: string): boolean =>
+  a === b || normalizeFileUri(a) === normalizeFileUri(b);
+
 interface WorkspaceFileUpdate {
   file: LspClientWorkspaceFile;
   prevDoc: Text;
@@ -72,10 +76,9 @@ export class LspClientWorkspace extends Workspace {
 
   constructor(
     client: CustomLspClient,
-    private lspId: LspId,
+    readonly lspId: LspId,
     private workspaceUri: string,
     private openEditorFile: (fileUri: string) => void | Promise<void>,
-    private filesList?: FileNode[],
     private getLspWorkspaceFile?: (fileUri: string) => Promise<string>,
     private getActiveView?: () => EditorView | null,
     /**
@@ -115,8 +118,6 @@ export class LspClientWorkspace extends Workspace {
       );
       this.files.push(file);
       this.client.didOpen(file);
-
-      this.openAllLspFiles();
     } else {
       file.addView(view);
       if (!view.state.doc.eq(file.doc)) {
@@ -158,7 +159,7 @@ export class LspClientWorkspace extends Workspace {
    * from the plugin's destroy (tab switch / buffer reload), which cancels the
    * pending autoSync debounce — edits made inside that window would otherwise
    * never reach the server, whose didOpen'd buffer then masks the saved file
-   * on disk until the tab is reopened. Skipped when another pane still shows
+   * on disk until the tab is reopened. Skipped when another panel still shows
    * the file: its plugin carries the same changes and syncs normally.
    */
   private flushViewChanges(
@@ -172,7 +173,7 @@ export class LspClientWorkspace extends Workspace {
     // Still resolvable here: CodeMirror destroys the old plugins before it
     // installs a new state's set.
     const plugin = LSPPlugin.get(view);
-    if (!plugin || plugin.uri !== file.uri) {
+    if (!plugin || !sameFileUri(plugin.uri, file.uri)) {
       return;
     }
     const changes = plugin.unsyncedChanges;
@@ -206,7 +207,7 @@ export class LspClientWorkspace extends Workspace {
         continue;
       }
 
-      // When the file is shown in several panes, split-sync keeps their docs identical,
+      // When the file is shown in several panels, split-sync keeps their docs identical,
       // so read the unsynced changes from one view and send a single didChange.
       const view = views[0];
       const plugin = LSPPlugin.get(view);
@@ -229,7 +230,7 @@ export class LspClientWorkspace extends Workspace {
         contentChanges.reverse();
 
         file.doc = view.state.doc;
-        // clear every pane's plugin, otherwise the mirrored peer would re-send the same edit on the next sync.
+        // clear every panel's plugin, otherwise the mirrored peer would re-send the same edit on the next sync.
         for (const view of views) {
           LSPPlugin.get(view)?.clear();
         }
@@ -257,10 +258,10 @@ export class LspClientWorkspace extends Workspace {
      * Use setInterval (max 10 attempts, 100ms frequency) to resolve only when the file is available in the workspace.
      * If the file is already open it will resolve faster than when it needs to be opened and added to the workspace.
      *
-     * When an active pane is known, prefer its view: `openEditorFile` just
-     * opened the target there, so we wait for that pane to actually show the
-     * file rather than resolving whichever pane registered it first (which
-     * would send navigation to the wrong pane when the file is already open
+     * When an active panel is known, prefer its view: `openEditorFile` just
+     * opened the target there, so we wait for that panel to actually show the
+     * file rather than resolving whichever panel registered it first (which
+     * would send navigation to the wrong panel when the file is already open
      * elsewhere). The `getView()` fallback keeps single-editor consumers and
      * the timeout path working.
      */
@@ -281,7 +282,7 @@ export class LspClientWorkspace extends Workspace {
 
         if (activeView) {
           const activePluginUri = LSPPlugin.get(activeView)?.uri;
-          // Resolve once the active pane is showing this file.
+          // Resolve once the active panel is showing this file.
           if (
             activePluginUri &&
             normalizeFileUri(activePluginUri) === normalizeFileUri(uri)
@@ -290,7 +291,7 @@ export class LspClientWorkspace extends Workspace {
             return;
           }
         } else {
-          // No active-pane preference: resolve as soon as any view exists.
+          // No active-editor-panel preference: resolve as soon as any view exists.
           const view = file?.getView();
           if (view) {
             resolveWith(view);
@@ -320,7 +321,7 @@ export class LspClientWorkspace extends Workspace {
    * but when rename changes involves files that are not open we need to handle it differently.
    * We need to call displayFile() to open the file before apply changes(we need CM view).
    * displayFile() is an async operation so any updateFile() call need to wait for the previous update to complete.
-   * When the file already has a live view (it's shown in a pane) we dispatch into it directly instead of opening it via displayFile().
+   * When the file already has a live view (it's shown in a panel) we dispatch into it directly instead of opening it via displayFile().
    */
   private updateFileQueue: Promise<unknown> = Promise.resolve();
   override async updateFile(
@@ -396,13 +397,13 @@ export class LspClientWorkspace extends Workspace {
 
   /**
    * Apply a server-initiated edit to a tracked file that has no view, by writing
-   * the result to the content store instead of opening the file in a pane.
+   * the result to the content store instead of opening the file in a panel.
    *
    * Dispatching into a view was the only way this used to work, so a cross-file
    * rename opened every file it touched — and the edit was then routinely
    * undone. The editor's `onChange` writes to whichever file the app currently
    * has *selected*, not the file the transaction belonged to, so an edit
-   * dispatched into a just-opened pane raced React committing that selection: the
+   * dispatched into a just-opened panel raced React committing that selection: the
    * new text went to the wrong key, the file's own content stayed stale, and the
    * next state rebuild (the store is the source of truth) reverted the document.
    * That is the "flash of the new name, then back to the old" — and it needed a
@@ -632,7 +633,7 @@ export class LspClientWorkspace extends Workspace {
         return;
       }
       const plugin = LSPPlugin.get(view);
-      if (!plugin || plugin.uri !== uri) {
+      if (!plugin || !sameFileUri(plugin.uri, uri)) {
         return;
       }
       view.dispatch(
@@ -646,7 +647,7 @@ export class LspClientWorkspace extends Workspace {
               plugin.fromPosition(diagnostic.range.end, plugin.syncedDoc),
             ),
             severity: LSP_DIAGNOSTIC_TO_CM_SEVERITY[diagnostic.severity ?? 1],
-            message: diagnostic.message,
+            message: lspDiagnosticMessage(diagnostic.message),
           })),
         ),
       );
@@ -656,25 +657,6 @@ export class LspClientWorkspace extends Workspace {
   private toPosition(doc: Text, pos: number): LspPosition {
     const line = doc.lineAt(pos);
     return { line: line.number - 1, character: pos - line.from };
-  }
-
-  /**
-   * Called on first LSP file open to open all the other file with the same LSP.
-   * This in necessary to let cross-file features like go-to-def/find-all-refs/rename work.
-   */
-  private openAllLspFiles(): void {
-    this.filesList
-      ?.filter((file) => {
-        // keep only files handled by this workspace's LSP
-        const lang = file.extension.split('.').pop();
-        return LSP_LANGS[lang as LspLang] === this.lspId;
-      })
-      .forEach((f) => {
-        this.trackFileFromDisk(
-          this.getUriByPath(f.path),
-          f.extension.split('.').pop() ?? '',
-        );
-      });
   }
 
   // In-flight disk-driven didOpens, keyed by uri. Lets external-change
@@ -730,6 +712,112 @@ export class LspClientWorkspace extends Workspace {
     await this.pendingDiskOpens.get(this.getUriByPath(path));
   }
 
+  /**
+   * Track `fileUri` from disk and wait for it, for a server-initiated edit that
+   * names a document nobody opened. Undefined when this LSP doesn't handle the
+   * file or its content couldn't be read.
+   */
+  async trackUriFromDisk(
+    fileUri: string,
+  ): Promise<LspClientWorkspaceFile | undefined> {
+    const existing = this.getFile(fileUri);
+    if (existing) {
+      return existing;
+    }
+
+    // Tracked under our own spelling of the uri: a server may spell it
+    // differently (`file:///c%3A/…` for `file:///C:/…` on Windows), and the
+    // editor view that later opens the file uses ours.
+    const uri = this.toWorkspaceUri(fileUri);
+    const lang = this.trackableLanguage(uri);
+    if (!lang) {
+      return undefined;
+    }
+
+    this.trackFileFromDisk(uri, lang);
+    await this.pendingDiskOpens.get(uri);
+    return this.getFile(uri) ?? undefined;
+  }
+
+  /**
+   * Called by the find-references panel for each file a result names. The
+   * server also finds references in files nobody opened, and the default
+   * implementation answers those with null, which drops their rows.
+   */
+  override async requestFile(
+    uri: string,
+  ): Promise<LspClientWorkspaceFile | null> {
+    return (await this.trackUriFromDisk(uri)) ?? null;
+  }
+
+  /**
+   * The language id to track `uri` from disk with, or undefined when this LSP
+   * must not be given the file: another language, a file outside the
+   * workspace, or an Arduino .ino outside the sketch root. arduino-cli merges
+   * only the root .ino files, and the Arduino LS maps every .ino it is given
+   * onto that merged file.
+   */
+  private trackableLanguage(uri: string): string | undefined {
+    const path = relativeUriPath(uri, this.workspaceUri);
+    if (path === null) {
+      return undefined;
+    }
+    const lang = path.split('.').pop() ?? '';
+    if (LSP_LANGS[lang as LspLang] !== this.lspId) {
+      return undefined;
+    }
+    if (
+      this.lspId === 'arduino' &&
+      lang === 'ino' &&
+      path.slice(0, Math.max(path.lastIndexOf('/'), 0)) !== SKETCH_DIR
+    ) {
+      return undefined;
+    }
+    return lang;
+  }
+
+  /** Track `uri` from disk if this LSP must be given it (trackableLanguage). */
+  private trackIfHandled(uri: string): void {
+    const lang = this.trackableLanguage(uri);
+    if (lang) {
+      this.trackFileFromDisk(uri, lang);
+    }
+  }
+
+  /** True when this LSP handles files with the extension of `path`. */
+  private handlesPath(path: string): boolean {
+    const lang = path.split('.').pop();
+    return LSP_LANGS[lang as LspLang] === this.lspId;
+  }
+
+  /** `uri` spelled the way this client builds uris, when inside the workspace. */
+  private toWorkspaceUri(uri: string): string {
+    const path = relativeUriPath(uri, this.workspaceUri);
+    return path === null ? uri : this.getUriByPath(path);
+  }
+
+  /** True when `uri` is the file at `path` or inside the folder at `path`. */
+  containsUri(path: string, uri: string): boolean {
+    return isWithinUri(uri, this.getUriByPath(path));
+  }
+
+  /**
+   * Track every workspace-relative path this LSP handles from disk. The Arduino
+   * LS maps a clangd result back to a sketch file only if that file was
+   * didOpen'd, so go-to-definition into a file nobody opened fails with
+   * "Document is not available". Servers that index the workspace folder
+   * themselves (basedpyright) do not need this.
+   *
+   * Call it as soon as the server starts. The Arduino LS closes itself when a
+   * go-to-definition result names a sketch file that is not open, so any delay
+   * here is a window in which a Cmd-hover crashes it. Opening early costs no
+   * rebuild: the server handles a didOpen only after its first build has written
+   * the build folder.
+   */
+  trackFilesFromDisk(paths: string[]): void {
+    paths.forEach((path) => this.trackIfHandled(this.getUriByPath(path)));
+  }
+
   private getUriByPath(path: string): string {
     return joinFileUri(this.workspaceUri, path);
   }
@@ -739,20 +827,38 @@ export class LspClientWorkspace extends Workspace {
    * by the file watcher). Announces the file on disk so the server drops any
    * negative import-resolution cache and re-resolves references to it from
    * *other* open files (e.g. an adjacent file that imports the new one), then
-   * tracks it like the startup set (openAllLspFiles) so later external changes
-   * and server-initiated edits treat it as a first-class document. Tracking is
-   * skipped for paths this LSP doesn't handle — including folder paths from
-   * watcher create events, whose "extension" matches no LSP language.
+   * tracks it so later external changes and server-initiated edits treat it as
+   * a first-class document. Tracking is skipped for paths this LSP doesn't
+   * handle — including folder paths from watcher create events, whose
+   * "extension" matches no LSP language.
    */
   createNodeFile(path: string): void {
     const fileUri = this.getUriByPath(path);
     this.notifyFilesChangedOnDisk([
       { uri: fileUri, type: FileChangeType.Created },
     ]);
+    this.trackIfHandled(fileUri);
+  }
 
-    const lang = path.split('.').pop();
-    if (LSP_LANGS[lang as LspLang] === this.lspId) {
-      this.trackFileFromDisk(fileUri, lang ?? '');
+  /**
+   * Called with the workspace-relative paths of the files under a folder that
+   * appeared in one step: an import, a folder renamed in App Lab, or a folder
+   * moved in from a terminal. Nothing reports those files one by one, and
+   * basedpyright ignores a Created event for a folder, so each file of this
+   * LSP's languages not tracked yet is announced. Only the Arduino LS also gets
+   * them opened: it maps a result back to a sketch file only if that file is
+   * open, while the other servers index the workspace themselves.
+   */
+  createNodeFiles(paths: string[]): void {
+    const created = paths
+      .filter((path) => this.handlesPath(path))
+      .map((path) => this.getUriByPath(path))
+      .filter((uri) => !this.getFile(uri));
+    this.notifyFilesChangedOnDisk(
+      created.map((uri) => ({ uri, type: FileChangeType.Created })),
+    );
+    if (this.lspId === 'arduino') {
+      created.forEach((uri) => this.trackIfHandled(uri));
     }
   }
 
@@ -766,21 +872,33 @@ export class LspClientWorkspace extends Workspace {
     const file = this.getFile(oldFileUri);
     if (file) {
       this.renameFile(file, newFileUri);
-      this.notifyFilesChangedOnDisk([
-        { uri: oldFileUri, type: FileChangeType.Deleted },
-        { uri: newFileUri, type: FileChangeType.Created },
-      ]);
+    }
+    // Also for a file this client never opened: the server read it from disk,
+    // and the watcher does not report a rename made in App Lab.
+    this.notifyFilesChangedOnDisk([
+      { uri: oldFileUri, type: FileChangeType.Deleted },
+      { uri: newFileUri, type: FileChangeType.Created },
+    ]);
+    if (!file) {
+      this.trackIfHandled(newFileUri);
     }
   }
 
   /**
-   * Called when a folder is renamed/moved in filetree
+   * Called when a folder is renamed/moved in filetree. Moves the tracked files
+   * under it; the caller announces the untracked ones with createNodeFiles.
    */
   renameOrMoveNodeFolder(oldPath: string, newPath: string): void {
     const oldFolderUri = this.getUriByPath(oldPath);
     const newFolderUri = this.getUriByPath(newPath);
 
-    const changes: LspFileEvent[] = [];
+    // The folders themselves: basedpyright rescans the files it held under the
+    // Deleted one, and the Go side restarts the Arduino LS for a Deleted folder
+    // inside sketch/.
+    const changes: LspFileEvent[] = [
+      { uri: oldFolderUri, type: FileChangeType.Deleted },
+      { uri: newFolderUri, type: FileChangeType.Created },
+    ];
     this.files.forEach((file) => {
       // Re-root through the uri helpers rather than a string replace: replace()
       // would rewrite the first match anywhere in the uri, not just the prefix.
@@ -799,14 +917,30 @@ export class LspClientWorkspace extends Workspace {
   }
 
   private renameFile(file: LspClientWorkspaceFile, newFileUri: string): void {
-    // if a file with 'newFileUri' already exists it means that filetree is operating a drag&drop with overwrite option, so file has to be closed
     const newFile = this.getFile(newFileUri);
+    // An editor showing the moved file can remount at the new path, and open it
+    // there, before this call. Its view syncs through that entry, so keep it and
+    // drop the old one; dropping the new one would leave the view's edits going
+    // nowhere and the server's copy stale.
+    if (newFile && newFile !== file && newFile.getViews().length > 0) {
+      this.files = this.files.filter((f) => f !== file);
+      this.client.didClose(file.uri);
+      return;
+    }
+    // if a file with 'newFileUri' already exists it means that filetree is operating a drag&drop with overwrite option, so file has to be closed
     if (newFile) {
       this.files = this.files.filter((f) => f !== newFile);
       this.client.didClose(newFileUri);
     }
     // close old file
     this.client.didClose(file.uri);
+
+    // A file this LSP must not be given at its new path (an .ino moved out of
+    // the sketch root) stays closed.
+    if (!this.trackableLanguage(newFileUri)) {
+      this.files = this.files.filter((f) => f !== file);
+      return;
+    }
 
     // open new file
     file.uri = newFileUri;
@@ -944,7 +1078,7 @@ export class LspClientWorkspace extends Workspace {
   }
 
   /**
-   * Re-lint the files currently shown in a pane after the Arduino LS has
+   * Re-lint the files currently shown in a panel after the Arduino LS has
    * restarted and finished the background-index pass that began after a sketch
    * move (see markSketchRestartIndexing). The restart replays the pre-move
    * document state — which restores cross-file resolution but leaves the open
@@ -995,7 +1129,11 @@ export class LspClientWorkspace extends Workspace {
   }
 
   /**
-   * Called when a folder is deleted in filetree
+   * Called when a folder is deleted in filetree, and for every removal the
+   * file watcher reports: once a path is gone it cannot be told apart from a
+   * folder. Closes the tracked files at or under `path` and announces them
+   * together with `path` itself, so a server that read untracked files under
+   * it from disk drops them too.
    */
   deleteNodeFolder(path: string): void {
     const folderUri = this.getUriByPath(path);
@@ -1017,12 +1155,14 @@ export class LspClientWorkspace extends Workspace {
 
     this.files = toKeep;
 
-    this.notifyFilesChangedOnDisk(
-      toDelete.map((file) => ({
-        uri: file.uri,
-        type: FileChangeType.Deleted,
-      })),
-    );
+    const changes: LspFileEvent[] = toDelete.map((file) => ({
+      uri: file.uri,
+      type: FileChangeType.Deleted,
+    }));
+    if (!toDelete.some((file) => sameFileUri(file.uri, folderUri))) {
+      changes.unshift({ uri: folderUri, type: FileChangeType.Deleted });
+    }
+    this.notifyFilesChangedOnDisk(changes);
   }
 
   /**
@@ -1035,7 +1175,7 @@ export class LspClientWorkspace extends Workspace {
   }
 
   /**
-   * True when `path` is tracked by the LSP but not shown in any editor pane.
+   * True when `path` is tracked by the LSP but not shown in any editor panel.
    * Such files only self-sync when opened, so an external change needs an
    * explicit `refreshFile` to keep cross-file features accurate.
    */
@@ -1129,7 +1269,7 @@ export class LspClientWorkspaceFile implements WorkspaceFile {
   getViews(): EditorView[] {
     return [...this.views].filter((view) => {
       const plugin = LSPPlugin.get(view);
-      return !!plugin && plugin.uri === this.uri;
+      return !!plugin && sameFileUri(plugin.uri, this.uri);
     });
   }
 
@@ -1174,7 +1314,9 @@ export const normalizeWorkspaceEdit = (
     if (!edits?.length) {
       return;
     }
-    (changes[uri] ??= []).push(...edits);
+    (changes[uri] ??= []).push(
+      ...edits.filter((edit): edit is LspTextEdit => 'newText' in edit),
+    );
   });
 
   return { changes };
@@ -1208,7 +1350,7 @@ export interface WorkspaceEditResult {
  *    never knew this document — it started being tracked after the request went
  *    out. Retrying the rename picks it up.
  *  - `no-document`: mapped, but no editor document could be resolved to write
- *    into (the file could not be opened in a pane, or the dispatch failed).
+ *    into (the file could not be opened in a panel, or the dispatch failed).
  */
 export type SkippedWorkspaceEditReason =
   | 'outside-workspace'
@@ -1223,6 +1365,29 @@ export interface SkippedWorkspaceEdit {
 /** One log-ready line naming every skipped document and its gate. */
 export const describeSkippedEdits = (skipped: SkippedWorkspaceEdit[]): string =>
   skipped.map(({ uri, reason }) => `${uri} (${reason})`).join(', ');
+
+/**
+ * `edits` without repeats of the same range and text. The Arduino LS on Windows
+ * lists some edits of a rename twice for one file, and CodeMirror applies both:
+ * renaming `X` to `Y` writes `YY`.
+ */
+const uniqueTextEdits = (edits: LspTextEdit[] | undefined): LspTextEdit[] => {
+  const seen = new Set<string>();
+  return (edits ?? []).filter((edit) => {
+    const key = JSON.stringify([
+      edit.range.start.line,
+      edit.range.start.character,
+      edit.range.end.line,
+      edit.range.end.character,
+      edit.newText,
+    ]);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+};
 
 /**
  * Applies workspace edit changes coming from:
@@ -1246,8 +1411,8 @@ export const applyWorkspaceEditChanges = async ({
   const skipped: SkippedWorkspaceEdit[] = [];
 
   for (const uri in wsEdit.changes) {
-    const lspChanges = wsEdit.changes[uri];
-    if (!lspChanges?.length) {
+    const lspChanges = uniqueTextEdits(wsEdit.changes[uri]);
+    if (!lspChanges.length) {
       continue;
     }
     // Never write to read-only external files (e.g. library headers) that a
@@ -1268,7 +1433,29 @@ export const applyWorkspaceEditChanges = async ({
     // request went out) would make mapPosition throw, losing the whole edit
     // including the files that could have been written. Skip it instead.
     if (mapping.getMapping(localUri) === null) {
-      skipped.push({ uri, reason: 'not-in-mapping' });
+      // A cross-file rename reaches files the user never opened, and the
+      // mapping only covers open documents. Track it from disk and resolve the
+      // positions against that copy directly: it is the same content the server
+      // read, and no local edit can have landed on a document nothing held.
+      const tracked = await client.workspace.trackUriFromDisk(localUri);
+      if (!tracked) {
+        skipped.push({ uri, reason: 'not-in-mapping' });
+        continue;
+      }
+
+      const changed = await client.workspace.applyFileUpdate(localUri, {
+        changes: lspChanges.map((change) => ({
+          from: toDocOffset(tracked.doc, change.range.start),
+          to: toDocOffset(tracked.doc, change.range.end),
+          insert: change.newText,
+        })),
+        userEvent,
+      });
+      if (changed) {
+        applied.push(uri);
+      } else {
+        skipped.push({ uri, reason: 'no-document' });
+      }
       continue;
     }
 

@@ -19,7 +19,7 @@ type sdkConn struct {
 	conn    *acp.ClientSideConnection
 	handler ClientHandler
 
-	mu       sync.Mutex                        // guards modelCfg
+	mu       sync.Mutex                        // guards modelCfg, mcpServers, allowedTools, boardName and dirOfWorkspace
 	modelCfg map[SessionID]acp.SessionConfigId // per-session id of the "model" config option, for SetModel
 
 	elicitTags     *elicitationTags // sessionIds sniffed off the wire, because the SDK drops them (see elicitationtag.go)
@@ -27,6 +27,11 @@ type sdkConn struct {
 	mcpServers     []acp.McpServer  // MCP servers advertised on every session (board tools)
 	allowedTools   []string         // read-only MCP tools auto-approved via session _meta (no permission prompt)
 	boardName      string           // connected board's display name, stated in every session's system prompt
+	grants         toolGrants       // "Always allow" answers, honoured here because the engine drops them (see toolgrants.go)
+	wsMu           sync.Mutex       // guards sessionWS: sessions open on one goroutine and permissions arrive on another
+	sessionWS      map[SessionID]string
+	sessionCwd     map[SessionID]string
+	dirOfWorkspace func(appID string) string
 }
 
 // boardMCPServerName is the MCP server name the agent sees; MCP tools are namespaced mcp__<name>__<tool>.
@@ -92,7 +97,7 @@ func init() { DefaultConnFactory = NewSDKConn }
 
 // NewSDKConn wires the SDK connection onto the agent process stdio (the ConnFactory for NewManager).
 func NewSDKConn(stdin io.Writer, stdout io.Reader, handler ClientHandler) (AgentConn, error) {
-	c := &sdkConn{handler: handler, modelCfg: map[SessionID]acp.SessionConfigId{}, elicitTags: &elicitationTags{}}
+	c := &sdkConn{handler: handler, modelCfg: map[SessionID]acp.SessionConfigId{}, sessionWS: map[SessionID]string{}, elicitTags: &elicitationTags{}}
 	// Tee the agent's output through the tagger so an elicitation's sessionId is recorded before the SDK — which drops
 	// that field — dispatches the request (see elicitationtag.go).
 	c.conn = acp.NewClientSideConnection(c, stdin, io.TeeReader(stdout, c.elicitTags))
@@ -132,7 +137,7 @@ func (c *sdkConn) Authenticate(ctx context.Context, methodID string) error {
 var policySettingSources = []string{"user"}
 
 // claudeSessionMeta carries Claude-Code session options the adapter reads from _meta (matching CLI flags ignored): disallow native mutating tools, pin the setting sources, auto-approve read-only MCP tools, append the chat output style + board knowledge.
-func claudeSessionMeta(allowedTools []string, boardName string) map[string]any {
+func claudeSessionMeta(allowedTools []string, boardName string, ws SessionWorkspace) map[string]any {
 	opts := map[string]any{
 		"disallowedTools": nativeMutatingTools,
 		"settingSources":  policySettingSources, // adapter spreads caller options over its default, so this overrides it
@@ -143,17 +148,90 @@ func claudeSessionMeta(allowedTools []string, boardName string) map[string]any {
 	}
 	return map[string]any{
 		"claudeCode":   map[string]any{"options": opts},
-		"systemPrompt": map[string]any{"append": chatOutputStyle + "\n\n" + boardKnowledgeFor(boardName)},
+		"systemPrompt": map[string]any{"append": chatOutputStyle + "\n\n" + boardKnowledgeFor(boardName) + workspaceFocus(ws)},
 	}
 }
 
-func (c *sdkConn) NewSession(ctx context.Context, cwd string) (NewSessionResult, error) {
-	resp, err := c.conn.NewSession(ctx, acp.NewSessionRequest{Cwd: cwd, McpServers: c.acpMcpServers(), Meta: claudeSessionMeta(c.acpAllowedTools(), c.acpBoardName())})
+func (c *sdkConn) NewSession(ctx context.Context, cwd string, ws SessionWorkspace) (NewSessionResult, error) {
+	resp, err := c.conn.NewSession(ctx, acp.NewSessionRequest{Cwd: cwd, McpServers: c.acpMcpServers(), Meta: claudeSessionMeta(c.acpAllowedTools(), c.acpBoardName(), ws)})
 	if err != nil {
 		return NewSessionResult{}, err
 	}
 	sid := SessionID(resp.SessionId)
+	c.rememberSession(sid, cwd, ws)
 	return c.sessionResult(sid, resp.ConfigOptions, resp.Modes), nil
+}
+
+// workspaceDir resolves the mirror directory of a session's workspace app; "" when there is none, which leaves every call in scope.
+func (c *sdkConn) workspaceDir(appID string) string {
+	if appID == "" {
+		return ""
+	}
+	// Read under the lock, called outside it: permissions arrive on the SDK's read goroutine while a restart
+	// re-attaches, and the host's mapping reaches back into App state that takes locks of its own.
+	c.mu.Lock()
+	dirOf := c.dirOfWorkspace
+	c.mu.Unlock()
+	if dirOf == nil {
+		return ""
+	}
+	return dirOf(appID)
+}
+
+// attachWorkspaceDirs gives the connection the appID → mirror dir mapping only the host can compute.
+func (c *sdkConn) attachWorkspaceDirs(f func(appID string) string) {
+	c.mu.Lock()
+	c.dirOfWorkspace = f
+	c.mu.Unlock()
+}
+
+// attachGrants hands the registry its persistence; called once, right after the connection is built.
+func (c *sdkConn) attachGrants(store GrantStore) { c.grants.attach(store) }
+
+// rememberSession records a session's workspace, which decides the grants, and its cwd, which anchors the agent's relative paths.
+func (c *sdkConn) rememberSession(sid SessionID, cwd string, ws SessionWorkspace) {
+	c.wsMu.Lock()
+	defer c.wsMu.Unlock()
+	if c.sessionWS == nil {
+		c.sessionWS = map[SessionID]string{}
+	}
+	if c.sessionCwd == nil {
+		c.sessionCwd = map[SessionID]string{}
+	}
+	c.sessionWS[sid], c.sessionCwd[sid] = ws.AppID, cwd
+}
+
+// forgetSession drops what a closed session left here, so neither map grows for the life of the process.
+func (c *sdkConn) forgetSession(sid SessionID) {
+	c.wsMu.Lock()
+	defer c.wsMu.Unlock()
+	delete(c.sessionWS, sid)
+	delete(c.sessionCwd, sid)
+}
+
+// RebindWorkspace moves live sessions off a renamed app's old id: otherwise their grants stop matching and their own app reads as another one.
+func (c *sdkConn) RebindWorkspace(oldID, newID string) {
+	c.wsMu.Lock()
+	defer c.wsMu.Unlock()
+	for sid, ws := range c.sessionWS {
+		if ws == oldID {
+			c.sessionWS[sid] = newID
+		}
+	}
+}
+
+// cwdOf reports the working directory a session was opened with.
+func (c *sdkConn) cwdOf(sid SessionID) string {
+	c.wsMu.Lock()
+	defer c.wsMu.Unlock()
+	return c.sessionCwd[sid]
+}
+
+// workspaceOf reports the workspace a session was opened in; an unknown one reads as the general workspace.
+func (c *sdkConn) workspaceOf(sid SessionID) string {
+	c.wsMu.Lock()
+	defer c.wsMu.Unlock()
+	return c.sessionWS[sid]
 }
 
 // sessionResult builds a NewSessionResult from a session response's config options + modes (shared by
@@ -246,7 +324,7 @@ func modelIDs(models []AgentModel) []string {
 }
 
 // LoadSession re-establishes sid on a relaunched agent and re-captures its model option.
-func (c *sdkConn) LoadSession(ctx context.Context, sid SessionID, cwd string) (NewSessionResult, error) {
+func (c *sdkConn) LoadSession(ctx context.Context, sid SessionID, cwd string, ws SessionWorkspace) (NewSessionResult, error) {
 	if !c.canLoadSession {
 		return NewSessionResult{}, errors.New("agent does not support session/load")
 	}
@@ -254,18 +332,23 @@ func (c *sdkConn) LoadSession(ctx context.Context, sid SessionID, cwd string) (N
 		SessionId:  acp.SessionId(sid),
 		Cwd:        cwd,
 		McpServers: c.acpMcpServers(),
-		Meta:       claudeSessionMeta(c.acpAllowedTools(), c.acpBoardName()),
+		Meta:       claudeSessionMeta(c.acpAllowedTools(), c.acpBoardName(), ws),
 	})
 	if err != nil {
 		return NewSessionResult{}, err
 	}
+	c.rememberSession(sid, cwd, ws)
 	return c.sessionResult(sid, resp.ConfigOptions, resp.Modes), nil
 }
 
-func (c *sdkConn) Prompt(ctx context.Context, sid SessionID, text string) error {
+func (c *sdkConn) Prompt(ctx context.Context, sid SessionID, text string, before []string) error {
+	blocks := make([]acp.ContentBlock, 0, len(before)+1)
+	for _, b := range before {
+		blocks = append(blocks, acp.TextBlock(b))
+	}
 	_, err := c.conn.Prompt(ctx, acp.PromptRequest{
 		SessionId: acp.SessionId(sid),
-		Prompt:    []acp.ContentBlock{acp.TextBlock(text)},
+		Prompt:    append(blocks, acp.TextBlock(text)),
 	})
 	return err
 }
@@ -274,8 +357,9 @@ func (c *sdkConn) Cancel(ctx context.Context, sid SessionID) error {
 	return c.conn.Cancel(ctx, acp.CancelNotification{SessionId: acp.SessionId(sid)})
 }
 
-// CloseSession frees the session on the agent and drops its local model-config entry.
+// CloseSession frees the session on the agent and drops what this connection kept for it.
 func (c *sdkConn) CloseSession(ctx context.Context, sid SessionID) error {
+	c.forgetSession(sid)
 	c.mu.Lock()
 	delete(c.modelCfg, sid)
 	c.mu.Unlock()
@@ -285,6 +369,7 @@ func (c *sdkConn) CloseSession(ctx context.Context, sid SessionID) error {
 
 // DeleteSession permanently removes a persisted session (ACP session/unstable/delete).
 func (c *sdkConn) DeleteSession(ctx context.Context, sid SessionID) error {
+	c.forgetSession(sid)
 	c.mu.Lock()
 	delete(c.modelCfg, sid)
 	c.mu.Unlock()
@@ -333,20 +418,69 @@ func (c *sdkConn) Close() error { return nil }
 // ---- acp.Client: inbound callbacks from the agent ----
 
 func (c *sdkConn) SessionUpdate(_ context.Context, n acp.SessionNotification) error {
-	if u, ok := toUpdate(n.Update); ok {
-		c.handler.HandleUpdate(SessionID(n.SessionId), u)
+	u, ok := toUpdate(n.Update)
+	if !ok {
+		return nil
 	}
+	sid := SessionID(n.SessionId)
+	c.markOutsideWorkspace(sid, u.ToolCall)
+	// A tool call is announced bare, so the row is judged again on the update; only a true ever travels, so a thinner update cannot clear the badge.
+	if tcu := n.Update.ToolCallUpdate; tcu != nil {
+		tc := &ToolCall{Input: tcu.RawInput, Paths: locationPaths(tcu.Locations)}
+		if tcu.Title != nil {
+			tc.Title = *tcu.Title
+		}
+		if tcu.Kind != nil {
+			tc.Kind = string(*tcu.Kind)
+		}
+		c.markOutsideWorkspace(sid, tc)
+		u.OutsideWorkspace = tc.OutsideWorkspace
+	}
+	c.handler.HandleUpdate(sid, u)
 	return nil
 }
 
+// markOutsideWorkspace flags a call acting on another app, so the chat row says so as it happens, not only when a permission is asked.
+func (c *sdkConn) markOutsideWorkspace(sid SessionID, tc *ToolCall) {
+	if tc == nil {
+		return
+	}
+	ws := c.workspaceOf(sid)
+	tc.OutsideWorkspace = actsOutsideWorkspace(tc, ws, c.workspaceDir(ws), c.cwdOf(sid))
+}
+
 func (c *sdkConn) RequestPermission(ctx context.Context, p acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
-	out := c.handler.HandlePermission(ctx, toPermissionRequest(p))
+	req := toPermissionRequest(p)
+	ws := c.workspaceOf(req.SessionID)
+	// Marked before the grant lookup: leaving the workspace is part of the grant's identity, so an allow given inside the app cannot cover it.
+	c.markOutsideWorkspace(req.SessionID, req.ToolCall)
+	if opt, ok := c.grants.autoAllow(ws, req); ok { // the user already answered "Always allow" for this exact call
+		slog.Info("[permission] auto-allowed by an earlier always-allow", "tool", req.ToolCall.Title, "session", string(p.SessionId))
+		return acp.RequestPermissionResponse{
+			Outcome: acp.NewRequestPermissionOutcomeSelected(acp.PermissionOptionId(opt)),
+		}, nil
+	}
+	out := c.handler.HandlePermission(ctx, req)
 	if out.Cancelled || out.OptionID == "" {
 		return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeCancelled()}, nil
 	}
+	c.grants.record(ws, req, out.OptionID)
 	return acp.RequestPermissionResponse{
-		Outcome: acp.NewRequestPermissionOutcomeSelected(acp.PermissionOptionId(out.OptionID)),
+		Outcome: acp.NewRequestPermissionOutcomeSelected(acp.PermissionOptionId(engineAnswer(req, out.OptionID))),
 	}, nil
+}
+
+// engineAnswer downgrades "Always allow" to a one-off: the engine's own rule is per tool for the whole session, so the scoped decision stays here (a reject is forwarded as chosen).
+func engineAnswer(req PermissionRequest, optionID string) string {
+	if !isAlwaysAllowOption(req.Options, optionID) {
+		return optionID
+	}
+	if once, ok := allowOptionID(req.Options); ok {
+		return once
+	}
+	// No one-off to answer with: the user said allow and only the widening option exists, so it goes through as chosen.
+	slog.Warn("[permission] no one-off allow to downgrade to; the engine gets the persistent answer", "tool", req.ToolCall.Title)
+	return optionID
 }
 
 // UnstableCreateElicitation renders the agent's form elicitation (Claude's AskUserQuestion, gated on our elicitation
@@ -533,7 +667,13 @@ func toUpdate(u acp.SessionUpdate) (Update, bool) {
 		return Update{Type: "message_chunk", Delta: blockText(u.AgentMessageChunk.Content)}, true
 	case u.UserMessageChunk != nil:
 		// Only seen during loadSession history replay; live user prompts are sent by us, not echoed.
-		return Update{Type: "user_message", Delta: blockText(u.UserMessageChunk.Content)}, true
+		text := blockText(u.UserMessageChunk.Content)
+		if loc := editorContextBlock.FindStringIndex(text); loc != nil {
+			if text = text[loc[1]:]; text == "" {
+				return Update{}, false
+			}
+		}
+		return Update{Type: "user_message", Delta: text}, true
 	case u.AgentThoughtChunk != nil:
 		return Update{Type: "thinking", Delta: blockText(u.AgentThoughtChunk.Content)}, true
 	case u.ToolCall != nil:
@@ -584,13 +724,26 @@ func toolStatus(s *acp.ToolCallStatus) string {
 }
 
 func toToolCall(tc *acp.SessionUpdateToolCall) *ToolCall {
-	return &ToolCall{
+	out := &ToolCall{
 		ID:     string(tc.ToolCallId),
 		Title:  tc.Title,
 		Kind:   string(tc.Kind),
 		Status: string(tc.Status), // value here; the *Update variant is a pointer (see toolStatus)
 		Input:  tc.RawInput,       // the tool's arguments, shown in the card
 	}
+	out.Paths = locationPaths(tc.Locations)
+	return out
+}
+
+// locationPaths lists the files a call declares it touches: the permission mapper decides whether to prompt, this one whether to badge.
+func locationPaths(locations []acp.ToolCallLocation) []string {
+	var paths []string
+	for _, l := range locations {
+		if strings.TrimSpace(l.Path) != "" {
+			paths = append(paths, l.Path)
+		}
+	}
+	return paths
 }
 
 // toToolCallRef maps the tool-call a permission request is about; fields are optional in this variant.
@@ -608,6 +761,7 @@ func toToolCallRef(tc acp.ToolCallUpdate) *ToolCall {
 	if tc.RawInput != nil {
 		out.Input = tc.RawInput // the tool's arguments (e.g. Bash {command}), so the permission dialog can show what will run
 	}
+	out.Paths = locationPaths(tc.Locations)
 	return out
 }
 

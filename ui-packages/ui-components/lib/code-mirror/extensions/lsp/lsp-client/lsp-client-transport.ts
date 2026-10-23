@@ -48,16 +48,28 @@ export const createLspClientTransport = ({
 } => {
   let handlers: ((value: string) => void)[] = [];
 
+  // Each send is its own backend call, and calls in flight together can reach
+  // the server in either order: a didClose that overtakes the didOpen sent
+  // after it leaves the server without a document the client still edits.
+  // The backend resolves a call once the message is written, so starting the
+  // next send only then keeps the server's order the order sent.
+  let sendQueue: Promise<void> = Promise.resolve();
+  const sendInOrder = (message: LspMessage): Promise<void> => {
+    const sent = sendQueue.then(() => sendLspMessage?.(lspId, message));
+    sendQueue = sent.catch(() => undefined);
+    return sent;
+  };
+
   const replyToServerRequest = (
     id: LspResponseMessage['id'],
     result: LspResponseMessage['result'],
   ): void => {
     const payload: LspResponseMessage = { jsonrpc: '2.0', id, result };
     logClientMessage(lspId, fileId, payload);
-    sendLspMessage?.(lspId, payload);
+    sendInOrder(payload).catch(() => undefined);
   };
 
-  const serverRequestHandlers = createServerRequestHandlers(client);
+  const serverRequestHandlers = createServerRequestHandlers(client, rootUri);
 
   // subscribe to events from the backend
   const unsubscribeLspMessages = subscribeLspMessages?.(
@@ -102,7 +114,7 @@ export const createLspClientTransport = ({
     }
     patchInitializeRequest(jsonMsg, rootUri);
     logClientMessage(lspId, fileId, jsonMsg);
-    sendLspMessage?.(lspId, jsonMsg)?.catch((e) => {
+    sendInOrder(jsonMsg).catch((e) => {
       console.error(`Failed to send LSP message [${lspId}-${fileId}]:`, e);
     });
   };
@@ -148,10 +160,16 @@ export const isUserFacingMessageType = (type: MessageType): boolean =>
  */
 const createServerRequestHandlers = (
   client: CustomLspClient,
+  rootUri: string,
 ): Record<
   string,
   (params: LspRequestMessage['params']) => Promise<LspResponseMessage['result']>
 > => ({
+  // Declaring the workspaceFolders capability invites this request; answering
+  // it with the same root the initialize params carried keeps a server that
+  // asks rather than reads from ending up with no workspace at all.
+  'workspace/workspaceFolders': async () => workspaceFolders(rootUri),
+
   // LS send this to create a progress token before streaming $/progress notifications.
   // Acknowledge just with null to let LS proceed.
   'window/workDoneProgress/create': async () => null,
@@ -294,6 +312,15 @@ const logServerMessage = (
   }
 };
 
+/**
+ * The workspace root, in the shape `workspaceFolders` takes. The servers index
+ * this folder, which is what lets cross-file features see files no editor has
+ * opened.
+ */
+const workspaceFolders = (rootUri: string): { uri: string; name: string }[] => [
+  { uri: rootUri, name: rootUri.split('/').pop() || 'app' },
+];
+
 const patchInitializeRequest = (
   msg: LspRequestMessage,
   rootUri: string,
@@ -307,6 +334,14 @@ const patchInitializeRequest = (
   }
   // add `rootPath` in initialize request for servers like Basedpyright that still use the deprecated field
   params.rootPath = rootUri;
+  // Both root fields are deprecated, so a server reading only the current one
+  // would be told nothing about the workspace and index none of it.
+  params.workspaceFolders = workspaceFolders(rootUri);
+  // …which most servers only read once the matching capability says they can.
+  params.capabilities.workspace = {
+    ...params.capabilities.workspace,
+    workspaceFolders: true,
+  };
   // set the locale so servers like Basedpyright don't localize messages based on the host machine's OS locale
   params.locale = 'en';
 };

@@ -43,9 +43,75 @@ func serveWheel(t *testing.T, handler http.HandlerFunc) {
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	previous := wheelURLFor
-	wheelURLFor = func(version string) string { return server.URL + "/" + version + ".whl" }
-	t.Cleanup(func() { wheelURLFor = previous })
+	previous := wheelURLsFor
+	wheelURLsFor = func(version string) []string { return []string{server.URL + "/" + version + ".whl"} }
+	t.Cleanup(func() { wheelURLsFor = previous })
+}
+
+// app-bricks-py moved its release tags from release/<version> to bricks/<version>
+// with 0.13.0. The current scheme goes first, and the legacy one still has to work
+// for boards on an older runtime.
+func TestAppBricksWheelURLsTryTheCurrentTagThenTheLegacyOne(t *testing.T) {
+	urls := appBricksWheelURLs("0.13.0")
+	want := []string{
+		"https://github.com/arduino/app-bricks-py/releases/download/bricks/0.13.0/arduino_app_bricks-0.13.0-py3-none-any.whl",
+		"https://github.com/arduino/app-bricks-py/releases/download/release/0.13.0/arduino_app_bricks-0.13.0-py3-none-any.whl",
+	}
+	if len(urls) != len(want) {
+		t.Fatalf("appBricksWheelURLs() = %v, want %v", urls, want)
+	}
+	for i := range want {
+		if urls[i] != want[i] {
+			t.Fatalf("appBricksWheelURLs()[%d] = %q, want %q", i, urls[i], want[i])
+		}
+	}
+}
+
+// A release published under the legacy tag only answers on the second candidate:
+// the publish has to move on from the 404 instead of giving up.
+func TestPublishFallsBackToTheNextWheelURL(t *testing.T) {
+	wheel := wheelBytes(t, "arduino/app_bricks/__init__.py")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/bricks/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write(wheel)
+	}))
+	t.Cleanup(server.Close)
+
+	previous := wheelURLsFor
+	wheelURLsFor = func(version string) []string {
+		return []string{server.URL + "/bricks/" + version + ".whl", server.URL + "/release/" + version + ".whl"}
+	}
+	t.Cleanup(func() { wheelURLsFor = previous })
+
+	root := t.TempDir()
+	versionDir := filepath.Join(root, "0.12.0")
+	if err := publishStubsForVersion(context.Background(), root, versionDir, "0.12.0"); err != nil {
+		t.Fatalf("publishStubsForVersion() = %v, want nil when the legacy tag serves the wheel", err)
+	}
+	if !stubsAreReady(versionDir) {
+		t.Fatal("version dir is not marked ready")
+	}
+}
+
+// When no candidate serves the wheel, the error has to name every URL tried, so the
+// log tells the tag schemes apart from a plain network failure.
+func TestDownloadWheelReportsEveryFailedCandidate(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) }))
+	t.Cleanup(server.Close)
+
+	urls := []string{server.URL + "/bricks/1.whl", server.URL + "/release/1.whl"}
+	if _, err := downloadWheel(context.Background(), urls); err == nil {
+		t.Fatal("downloadWheel() = nil, want an error when every candidate fails")
+	} else {
+		for _, u := range urls {
+			if !strings.Contains(err.Error(), u) {
+				t.Fatalf("error %q does not mention the tried URL %s", err, u)
+			}
+		}
+	}
 }
 
 func TestPublishStubsForVersionExtractsAndMarksComplete(t *testing.T) {
@@ -89,6 +155,24 @@ func TestPublishStubsForVersionExtractsAndMarksComplete(t *testing.T) {
 // The reported bug: the old code deleted the stubs directory before fetching the
 // wheel, so a network failure left basedpyright with an empty extraPaths and no way
 // back until the next server start.
+// The rules file is extracted with the stubs but does not count as one: a wheel
+// carrying only it has nothing to analyze and must not be published, or it would
+// become the newest ready version and hide the older, working stubs.
+func TestPublishRejectsAWheelWithOnlyTheRulesFile(t *testing.T) {
+	wheel := wheelBytes(t, pythonAnalysisRulesRelPath)
+	serveWheel(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(wheel) })
+
+	root := t.TempDir()
+	versionDir := filepath.Join(root, "1.0.0")
+	err := publishStubsForVersion(context.Background(), root, versionDir, "1.0.0")
+	if err == nil || !strings.Contains(err.Error(), "no python files") {
+		t.Fatalf("publishStubsForVersion() = %v, want the no-python-files error", err)
+	}
+	if stubsAreReady(versionDir) {
+		t.Fatal("a version dir with no Python file was marked ready")
+	}
+}
+
 func TestFailedDownloadLeavesEarlierStubsUsable(t *testing.T) {
 	serveWheel(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
 

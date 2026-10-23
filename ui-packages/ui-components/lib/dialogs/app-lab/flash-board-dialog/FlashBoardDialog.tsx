@@ -47,7 +47,6 @@ export const FlashBoardDialog: React.FC<FlashBoardDialogProps> = ({
             variant={ButtonVariant.Primary}
             uppercase={false}
             type="submit"
-            /* eslint-disable-next-line jsx-a11y/no-autofocus */
             autoFocus
           >
             {formatMessage(messages.updateButton)}

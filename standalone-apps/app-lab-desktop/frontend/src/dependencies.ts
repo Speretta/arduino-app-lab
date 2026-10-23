@@ -1,6 +1,7 @@
 import {
   setAiRuntimeService,
   setCodingAgentService,
+  subscribeWorkspaceAppForgotten,
 } from '@cloud-editor-mono/ai-assistant';
 import {
   setAppUIService,
@@ -63,4 +64,6 @@ export const injectDependencies = (): void => {
   // AI Assistant: Wails-backed runtime + agent (ACP).
   setCodingAgentService(StandaloneCodingAgentService);
   setAiRuntimeService(StandaloneAiRuntimeService);
+  // Runs for the whole session, so a deleted app's chat is forgotten with no agent UI mounted.
+  subscribeWorkspaceAppForgotten();
 };

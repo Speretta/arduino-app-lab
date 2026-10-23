@@ -3,7 +3,7 @@ import { defineMessages } from 'react-intl';
 export const messages = defineMessages({
   title: {
     id: 'app-lab.board-update-dialog.title',
-    defaultMessage: 'Updates Available',
+    defaultMessage: 'Updates available',
     description: 'Title shown on the board update dialog for updates',
   },
 
@@ -30,7 +30,7 @@ export const messages = defineMessages({
   },
   changeNetwork: {
     id: 'app-lab.board-update-dialog.change-network',
-    defaultMessage: 'Change Network',
+    defaultMessage: 'Change network',
     description: 'Button text to change network settings to allow update check',
   },
   retry: {
@@ -88,6 +88,11 @@ export const messages = defineMessages({
     defaultMessage: 'Installing updates...',
     description: 'Status text shown when the update is being installed',
   },
+  updateProgress: {
+    id: 'app-lab.board-update-dialog.update-progress',
+    defaultMessage: '{progress}%',
+    description: 'Completion percentage shown on the update progress bar',
+  },
   updateCompleted: {
     id: 'app-lab.board-update-dialog.update-completed',
     defaultMessage: 'Update complete',
@@ -103,7 +108,7 @@ export const messages = defineMessages({
   // Update labels
   softwareUpdate: {
     id: 'app-lab.board-update-dialog.software-update',
-    defaultMessage: '{boardModel} Software update',
+    defaultMessage: '{boardModel} software update',
     description: 'Label for software update section',
   },
   arduinoAppLab: {

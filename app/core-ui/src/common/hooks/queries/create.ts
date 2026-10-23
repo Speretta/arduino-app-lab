@@ -47,7 +47,6 @@ import {
   GetFilesList_Response,
   GetLibrariesList_Response,
   GetLibrary_Response,
-  GetLibraryCode_Response,
   GetSketch_Params,
   PostSketchFile_Response,
   SketchData,
@@ -66,6 +65,7 @@ import {
   useQueries,
   useQuery,
   useQueryClient,
+  UseQueryResult,
 } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { WretchError } from 'wretch/types';
@@ -133,18 +133,16 @@ export const useRetrieveSketch: UseRetrieveSketch = function (
   enabled,
   sketchID,
 ): ReturnType<UseRetrieveSketch> {
-  const { data, isLoading, isError } = useQuery(
-    [SketchDataBaseQueryKey.GET_SKETCH_BY_ID_QUERY_KEY, sketchID],
-    () =>
+  const { data, isLoading, isError } = useQuery({
+    queryKey: [SketchDataBaseQueryKey.GET_SKETCH_BY_ID_QUERY_KEY, sketchID],
+    queryFn: () =>
       sketchID
         ? retrieveSketch(sketchID)
         : Promise.reject(
             'Tried to obtain a sketch by ID without providing a specific sketch ID',
           ),
-    {
-      enabled,
-    },
-  );
+    enabled,
+  });
 
   return {
     data,
@@ -168,10 +166,10 @@ export const useCreateSketch: UseCreateSketch =
   function (): ReturnType<UseCreateSketch> {
     const {
       data: createdSketch,
-      isLoading,
+      isPending: isLoading,
       mutate: create,
     } = useMutation({
-      mutationFn: createSketch,
+      mutationFn: (sketchName?: string) => createSketch(sketchName),
     });
 
     return {
@@ -188,9 +186,11 @@ type UseDeleteSketch = () => {
 
 export const useDeleteSketch: UseDeleteSketch =
   function (): ReturnType<UseDeleteSketch> {
-    const { isLoading, mutateAsync: deleteSketchMutate } = useMutation({
-      mutationFn: deleteSketch,
-    });
+    const { isPending: isLoading, mutateAsync: deleteSketchMutate } =
+      useMutation({
+        mutationFn: deleteSketch,
+      });
+
     return {
       isLoading,
       deleteSketchMutate,
@@ -209,11 +209,12 @@ type UseRenameSketch = () => {
 
 export const useRenameSketch: UseRenameSketch =
   function (): ReturnType<UseRenameSketch> {
-    const { isLoading, mutateAsync: renameSketchMutate } = useMutation({
-      mutationFn: (content: { from: string; to: string }) => {
-        return renameSketch(content.from, content.to);
-      },
-    });
+    const { isPending: isLoading, mutateAsync: renameSketchMutate } =
+      useMutation({
+        mutationFn: (content: { from: string; to: string }) => {
+          return renameSketch(content.from, content.to);
+        },
+      });
 
     return {
       renameSketchMutate,
@@ -254,7 +255,7 @@ export const useCreateSketchFromExisting: UseCreateSketchFromExisting =
 
     const {
       data: createdSketch,
-      isLoading,
+      isPending: isLoading,
       mutate: create,
     } = useMutation({
       mutationFn: (content?: {
@@ -282,8 +283,6 @@ export const useCreateSketchFromExisting: UseCreateSketchFromExisting =
         errorCount.current = errorCount.current + 1;
 
         if (errorCount.current > 1) {
-          // on multiple errors, remove the "create qs params" to avoid
-          // repeated calls to the `create-api`
           navigate({
             search: {
               [CREATE_SKETCH_PARAM]: undefined,
@@ -293,8 +292,6 @@ export const useCreateSketchFromExisting: UseCreateSketchFromExisting =
           return;
         }
 
-        // TODO make this more precise by checking the error cause,
-        // ensuring it's actually a name conflict error
         create({
           ...variables,
           sketchName: `${
@@ -322,20 +319,21 @@ export const useCreateDefaultSketch: UseCreateDefaultSketch = function (
 
   const errorCount = useRef(0);
 
-  const { data: createdSketch } = useQuery(
-    [SketchDataBaseQueryKey.CREATE_DEFAULT_KEY_QUERY_KEY, name],
-    () => createSketch(name),
-    {
-      onError: () => {
-        if (errorCount.current === 0) {
-          setName(`${DEFAULT_SKETCH_NAME}_${new Date().valueOf()}`);
-        }
+  const { data: createdSketch, error } = useQuery({
+    queryKey: [SketchDataBaseQueryKey.CREATE_DEFAULT_KEY_QUERY_KEY, name],
+    queryFn: () => createSketch(name),
+    enabled,
+  });
 
-        errorCount.current = errorCount.current + 1;
-      },
-      enabled,
-    },
-  );
+  useEffect(() => {
+    if (!error) return;
+
+    if (errorCount.current === 0) {
+      setName(`${DEFAULT_SKETCH_NAME}_${new Date().valueOf()}`);
+    }
+
+    errorCount.current = errorCount.current + 1;
+  }, [error]);
 
   return {
     createdSketch,
@@ -343,16 +341,19 @@ export const useCreateDefaultSketch: UseCreateDefaultSketch = function (
 };
 
 export function refreshSketch(): Promise<void> {
-  return queryClient.invalidateQueries(
-    [SketchDataBaseQueryKey.GET_SKETCH_BY_ID_QUERY_KEY],
-    {},
-  );
+  return queryClient.invalidateQueries({
+    queryKey: [SketchDataBaseQueryKey.GET_SKETCH_BY_ID_QUERY_KEY],
+  });
 }
 
 export function refreshFilesContents(filePaths: string[]): void {
   filePaths.forEach((path) => {
-    queryClient.invalidateQueries(['get-file-content', path]);
-    queryClient.invalidateQueries(['get-batch-file-content', path]);
+    queryClient.invalidateQueries({
+      queryKey: ['get-file-content', path],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ['get-batch-file-content', path],
+    });
   });
 }
 
@@ -375,35 +376,36 @@ export const useRetrieveFileContents: UseRetrieveFileContents = function (
   name?: string,
   scope?: FileLineScope,
 ): ReturnType<UseRetrieveFileContents> {
-  const { data: fileData } = useQuery(
-    ['get-file-content', path, scope, String(bypassOrgHeader)],
-    () => {
+  const { data: fileData, error } = useQuery({
+    queryKey: ['get-file-content', path, scope, String(bypassOrgHeader)],
+    queryFn: () => {
       return path && name
         ? retrieveFileContents(path, name, bypassOrgHeader, scope)
         : Promise.reject(
             new Error('Tried to get file without path or sketch name'),
           );
     },
-    {
-      onSuccess: (data: RetrieveFileContentsResult) => {
-        setCodeSubjects(data);
-        getUnsavedFilesSubjectNext(data.path, false);
-      },
-      onError: (error) => {
-        if (!tokenNotRequired) return;
+    enabled,
+  });
 
-        // if we happen to get a 401 error when `tokenNotRequired`, we need to redirect to
-        // login
-        if (error && ((error as Error).cause as WretchError).status === 401) {
-          const result = onError?.(error);
-          if (result?.errorIsManaged) return;
+  useEffect(() => {
+    if (!fileData) return;
 
-          isUnauthorizedEventsNext(true);
-        }
-      },
-      enabled,
-    },
-  );
+    setCodeSubjects(fileData);
+    getUnsavedFilesSubjectNext(fileData.path, false);
+  }, [fileData]);
+
+  useEffect(() => {
+    if (!error) return;
+    if (!tokenNotRequired) return;
+
+    if (error && ((error as Error).cause as WretchError).status === 401) {
+      const result = onError?.(error);
+      if (result?.errorIsManaged) return;
+
+      isUnauthorizedEventsNext(true);
+    }
+  }, [error, onError]);
 
   return {
     fileData,
@@ -488,6 +490,24 @@ type UseRetrieveBatchFileContents = <T extends BatchFile>(
 
 export const GET_BATCH_FILE_CONTENT_QUERY_KEY = 'get-batch-file-content';
 
+type BatchFileResult = Awaited<ReturnType<typeof retrieveFiles>>;
+
+type CombinedBatchFileResults = {
+  data: (BatchFileResult | undefined)[];
+  errors: unknown[];
+  isLoading: boolean;
+};
+
+function combineBatchFileResults(
+  results: UseQueryResult<BatchFileResult>[],
+): CombinedBatchFileResults {
+  return {
+    data: results.map((result) => result.data),
+    errors: results.map((result) => result.error),
+    isLoading: results.some((result) => result.isLoading),
+  };
+}
+
 export const useRetrieveBatchFileContents: UseRetrieveBatchFileContents =
   function (
     enabled,
@@ -508,8 +528,15 @@ export const useRetrieveBatchFileContents: UseRetrieveBatchFileContents =
       fetchComplete: boolean;
     }>({ items: [], fetchCount: 0, fetchComplete: false });
 
+    const processedResultsRef = useRef(new Map<string, File[] | undefined>());
+
     useEffect(() => {
-      setFilesContents({ items: [], fetchCount: 0, fetchComplete: false });
+      setFilesContents({
+        items: [],
+        fetchCount: 0,
+        fetchComplete: false,
+      });
+      processedResultsRef.current.clear();
     }, [mainInoFilePath, filesListKey]);
 
     useEffect(() => {
@@ -525,7 +552,7 @@ export const useRetrieveBatchFileContents: UseRetrieveBatchFileContents =
           return isInFiles;
         });
 
-        return { ...prev, ...items };
+        return { ...prev, items };
       });
     }, [files]);
 
@@ -533,6 +560,7 @@ export const useRetrieveBatchFileContents: UseRetrieveBatchFileContents =
 
     const { renameSketchFileMutate, isLoading: sketchIsRenaming } =
       useRenameSketchFile(filesListKey);
+
     const { createSketchFileMutate } = useCreateSketchFile(
       enabled,
       filesListKey,
@@ -541,7 +569,11 @@ export const useRetrieveBatchFileContents: UseRetrieveBatchFileContents =
     const { deleteSketchFileQuery, isDeleting } =
       useDeleteSketchFile(filesListKey);
 
-    const results = useQueries({
+    const {
+      data: fileResults,
+      errors: fileErrors,
+      isLoading: filesAreLoading,
+    } = useQueries({
       queries: (files ?? []).map((file) => ({
         queryKey:
           scopedFilePath === file.path
@@ -564,59 +596,102 @@ export const useRetrieveBatchFileContents: UseRetrieveBatchFileContents =
             scopedFilePath,
             areLibraryFiles,
           ),
-        onSuccess: (result: File[]): void => {
-          const newContentsMap = new Map<string, RetrieveFileContentsResult>();
-
-          for (const file of result) {
-            if (!file.contents) continue;
-            if (file.type === 'file') {
-              let contents: RetrieveFileContentsResult;
-              if (usePathNames) {
-                const fullName = file.contents?.path.replace(
-                  (basePath ?? '') + '/',
-                  '',
-                );
-                contents = {
-                  ...file.contents,
-                  name: file.contents?.extension
-                    ? fullName.replace(`.${file.contents.extension}`, '')
-                    : fullName,
-                  fullName,
-                };
-              } else {
-                contents = file.contents;
-              }
-
-              newContentsMap.set(file.path, contents);
-              setCodeSubjects(contents);
-            }
-          }
-
-          setFilesContents((prev) => {
-            const items = prev.items
-              .filter((f) => !newContentsMap.has(f.path))
-              .concat(Array.from(newContentsMap.values()));
-
-            return {
-              items,
-              fetchCount: prev.fetchComplete
-                ? prev.fetchCount
-                : prev.fetchCount + 1,
-              fetchComplete: prev.fetchComplete
-                ? prev.fetchComplete
-                : prev.fetchCount + 1 === files?.length,
-            };
-          });
-        },
-        onError,
         enabled,
       })),
+
+      // `useQueries` returns a new results array on every render. The
+      // combined value keeps its reference until a result changes, so the
+      // effects below do not run on every render.
+      combine: combineBatchFileResults,
     });
+
+    useEffect(() => {
+      fileResults.forEach((resultData, index) => {
+        if (!resultData) return;
+
+        const file = files?.[index];
+        if (!file) return;
+
+        const queryKey =
+          scopedFilePath === file.path
+            ? [
+                GET_BATCH_FILE_CONTENT_QUERY_KEY,
+                file.path,
+                scope,
+                String(bypassOrgHeader),
+              ]
+            : [
+                GET_BATCH_FILE_CONTENT_QUERY_KEY,
+                file.path,
+                String(bypassOrgHeader),
+              ];
+        const resultKey = JSON.stringify(queryKey);
+        const previousData = processedResultsRef.current.get(resultKey);
+
+        if (previousData === resultData) return;
+
+        processedResultsRef.current.set(resultKey, resultData);
+
+        const newContentsMap = new Map<string, RetrieveFileContentsResult>();
+
+        for (const file of resultData) {
+          if (!file.contents) continue;
+
+          if (file.type === 'file') {
+            let contents: RetrieveFileContentsResult;
+
+            if (usePathNames) {
+              const fullName = file.contents?.path.replace(
+                (basePath ?? '') + '/',
+                '',
+              );
+
+              contents = {
+                ...file.contents,
+                name: file.contents?.extension
+                  ? fullName.replace(`.${file.contents.extension}`, '')
+                  : fullName,
+                fullName,
+              };
+            } else {
+              contents = file.contents;
+            }
+
+            newContentsMap.set(file.path, contents);
+            setCodeSubjects(contents);
+          }
+        }
+
+        setFilesContents((prev) => {
+          const items = prev.items
+            .filter((f) => !newContentsMap.has(f.path))
+            .concat(Array.from(newContentsMap.values()));
+
+          return {
+            items,
+            fetchCount: prev.fetchComplete
+              ? prev.fetchCount
+              : prev.fetchCount + 1,
+            fetchComplete: prev.fetchComplete
+              ? prev.fetchComplete
+              : prev.fetchCount + 1 === files?.length,
+          };
+        });
+      });
+    }, [fileResults, files, basePath, usePathNames]);
+
+    useEffect(() => {
+      fileErrors.forEach((error) => {
+        if (!error) return;
+        onError?.(error);
+      });
+    }, [fileErrors, onError]);
 
     const refreshFileContents = (paths: string[] = []): void => {
       if (paths.length === 0) {
-        // Invalidate all files
-        queryClient.invalidateQueries([GET_BATCH_FILE_CONTENT_QUERY_KEY]);
+        queryClient.invalidateQueries({
+          queryKey: [GET_BATCH_FILE_CONTENT_QUERY_KEY],
+        });
         return;
       }
 
@@ -638,16 +713,22 @@ export const useRetrieveBatchFileContents: UseRetrieveBatchFileContents =
                 file.fullName = fullName;
                 file.name = fullName.split('.')[0];
               }
+
               return file;
             });
+
             return { ...prev, items };
           });
         }
 
         renameFile(prevName, newName);
         setIsMainInoRenaming(prevName === mainInoFilePath);
+
         try {
-          await renameSketchFileMutate({ from: prevName, to: newName });
+          await renameSketchFileMutate({
+            from: prevName,
+            to: newName,
+          });
         } catch (error) {
           renameFile(newName, prevName);
           throw error;
@@ -673,10 +754,12 @@ export const useRetrieveBatchFileContents: UseRetrieveBatchFileContents =
           extension: fileExtension ?? '',
           mimetype: '',
         };
+
         setFilesContents((prev) => ({
           ...prev,
           items: prev.items.concat(newFile),
         }));
+
         try {
           return await createSketchFileMutate({
             filePath: { path: fileId },
@@ -688,6 +771,7 @@ export const useRetrieveBatchFileContents: UseRetrieveBatchFileContents =
             ...prev,
             items: prev.items.filter((f) => f.path !== fileId),
           }));
+
           throw error;
         }
       },
@@ -698,14 +782,17 @@ export const useRetrieveBatchFileContents: UseRetrieveBatchFileContents =
       async (path?: string | undefined) => {
         const fileIndex = filesContents.items.findIndex((f) => f.path === path);
         const file = filesContents.items[fileIndex];
+
         setFilesContents((prev) => ({
           ...prev,
           items: prev.items.filter((item) => item.path !== path),
         }));
+
         try {
           return await deleteSketchFileQuery(path);
         } catch (error) {
           const err = error as Error;
+
           if (err.cause !== 404) {
             setFilesContents((prev) => {
               const items = [
@@ -733,10 +820,7 @@ export const useRetrieveBatchFileContents: UseRetrieveBatchFileContents =
       renameSketchFile,
       addSketchFile,
       mainInoIsRenaming: sketchIsRenaming && isMainInoRenaming,
-      isLoading:
-        filesContents.items.length > 0
-          ? results.some((result) => result.isLoading)
-          : true,
+      isLoading: filesContents.items.length > 0 ? filesAreLoading : true,
       allContentsRetrieved: filesContents.fetchComplete,
     };
   };
@@ -771,9 +855,10 @@ export const useRetrieveFilesList: UseRetrieveFilesList = function (
     isLoading: getFilesIsLoading,
     isError: getFilesIsError,
     refetch,
-  } = useQuery(
+    error,
+  } = useQuery({
     queryKey,
-    () =>
+    queryFn: () =>
       path
         ? retrieveFilesList(path, bypassOrgHeader, isLibrary)
         : Promise.reject(
@@ -781,14 +866,16 @@ export const useRetrieveFilesList: UseRetrieveFilesList = function (
               'Tried to obtain sketch files without providing a valid sketch path',
             ),
           ),
-    {
-      onError,
-      enabled,
-    },
-  );
+    enabled,
+  });
+
+  useEffect(() => {
+    if (!error) return;
+    onError?.(error);
+  }, [error, onError]);
 
   const invalidateFilesList = useCallback(() => {
-    queryClient.invalidateQueries(queryKey);
+    queryClient.invalidateQueries({ queryKey });
   }, [queryKey, queryClient]);
 
   return {
@@ -846,7 +933,7 @@ export type DeleteSketchFileMutation = UseMutateAsyncFunction<
 export const useDeleteSketchFile: UseDeleteSketchFile = function (
   keyToInvalidate: QueryKey,
 ): ReturnType<UseDeleteSketchFile> {
-  const { mutateAsync: deleteSketchFileQuery, isLoading: isDeleting } =
+  const { mutateAsync: deleteSketchFileQuery, isPending: isDeleting } =
     useMutation({
       mutationFn: (path?: string) => {
         return typeof path !== 'undefined'
@@ -855,6 +942,7 @@ export const useDeleteSketchFile: UseDeleteSketchFile = function (
       },
       onSuccess: (_, path) => {
         if (path) removeCodeSubject(path);
+
         queryClient.invalidateQueries({
           queryKey: keyToInvalidate,
           exact: true,
@@ -883,7 +971,7 @@ export const useCreateSketchFile: UseCreateSketchFile = function (
 ): ReturnType<UseCreateSketchFile> {
   const {
     data: createdSketchFile,
-    isLoading,
+    isPending: isLoading,
     mutateAsync: createSketchFileMutate,
   } = useMutation({
     mutationFn: (content: {
@@ -912,7 +1000,11 @@ export const useCreateSketchFile: UseCreateSketchFile = function (
 export type CreateSketchFileMutation = UseMutateAsyncFunction<
   PostSketchFile_Response,
   unknown,
-  { filePath: FileChange_Params; extension: string; code?: string },
+  {
+    filePath: FileChange_Params;
+    extension: string;
+    code?: string;
+  },
   unknown
 >;
 
@@ -929,24 +1021,26 @@ type UseRenameSketchFile = (keyToInvalidate: QueryKey) => {
 export const useRenameSketchFile: UseRenameSketchFile = function (
   keyToInvalidate: QueryKey,
 ): ReturnType<UseRenameSketchFile> {
-  const { mutateAsync: renameSketchFileMutate, isLoading } = useMutation({
-    mutationFn: (content: { from?: string; to?: string }) => {
-      return typeof content !== 'undefined' &&
-        typeof content.from !== 'undefined' &&
-        typeof content.to !== 'undefined'
-        ? renameSketch(content.from, content.to)
-        : Promise.reject(
-            new Error('Tried to rename sketch without path or sketch name'),
-          );
-    },
-    onSuccess: (_, variables) => {
-      if (variables.from) removeCodeSubject(variables.from);
-      queryClient.invalidateQueries({
-        queryKey: keyToInvalidate,
-        exact: true,
-      });
-    },
-  });
+  const { mutateAsync: renameSketchFileMutate, isPending: isLoading } =
+    useMutation({
+      mutationFn: (content: { from?: string; to?: string }) => {
+        return typeof content !== 'undefined' &&
+          typeof content.from !== 'undefined' &&
+          typeof content.to !== 'undefined'
+          ? renameSketch(content.from, content.to)
+          : Promise.reject(
+              new Error('Tried to rename sketch without path or sketch name'),
+            );
+      },
+      onSuccess: (_, variables) => {
+        if (variables.from) removeCodeSubject(variables.from);
+
+        queryClient.invalidateQueries({
+          queryKey: keyToInvalidate,
+          exact: true,
+        });
+      },
+    });
 
   return {
     renameSketchFileMutate,
@@ -969,7 +1063,7 @@ export const useUpdateSketchSecrets: UseUpdateSketchSecrets =
   function (): ReturnType<UseUpdateSketchSecrets> {
     const {
       mutateAsync: mutateSketchWithSecrets,
-      isLoading,
+      isPending: isLoading,
       isError,
     } = useMutation({
       mutationFn: updateSketchSecrets,
@@ -994,9 +1088,10 @@ type UseAssociateSketchToDevice = () => {
 
 export const useAssociateSketchToDevice: UseAssociateSketchToDevice =
   function (): ReturnType<UseAssociateSketchToDevice> {
-    const { mutateAsync: mutateSketchWithDevice, isLoading } = useMutation({
-      mutationFn: associateSketchWithDevice,
-    });
+    const { mutateAsync: mutateSketchWithDevice, isPending: isLoading } =
+      useMutation({
+        mutationFn: associateSketchWithDevice,
+      });
 
     return {
       mutateSketchWithDevice,
@@ -1016,9 +1111,10 @@ type UseMarkSketchVisibility = () => {
 
 export const useMarkSketchVisibility: UseMarkSketchVisibility =
   function (): ReturnType<UseMarkSketchVisibility> {
-    const { mutateAsync: mutateSketchVisibility, isLoading } = useMutation({
-      mutationFn: markSketchVisibility,
-    });
+    const { mutateAsync: mutateSketchVisibility, isPending: isLoading } =
+      useMutation({
+        mutationFn: markSketchVisibility,
+      });
 
     return {
       mutateSketchVisibility,
@@ -1038,9 +1134,10 @@ type UseAssociateSketchToLibraries = () => {
 
 export const useAssociateSketchToLibraries: UseAssociateSketchToLibraries =
   function (): ReturnType<UseAssociateSketchToLibraries> {
-    const { mutateAsync: mutateSketchWithLibraries, isLoading } = useMutation({
-      mutationFn: associateSketchWithLibraries,
-    });
+    const { mutateAsync: mutateSketchWithLibraries, isPending: isLoading } =
+      useMutation({
+        mutationFn: associateSketchWithLibraries,
+      });
 
     return {
       mutateSketchWithLibraries,
@@ -1068,39 +1165,67 @@ export const useGetCustomLibraries: UseGetCustomLibraries = function (
   const [customLibraries, setCustomLibraries] =
     useState<GetLibrariesList_Response>();
 
-  const { data, isLoading: customLibrariesAreLoading } = useQuery(
-    ['get-custom-libraries'],
-    retrieveCustomLibraries,
-    {
-      enabled,
-      staleTime: Infinity,
-      onSuccess(data) {
-        for (const customLibrary of data) {
-          queryClient.invalidateQueries(
-            getCustomLibCodeKey(customLibrary.path),
-          );
-        }
-      },
-    },
-  );
+  const {
+    data,
+    dataUpdatedAt,
+    isLoading: customLibrariesAreLoading,
+  } = useQuery({
+    queryKey: ['get-custom-libraries'],
+    queryFn: retrieveCustomLibraries,
+    enabled,
+    staleTime: Infinity,
+  });
 
-  useQueries({
+  const libraryCodeResults = useQueries({
     queries: (customLibraries ?? []).map((customLibrary) => ({
       queryKey: getCustomLibCodeKey(customLibrary.path),
       queryFn: () => retrieveCustomLibraryCode({ id: customLibrary.id }),
       enabled: codeEnabled,
       staleTime: Infinity,
-      onSuccess: ({ code }: GetLibraryCode_Response): void => {
-        setCustomLibraries((prev) =>
-          prev?.map((l) => (l.id === customLibrary.id ? { ...l, code } : l)),
-        );
-      },
     })),
   });
 
+  // `dataUpdatedAt` changes on every fetch. `data` alone keeps its reference
+  // when a refetch returns an equal list, and the code must refresh anyway
+  // (for example after a `library.properties` save).
   useEffect(() => {
+    if (!data) return;
+
+    for (const customLibrary of data) {
+      queryClient.invalidateQueries({
+        queryKey: getCustomLibCodeKey(customLibrary.path),
+      });
+    }
+
     setCustomLibraries(data);
-  }, [data]);
+  }, [data, dataUpdatedAt]);
+
+  useEffect(() => {
+    libraryCodeResults.forEach((result, index) => {
+      if (!result.data) return;
+
+      const customLibrary = customLibraries?.[index];
+      if (!customLibrary) return;
+
+      const { code } = result.data;
+
+      setCustomLibraries((prev) => {
+        if (!prev) return prev;
+
+        const currentLibrary = prev.find(
+          (library) => library.id === customLibrary.id,
+        );
+
+        if (currentLibrary?.code === code) {
+          return prev;
+        }
+
+        return prev.map((library) =>
+          library.id === customLibrary.id ? { ...library, code } : library,
+        );
+      });
+    });
+  }, [libraryCodeResults, customLibraries]);
 
   return {
     customLibraries,
@@ -1113,6 +1238,7 @@ export function isCustomLibrary(
 ): data is GetLibrary_Response {
   return data ? !('version' in data) && !('downloadUrl' in data) : false;
 }
+
 type UseSaveCustomLibrary = (
   libraryName: string | undefined,
   enabled: boolean,
@@ -1136,9 +1262,14 @@ export const useSaveCustomLibrary: UseSaveCustomLibrary = function (
   const { mutateAsync: saveLibraryQuery } = useMutation({
     mutationFn(files: RetrieveLibraryFileContentsResult[]) {
       if (!enabled) return Promise.resolve(null);
-      if (!libraryName)
+
+      if (!libraryName) {
         return Promise.reject('Tried to save library without library name');
-      return saveCustomLibrary(libraryName, files, { sourceReleaseId });
+      }
+
+      return saveCustomLibrary(libraryName, files, {
+        sourceReleaseId,
+      });
     },
     onSuccess: (data) => {
       if (isCustomLibrary(data)) {
@@ -1150,6 +1281,7 @@ export const useSaveCustomLibrary: UseSaveCustomLibrary = function (
           },
           replace: true,
         });
+
         refreshCustomLibraries();
       }
     },
@@ -1170,9 +1302,11 @@ type UseDeleteCustomLibrary = () => {
 
 export const useDeleteCustomLibrary: UseDeleteCustomLibrary =
   function (): ReturnType<UseDeleteCustomLibrary> {
-    const { isLoading, mutateAsync: deleteCustomLibraryMutate } = useMutation({
-      mutationFn: deleteCustomLibrary,
-    });
+    const { isPending: isLoading, mutateAsync: deleteCustomLibraryMutate } =
+      useMutation({
+        mutationFn: deleteCustomLibrary,
+      });
+
     return {
       isLoading,
       deleteCustomLibraryMutate,
@@ -1190,14 +1324,16 @@ type UseImportLibrary = () => {
 };
 
 export const useImportLibrary: UseImportLibrary = () => {
-  const { mutateAsync: importLibraryQuery, isLoading } = useMutation({
-    mutationFn: uploadCustomLibrary,
-    onSuccess: (data) => {
-      if (isCustomLibrary(data)) {
-        refreshCustomLibraries();
-      }
+  const { mutateAsync: importLibraryQuery, isPending: isLoading } = useMutation(
+    {
+      mutationFn: uploadCustomLibrary,
+      onSuccess: (data) => {
+        if (isCustomLibrary(data)) {
+          refreshCustomLibraries();
+        }
+      },
     },
-  });
+  );
 
   return {
     importLibraryQuery,
@@ -1207,9 +1343,11 @@ export const useImportLibrary: UseImportLibrary = () => {
 
 export async function downloadLibrary(id: string): Promise<void> {
   const library = (await retrieveCustomLibraries()).find((l) => l.id === id);
+
   if (!library) throw new Error('Library not found');
 
   let files;
+
   try {
     files = await retrieveFiles(
       {
@@ -1232,7 +1370,9 @@ export async function downloadLibrary(id: string): Promise<void> {
     }
   }
 
-  if (!files) throw new Error('Failed to retrieve library files');
+  if (!files) {
+    throw new Error('Failed to retrieve library files');
+  }
 
   const normalizedFiles = files.map((f) => ({
     ...f,
@@ -1249,6 +1389,7 @@ export async function downloadLibrary(id: string): Promise<void> {
     library.name,
   );
 }
+
 type UseGetFileHash = (
   enabled: boolean,
   refetchSketchFiles: () => void,
@@ -1275,134 +1416,146 @@ export const useGetFileHash: UseGetFileHash = function (
   const managed404ErrorCount = useRef(0);
   const timeoutRef = useRef<number | undefined>(undefined);
 
-  const setConcurrentEditingBannerTimeout = (): void => {
-    // Clear the previous timeout if it exists
+  const setConcurrentEditingBannerTimeout = useCallback((): void => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
 
-    // Set a new timeout to reset concurrentEditing to false after 10 seconds
     timeoutRef.current = window.setTimeout(() => {
       setConcurrentEditing(false);
     }, BANNER_PERSISTENCE);
-  };
+  }, []);
 
-  useQuery(
-    ['retrieve-files-hash-poll', sketchPath, username, selectedFilePath],
-    () =>
+  const { data: fileListResponse, error } = useQuery({
+    queryKey: [
+      'retrieve-files-hash-poll',
+      sketchPath,
+      username,
+      selectedFilePath,
+    ],
+    queryFn: () =>
       sketchPath
         ? retrieveFilesList(sketchPath, false)
         : Promise.reject('No sketch path while polling the file hash.'),
-    {
-      enabled,
-      refetchInterval: 3000,
-      refetchIntervalInBackground: true,
-      onSuccess(data) {
-        const fileListResponse = data?.filter((file) => !isHiddenFile(file));
-        const fileListSubjects = getCodeSubjects();
+    enabled,
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
+  });
 
-        if (fileListSubjects.size === 0) return; //If no files to compare
-
-        let isConcurrentEditing = false;
-        for (const fileIndex of fileListResponse.keys()) {
-          const file = fileListResponse[fileIndex];
-          const fileSubjectValue = fileListSubjects.get(file.path)?.getValue();
-
-          if (!fileSubjectValue) {
-            continue;
-          }
-
-          // Check if the current subject hash is the one retrieve from the DB (The latest one)
-          const isFileOutdated =
-            !!fileSubjectValue.meta.hash &&
-            !!file.revision?.hash &&
-            fileSubjectValue.meta.hash !== file.revision?.hash;
-
-          // If the file is outdated fires the query to update the data
-          if (isFileOutdated) {
-            queryClient.invalidateQueries(['get-file-content', file.path], {
-              exact: false,
-            });
-            queryClient.invalidateQueries(
-              ['get-batch-file-content', file.path],
-              { exact: false },
-            );
-          }
-
-          isConcurrentEditing =
-            isFileOutdated ||
-            (!!file.revision?.username &&
-              username !== file.revision?.username &&
-              !!file.modifiedAt &&
-              timeElapsedFromNowMs(file.modifiedAt) < BANNER_PERSISTENCE);
-          // ! The concurrent editing flag is visible for double the time,
-          // ! after this is false the banner persists for 2 minutes
-          // ! The persistence is not present if the component unmount L1475
-          if (isConcurrentEditing) {
-            break;
-          }
-        }
-
-        const newFilesFromResponse = fileListResponse.filter(
-          (file) => !fileListSubjects.has(file.path),
-        );
-
-        if (
-          newFilesFromResponse.length ||
-          fileListSubjects.size !== fileListResponse.length
-        ) {
-          isConcurrentEditing = true;
-          refetchSketchFiles();
-        }
-
-        if (isConcurrentEditing) {
-          setConcurrentEditing(true);
-          onConcurrentEditingDetected();
-          setConcurrentEditingBannerTimeout();
-        }
-
-        // Reset error count
-        managed404ErrorCount.current = 0;
-      },
-      onError(err: Error) {
-        if (!sketchPath) {
-          throw new Error('Missing sketchPath');
-        }
-
-        // Refresh the sketch if the error is 404 and the 404 error count is 0
-        type CustomCause = { path: string; status: number };
-        if (
-          (err.cause as CustomCause).path === sketchPath &&
-          (err.cause as CustomCause).status === 404 &&
-          managed404ErrorCount.current === 0
-        ) {
-          // increments count of "managed" errors to avoid this block re-executing
-          // infinitely on a 404 error caused by a bad sketch id
-          managed404ErrorCount.current = managed404ErrorCount.current + 1;
-
-          setConcurrentEditing(true);
-          setConcurrentEditingBannerTimeout();
-          queryClient.invalidateQueries(
-            [SketchDataBaseQueryKey.GET_SKETCH_BY_ID_QUERY_KEY],
-            {
-              exact: false,
-            },
-          );
-          removeCodeSubjectBySketchPath(sketchPath);
-        }
-      },
-    },
-  );
-
-  // Clear the timeout when the component is unmounted
   useEffect(() => {
-    let timeout: number;
-    if (timeoutRef.current) {
-      timeout = timeoutRef.current;
+    if (!fileListResponse) return;
+
+    const visibleFiles = fileListResponse.filter((file) => !isHiddenFile(file));
+
+    const fileListSubjects = getCodeSubjects();
+
+    if (fileListSubjects.size === 0) return;
+
+    let isConcurrentEditing = false;
+
+    for (const fileIndex of visibleFiles.keys()) {
+      const file = visibleFiles[fileIndex];
+      const fileSubjectValue = fileListSubjects.get(file.path)?.getValue();
+
+      if (!fileSubjectValue) {
+        continue;
+      }
+
+      const isFileOutdated =
+        !!fileSubjectValue.meta.hash &&
+        !!file.revision?.hash &&
+        fileSubjectValue.meta.hash !== file.revision?.hash;
+
+      if (isFileOutdated) {
+        queryClient.invalidateQueries({
+          queryKey: ['get-file-content', file.path],
+          exact: false,
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: ['get-batch-file-content', file.path],
+          exact: false,
+        });
+      }
+
+      isConcurrentEditing =
+        isFileOutdated ||
+        (!!file.revision?.username &&
+          username !== file.revision?.username &&
+          !!file.modifiedAt &&
+          timeElapsedFromNowMs(file.modifiedAt) < BANNER_PERSISTENCE);
+
+      if (isConcurrentEditing) {
+        break;
+      }
     }
 
+    const newFilesFromResponse = visibleFiles.filter(
+      (file) => !fileListSubjects.has(file.path),
+    );
+
+    if (
+      newFilesFromResponse.length ||
+      fileListSubjects.size !== visibleFiles.length
+    ) {
+      isConcurrentEditing = true;
+      refetchSketchFiles();
+    }
+
+    if (isConcurrentEditing) {
+      setConcurrentEditing(true);
+      onConcurrentEditingDetected();
+      setConcurrentEditingBannerTimeout();
+    }
+
+    managed404ErrorCount.current = 0;
+  }, [
+    fileListResponse,
+    username,
+    refetchSketchFiles,
+    onConcurrentEditingDetected,
+    setConcurrentEditingBannerTimeout,
+  ]);
+
+  useEffect(() => {
+    if (!error) return;
+
+    if (!sketchPath) {
+      throw new Error('Missing sketchPath');
+    }
+
+    type CustomCause = {
+      path: string;
+      status: number;
+    };
+
+    const cause =
+      error instanceof Error ? (error.cause as CustomCause) : undefined;
+
+    if (
+      cause?.path === sketchPath &&
+      cause?.status === 404 &&
+      managed404ErrorCount.current === 0
+    ) {
+      managed404ErrorCount.current = managed404ErrorCount.current + 1;
+
+      setConcurrentEditing(true);
+      setConcurrentEditingBannerTimeout();
+
+      queryClient.invalidateQueries({
+        queryKey: [SketchDataBaseQueryKey.GET_SKETCH_BY_ID_QUERY_KEY],
+        exact: false,
+      });
+
+      removeCodeSubjectBySketchPath(sketchPath);
+    }
+  }, [error, sketchPath, setConcurrentEditingBannerTimeout]);
+
+  useEffect(() => {
     return () => {
-      clearTimeout(timeout);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
     };
   }, []);
 
@@ -1410,22 +1563,23 @@ export const useGetFileHash: UseGetFileHash = function (
     isConcurrent: concurrentEditing,
   };
 };
+
 type UseGetUser = (
   enabled: boolean,
   id?: string,
-) => { data?: CreateUser_Response };
+) => {
+  data?: CreateUser_Response;
+};
 
 export const useGetUser: UseGetUser = function (
   enabled: boolean,
   id?: string,
 ): ReturnType<UseGetUser> {
-  const { data } = useQuery(
-    ['get-user', id],
-    () => (id ? getUser({ id }) : Promise.reject()),
-    {
-      enabled,
-    },
-  );
+  const { data } = useQuery({
+    queryKey: ['get-user', id],
+    queryFn: () => (id ? getUser({ id }) : Promise.reject()),
+    enabled,
+  });
 
   return { data };
 };
@@ -1463,6 +1617,7 @@ export function getCustomLibraryExamplesByFolder(
       const files = examples?.filter(
         (file) => file.type === 'file' && file.name !== example.name,
       );
+
       const path = example.path.slice(0, example.path.lastIndexOf('/'));
 
       currentFolder.push({

@@ -14,9 +14,11 @@ import {
 export const useGetReferenceCategories: UseGetReferenceCategories = function (
   langCode = 'en',
 ): ReturnType<UseGetReferenceCategories> {
-  const { isLoading, data } = useQuery(['reference', langCode], () =>
-    getReferenceCategoriesTree(),
-  );
+  const { isLoading, data } = useQuery({
+    queryKey: ['reference', langCode],
+
+    queryFn: () => getReferenceCategoriesTree(),
+  });
 
   const categoryTree = data ? data[0] : undefined;
   const allEntries = data ? data[1] : undefined;
@@ -32,13 +34,11 @@ export const useGetReferenceItem: UseGetReferenceItem = function (
   { path, langCode = 'en' },
   enabled,
 ): ReturnType<UseGetReferenceItem> {
-  const { isLoading, data: referenceItem } = useQuery(
-    ['reference', langCode, path.category, ...(path.itemPath || [])],
-    () => getReferenceItemTemplate(path, langCode),
-    {
-      enabled,
-    },
-  );
+  const { isLoading, data: referenceItem } = useQuery({
+    queryKey: ['reference', langCode, path.category, ...(path.itemPath || [])],
+    queryFn: () => getReferenceItemTemplate(path, langCode),
+    enabled,
+  });
 
   return {
     referenceItem,
@@ -50,13 +50,11 @@ export const useSearchReferenceItem: UseSearchReferenceItem = function (
   { query },
   enabled,
 ): ReturnType<UseSearchReferenceItem> {
-  const { isLoading, data: searchResult } = useQuery(
-    ['reference', 'search', query],
-    () => searchReferenceItem(query),
-    {
-      enabled,
-    },
-  );
+  const { isLoading, data: searchResult } = useQuery({
+    queryKey: ['reference', 'search', query],
+    queryFn: () => searchReferenceItem(query),
+    enabled,
+  });
 
   return {
     searchResult,

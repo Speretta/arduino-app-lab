@@ -123,8 +123,8 @@ func SelectAppDialog(ctx context.Context, orchestratorURL string, hostReads *hos
 		Title: "Select App to Import",
 		Filters: []runtime.FileFilter{
 			{
-				DisplayName: "ZIP Archive (*.zip)",
-				Pattern:     "*.zip",
+				DisplayName: "App or App release (*.zip, *.ard)",
+				Pattern:     "*.zip;*.ard",
 			},
 		},
 	})
@@ -167,15 +167,23 @@ func SelectAiModelDialog(ctx context.Context, orchestratorURL string) (string, e
 	return filePath, err
 }
 
+// checkHostRead refuses a host path the user did not select in this session.
+func checkHostRead(filePath string, hostReads *hostread.AllowSet, action string) error {
+	if hostReads.Allows(filePath) {
+		return nil
+	}
+	slog.Error(action+" denied: path was not selected in this session", "path", filePath)
+	return fmt.Errorf("access denied: %s was not selected in this session", filePath)
+}
+
 // Importing an app uploads a host file to the orchestrator, where its contents
 // become readable through the ordinary app-file APIs - so it is a host read by
 // another route, and needs the same intent check as a direct one. It also
 // deletes the source when it sits in the temp dir, which the check confines to
 // paths the user actually named.
 func ImportAppFromPath(ctx context.Context, orchestratorURL string, filePath string, hostReads *hostread.AllowSet) (string, error) {
-	if !hostReads.Allows(filePath) {
-		slog.Error("app import denied: path was not selected in this session", "path", filePath)
-		return "", fmt.Errorf("access denied: %s was not selected in this session", filePath)
+	if err := checkHostRead(filePath, hostReads, "app import"); err != nil {
+		return "", err
 	}
 
 	appID, err := uploadAppFile(ctx, orchestratorURL, filePath)

@@ -1,6 +1,10 @@
 import { getExamples } from '@cloud-editor-mono/domain/src/services/services-by-app/app-lab';
-import { ExampleCatalogResult } from '@cloud-editor-mono/infrastructure';
 import {
+  ExampleCatalogResult,
+  ExampleInfo,
+} from '@cloud-editor-mono/infrastructure';
+import {
+  ExampleRowVM,
   ExampleSectionVM,
   ExamplesLogic,
   ExampleTableVM,
@@ -49,6 +53,13 @@ export interface ExampleBuildLabels {
 const sumCount = (tables: ExampleTableVM[]): number =>
   tables.reduce((n, t) => n + t.count, 0);
 
+const toRows = (examples: ExampleInfo[] | null | undefined): ExampleRowVM[] =>
+  (examples ?? []).map((ex) => ({
+    id: ex.encoded_id ?? ex.id ?? '',
+    title: ex.name ?? ex.id ?? '',
+    description: ex.description,
+  }));
+
 // Pure view-model builder — deterministic, unit-tested. Turns the endpoint
 // shape (ExampleCatalogResult) into the VM.
 export const buildExampleSections = (
@@ -61,11 +72,7 @@ export const buildExampleSections = (
   const core = res['core-and-foundational'] ?? [];
   if (core.length > 0) {
     const tables: ExampleTableVM[] = core.map((cat) => {
-      const rows = (cat.examples ?? []).map((ex) => ({
-        id: ex.encoded_id ?? ex.id,
-        title: ex.name ?? ex.id,
-        description: ex.description,
-      }));
+      const rows = toRows(cat.examples);
       return {
         id: cat.category ?? '',
         title: prettifyCategoryName(cat.category ?? ''),
@@ -89,11 +96,7 @@ export const buildExampleSections = (
     const brickId = br.brick ?? '';
     const category = br.brick_category;
     const macroId = macroIdForCategory(category);
-    const rows = (br.examples ?? []).map((ex) => ({
-      id: ex.encoded_id ?? ex.id,
-      title: ex.name ?? ex.id,
-      description: ex.description,
-    }));
+    const rows = toRows(br.examples);
     const table: ExampleTableVM = {
       id: brickId,
       title: prettifyBrickName(brickId),
@@ -143,9 +146,10 @@ export const createUseExamplesLogic = function (): ExamplesLogic {
 
     // GET /v1/examples (arduino-app-cli). The response carries the brick
     // category used to group bricks into the design macro-sections.
-    const { data, isLoading } = useQuery(['examples-catalog'], () =>
-      getExamples(),
-    );
+    const { data, isPending: isLoading } = useQuery({
+      queryKey: ['examples-catalog'],
+      queryFn: () => getExamples(),
+    });
 
     const labels: ExampleBuildLabels = useMemo(
       () => ({

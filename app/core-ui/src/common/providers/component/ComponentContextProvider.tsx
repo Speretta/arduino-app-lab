@@ -20,10 +20,12 @@ export interface ComponentEnvironment {
   ROUTING_BASE_URL: string;
   CLOUD_HOME_URL: string;
   API_URL: string;
-  WL_API_URL: string;
   CREATE_API_URL: string;
+  CREATE_FAVORITE_NEW: string;
+  LIBRARIES_API_URL_NEW: string;
   BUILDER_API_URL: string;
   BUILDER_API_V2_URL: string;
+  BOARDS_API_URL: string;
   IOT_API_URL: string;
   OTA_API_URL: string;
   USERS_API_URL: string;

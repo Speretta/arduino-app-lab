@@ -35,4 +35,9 @@ TODO
 *.sh
 *.pem
 
+# Not JavaScript. Without these, eslint parses them as JS and `yarn eslint-fix` — the
+# documented lint command — fails repo-wide on parse errors it cannot autofix.
+*.py
+*.ps1
+
 standalone-apps/app-lab-desktop/frontend/wailsjs

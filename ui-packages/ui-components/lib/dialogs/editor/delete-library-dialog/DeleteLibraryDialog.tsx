@@ -31,6 +31,7 @@ const DeleteLibraryDialog: React.FC<DeleteLibraryDialogProps> = (
   );
   return (
     <ConfirmActionDialog
+      containerClasses={styles['container']}
       headerTitle={formatMessage(messages.dialogTitle)}
       dialogTitle={dialogTitle}
       dialogMessage={<Small>{formatMessage(messages.confirmText)}</Small>}

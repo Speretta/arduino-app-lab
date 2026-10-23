@@ -16,7 +16,7 @@ import { AppLabDialog } from '../app-lab-dialog/AppLabDialog';
 import styles from './change-password-dialog.module.scss';
 import { messages } from './messages';
 
-export type ChangePasswordDialogLogic = {
+export type ChangePasswordDialogLogic = () => {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   setUserPassword: (password: string, passwordConfirmation: string) => void;
@@ -47,7 +47,7 @@ export const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({
     confirmationIsError,
     errorMsg,
     confirmationErrorMsg,
-  } = logic;
+  } = logic();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -118,7 +118,6 @@ export const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({
           label={formatMessage(messages.newPassword)}
           disabled={isLoading}
           sensitive
-          /* eslint-disable-next-line jsx-a11y/no-autofocus */
           autoFocus
         />
         <Input

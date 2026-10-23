@@ -1,5 +1,8 @@
 import { CodeEditorLogic } from '../code-editor';
-import { BrickDetailLogic } from '../components-by-app/app-lab';
+import {
+  BrickDetailLogic,
+  BrickDetailTabId,
+} from '../components-by-app/app-lab';
 import { EditorControlsHandlers } from '../editor-controls';
 import { TabsBarLogic } from '../editor-tabs-bar';
 import { SecretsEditorLogic } from '../secrets-editor';
@@ -34,91 +37,94 @@ export type EditorPanelLogic = () => {
   canSwitchMarkdownMode?: boolean;
   /**
    * Currently selected brick sub-tab (e.g. 'overview', 'examples') for the
-   * brick rendered in pane A. Persisted per (pane, brickId) so the same
+   * brick rendered in panel A. Persisted per (panel, brickId) so the same
    * brick can be on different sub-tabs in A and B.
    */
-  brickSelectedTab?: string;
-  setBrickSelectedTab?: (value: string) => void;
+  brickSelectedTab?: BrickDetailTabId;
+  setBrickSelectedTab?: (value: BrickDetailTabId) => void;
   openExternalLink?: (url: string) => void;
   readOnly?: boolean;
   isSplit?: boolean;
   /**
-   * Open or activate a file in the right (split) pane WITHOUT mutating the
-   * left pane's selection. When invoked with `fileId === undefined` (eg.
-   * from the split toggle button) the currently selected left-pane file is
+   * Open or activate a file in the right (split) panel WITHOUT mutating the
+   * left panel's selection. When invoked with `fileId === undefined` (eg.
+   * from the split toggle button) the currently selected left-panel file is
    * mirrored on the right. When invoked with a specific `fileId` (eg. from
    * the tab "Split Right" context-menu action or a drop on the split zone)
-   * that tab is moved/added to the right pane.
+   * that tab is moved/added to the right panel.
    *
    * Calling this with a file already shown on the right is a no-op (the
-   * right pane re-selects the same tab).
+   * right panel re-selects the same tab).
    */
   openOrPushToSplit?: (fileId?: string) => void;
   /**
-   * Duplicate the given file from `fromPane` into the opposite pane (Split
+   * Duplicate the given file from `fromPanel` into the opposite panel (Split
    * sub-feature). When `fileId` is undefined the currently selected file
-   * in `fromPane` is used. Called by the per-pane Split CTA button and the
+   * in `fromPanel` is used. Called by the per-panel Split CTA button and the
    * Split Right / Split Left tab context-menu items.
    */
-  splitToOtherPane?: (fileId: string | undefined, fromPane: 'A' | 'B') => void;
+  splitToOtherPanel?: (
+    fileId: string | undefined,
+    fromPanel: 'A' | 'B',
+  ) => void;
   /**
-   * Move the given file from `fromPane` to the opposite pane (file is
-   * removed from the origin). Called by cross-pane tab drags and the
+   * Move the given file from `fromPanel` to the opposite panel (file is
+   * removed from the origin). Called by cross-panel tab drags and the
    * right-edge drop zone. Idempotent on destination. `toIndex` positions
    * the file in the destination tab list (cross-bar drops); appended /
    * adjacent-inserted when omitted.
    */
-  moveTabToOtherPane?: (
+  moveTabToOtherPanel?: (
     fileId: string,
-    fromPane: 'A' | 'B',
+    fromPanel: 'A' | 'B',
     toIndex?: number,
   ) => void;
   /**
-   * Open `fileId` in `targetPane`, creating panel B if needed. Idempotent:
+   * Open `fileId` in `targetPanel`, creating panel B if needed. Idempotent:
    * if the file is already a tab there it is simply selected. Used by
    * file-tree drops on the editor body.
    */
-  openFileInPane?: (fileId: string, targetPane: 'A' | 'B') => void;
+  openFileInPanel?: (fileId: string, targetPanel: 'A' | 'B') => void;
   /**
-   * The pane the user last interacted with. Bound to focus/pointer events
-   * on each pane so the parent can route file-tree clicks into the active
-   * pane.
+   * The panel the user last interacted with. Bound to focus/pointer events
+   * on each panel so the parent can route file-tree clicks into the active
+   * panel.
    */
-  activePane?: 'A' | 'B';
+  activeEditorPanel?: 'A' | 'B';
   /**
-   * Mark a pane as active. Wired to focus/pointer-down on each pane's
-   * container so clicking inside a pane makes it the target for subsequent
+   * Mark a panel as active. Wired to focus/pointer-down on each panel's
+   * container so clicking inside a panel makes it the target for subsequent
    * file-tree clicks.
    */
-  setActivePane?: (pane: 'A' | 'B') => void;
+  setActiveEditorPanel?: (panel: 'A' | 'B') => void;
   /**
-   * Number of tabs currently in pane A. Used by the cross-pane drop zone
+   * Number of tabs currently in panel A. Used by the cross-panel drop zone
    * to suppress the overlay when an A→B tab drag has nowhere to land
    * (A has only one tab and no panel B exists to collapse into).
    */
-  paneATabsCount?: number;
-  splitPaneCodeEditorLogic?: CodeEditorLogic;
-  splitPaneTabsBarLogic?: TabsBarLogic;
-  splitPaneFileId?: string;
-  splitPaneFile?: {
+  panelATabsCount?: number;
+  splitPanelCodeEditorLogic?: CodeEditorLogic;
+  splitPanelTabsBarLogic?: TabsBarLogic;
+  splitPanelFileId?: string;
+  splitPanelFile?: {
     id: string;
     ext: string;
     getData: () => string | undefined;
     error?: Error;
   };
-  splitPaneShouldRenderMarkdown?: boolean;
-  splitPaneSetShouldRenderMarkdown?: (value: boolean) => void;
-  splitPaneCanSwitchMarkdownMode?: boolean;
+  splitPanelShouldRenderMarkdown?: boolean;
+  splitPanelSetShouldRenderMarkdown?: (value: boolean) => void;
+  splitPanelCanSwitchMarkdownMode?: boolean;
   /**
-   * Brick detail logic for the right (split) pane. Same factory as pane
-   * A — the hook is parameterized per call by brickId, so each pane
+   * Brick detail logic for the right (split) panel. Same factory as panel
+   * A — the hook is parameterized per call by brickId, so each panel
    * resolves its own brick.
    */
-  splitPaneBrickDetailLogic?: BrickDetailLogic;
-  splitPaneBrickSelectedTab?: string;
-  splitPaneSetBrickSelectedTab?: (value: string) => void;
+  splitPanelBrickDetailLogic?: BrickDetailLogic;
+  splitPanelBrickSelectedTab?: BrickDetailTabId;
+  splitPanelSetBrickSelectedTab?: (value: BrickDetailTabId) => void;
   /**
-   * Persisted width of the left (A) pane as a percentage (0-100). When
+   * Persisted width of the left (A) panel as a percentage (0-100). When
    * provided, the panel group seeds its initial layout from this value.
    * `react-resizable-panels` only reads `defaultSize` on mount, so the
    * panel group is remounted (via `key`) when this value first arrives
@@ -130,5 +136,13 @@ export type EditorPanelLogic = () => {
    * receiver is expected to persist the value so the next session
    * restores the same layout.
    */
-  onSplitResize?: (leftPanePercent: number) => void;
+  onSplitResize?: (leftPanelPercent: number) => void;
+  /**
+   * Toggle the agent side panel (a separate, additive entry point from the
+   * footer-bar full-screen Agent Mode swap). Undefined hides the toolbar
+   * button entirely.
+   */
+  onToggleAgentPanel?: VoidFunction;
+  /** Whether the agent side panel is currently open — drives the button's pressed state. */
+  agentPanelOpen?: boolean;
 } & EditorControlsProps;

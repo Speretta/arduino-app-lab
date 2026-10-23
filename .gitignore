@@ -26,11 +26,16 @@ dist-ssr
 *.sw?
 *.pem
 
-dev-utils/dev-config/themes/*
-!dev-utils/dev-config/themes/README.md
 vuln.json
 .env
+.figma.env
 .tool-versions
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional eslint cache
+.eslintcache
 
 # Direnv
 __engines__
@@ -44,6 +49,9 @@ __engines__
 !.yarn/versions
 
 .npmrc
+
+# ESLint cache
+.eslintcache
 
 # Pwa files
 standalone-apps/cloud-editor-standalone/dev-dist/
@@ -59,3 +67,12 @@ standalone-apps/app-lab-desktop/internal/emoji/assets/
 
 # AI Standards
 GEMINI.md
+
+# Misc
+storybook-static/
+# TypeScript incremental build cache
+.tsbuildinfo
+
+# Per-version release notes, filled in by hand. Anchored to the root: the template in a
+# subfolder also matches al_*_body.md and stays tracked.
+/al_*_body.md

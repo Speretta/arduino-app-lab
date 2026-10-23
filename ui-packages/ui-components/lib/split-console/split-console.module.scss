@@ -29,7 +29,7 @@ $console-gutter-height: 20;
 
     &:hover {
       &::after {
-        background-color: shared.theme-var(--console-divider-drag);
+        background-color: var(--console-divider-drag);
         position: absolute;
         width: 100%;
         height: 3px;
