@@ -316,19 +316,44 @@
   display: inline-block;
 }
 
+.terminal-row {
+  // The row grows when the custom terminal editor is open. The overrides are
+  // important because the height of a settings row is fixed and the styles of
+  // the two modules may be loaded in any order.
+  height: auto !important;
+  align-items: start !important;
+
+  &-value {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+}
+
 .terminal-custom {
   display: flex;
   align-items: center;
-  gap: 8px;
   flex-wrap: wrap;
-  margin-top: 8px;
+  gap: 8px;
+  width: 100%;
 
   &-input {
-    min-width: 200px;
+    flex: 1;
+    min-width: 0;
+
+    // The app-lab input style does not fill the available width.
+    width: 100% !important;
+  }
+
+  &-input-container {
+    width: 100% !important;
   }
 }
 
 .terminal-error {
+  width: 100%;
   color: var(--feedback-error-default, #ff8878);
 }
 

@@ -6,6 +6,7 @@ import {
   ButtonVariant,
   DropdownMenuButton,
   Input,
+  InputStyle,
   XXSmall,
 } from '@cloud-editor-mono/ui-components/lib/components-by-app/app-lab';
 import { useMemo, useState } from 'react';
@@ -123,7 +124,12 @@ export const TerminalSelector = ({
       {isCustomOpen && (
         <div className={styles['terminal-custom']}>
           <Input
-            className={styles['terminal-custom-input']}
+            classes={{
+              input: styles['terminal-custom-input'],
+              inputContainer: styles['terminal-custom-input-container'],
+            }}
+            inputStyle={InputStyle.AppLab}
+            autoFocus
             value={customValue}
             placeholder={formatMessage(
               systemMessages.terminalCustomPlaceholder,

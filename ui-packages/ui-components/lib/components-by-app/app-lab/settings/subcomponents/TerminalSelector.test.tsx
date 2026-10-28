@@ -103,9 +103,7 @@ describe('TerminalSelector', () => {
     openMenu();
     fireEvent.click(await screen.findByText('Custom…'));
 
-    const input = await screen.findByPlaceholderText(
-      'e.g. alacritty or /usr/bin/ghostty',
-    );
+    const input = await screen.findByPlaceholderText('e.g. alacritty');
     fireEvent.change(input, { target: { value: 'my-terminal' } });
     fireEvent.click(screen.getByText('Save'));
 

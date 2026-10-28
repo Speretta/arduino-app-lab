@@ -747,6 +747,10 @@ export const Settings: React.FC<SettingsProps> = ({
             <SettingsSection.Row
               label={formatMessage(systemMessages.terminal)}
               info={formatMessage(systemMessages.terminalInfo)}
+              classes={{
+                wrapper: styles['terminal-row'],
+                value: styles['terminal-row-value'],
+              }}
             >
               <TerminalSelector logic={terminalSettingsLogic} />
             </SettingsSection.Row>

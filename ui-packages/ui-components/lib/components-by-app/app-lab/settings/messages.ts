@@ -272,7 +272,7 @@ export const systemMessages = defineMessages({
   },
   terminalCustomPlaceholder: {
     id: 'appLabSettings.system.terminalCustomPlaceholder',
-    defaultMessage: 'e.g. alacritty or /usr/bin/ghostty',
+    defaultMessage: 'e.g. alacritty',
     description: 'Placeholder of the custom terminal command input',
   },
   terminalCustomSave: {
