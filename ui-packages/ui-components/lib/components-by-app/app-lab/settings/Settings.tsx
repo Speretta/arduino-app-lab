@@ -57,6 +57,7 @@ import { DeviceHeader } from './subcomponents/DeviceHeader';
 import { DeviceSerialNumber } from './subcomponents/DeviceSerialNumber';
 import { DeviceStorage } from './subcomponents/DeviceStorage';
 import { NetworkMode } from './subcomponents/NetworkMode';
+import { TerminalSelector } from './subcomponents/TerminalSelector';
 
 // Anchor for the agent section, so a caller can deep-link to it (`/settings#...`) rather than repeat the id.
 export const AGENT_SETTINGS_SECTION_ID = 'agent-settings-section';
@@ -83,6 +84,7 @@ export const Settings: React.FC<SettingsProps> = ({
     networkSettingsLogic,
     systemSettingsLogic,
     passwordSettingsLogic,
+    terminalSettingsLogic,
     onOpenExternal,
   } = settingsLogic();
 
@@ -142,6 +144,8 @@ export const Settings: React.FC<SettingsProps> = ({
     openFlasher,
     startUpdate,
   } = systemSettingsLogic();
+
+  const { supported: isTerminalSelectionSupported } = terminalSettingsLogic();
 
   const {
     props: tooltipPropsAppUpdate,
@@ -739,6 +743,14 @@ export const Settings: React.FC<SettingsProps> = ({
               classes={dropdownClasses}
             />
           </SettingsSection.Row>
+          {isTerminalSelectionSupported && (
+            <SettingsSection.Row
+              label={formatMessage(systemMessages.terminal)}
+              info={formatMessage(systemMessages.terminalInfo)}
+            >
+              <TerminalSelector logic={terminalSettingsLogic} />
+            </SettingsSection.Row>
+          )}
           <SettingsSection.Row label={formatMessage(systemMessages.osPassword)}>
             <div
               {...tooltipPropsPassword}

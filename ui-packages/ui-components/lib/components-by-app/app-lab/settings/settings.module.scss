@@ -316,6 +316,22 @@
   display: inline-block;
 }
 
+.terminal-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+
+  &-input {
+    min-width: 200px;
+  }
+}
+
+.terminal-error {
+  color: var(--feedback-error-default, #ff8878);
+}
+
 .toggle {
   cursor: pointer;
 }

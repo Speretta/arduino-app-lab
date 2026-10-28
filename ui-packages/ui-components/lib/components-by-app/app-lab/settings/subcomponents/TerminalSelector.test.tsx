@@ -1,0 +1,127 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { IntlProvider } from 'react-intl';
+import { describe, expect, it, vi } from 'vitest';
+
+// Browser APIs jsdom lacks: the app-lab barrel imports from also pull in the
+// serial monitor, which constructs a web worker at import time.
+vi.hoisted(() => {
+  const noop = (): void => undefined;
+
+  globalThis.Worker = class {
+    addEventListener = noop;
+    postMessage = noop;
+    terminate = noop;
+  } as unknown as typeof Worker;
+
+  globalThis.ResizeObserver = class {
+    observe = noop;
+    unobserve = noop;
+    disconnect = noop;
+  } as unknown as typeof ResizeObserver;
+});
+
+import { UseTerminalSettingsLogic } from '../settings.type';
+import { TerminalSelector } from './TerminalSelector';
+
+const terminals = [
+  { id: 'alacritty', label: 'Alacritty', path: '/usr/bin/alacritty' },
+  { id: 'ghostty', label: 'Ghostty', path: '/usr/bin/ghostty' },
+];
+
+const renderSelector = (
+  overrides: Partial<ReturnType<UseTerminalSettingsLogic>> = {},
+): { setPreference: ReturnType<typeof vi.fn> } => {
+  const setPreference = vi.fn().mockResolvedValue(undefined);
+
+  const logic: UseTerminalSettingsLogic = () => ({
+    supported: true,
+    terminals,
+    preference: '',
+    setPreference,
+    ...overrides,
+  });
+
+  render(
+    <IntlProvider locale="en">
+      <TerminalSelector logic={logic} />
+    </IntlProvider>,
+  );
+
+  return { setPreference };
+};
+
+const openMenu = (): void => {
+  fireEvent.click(screen.getByRole('button'));
+};
+
+describe('TerminalSelector', () => {
+  it('shows the automatic detection when no terminal is selected', () => {
+    renderSelector();
+
+    expect(screen.getByRole('button')).toHaveTextContent('Automatic');
+  });
+
+  it('lists the detected terminal emulators', async () => {
+    renderSelector();
+
+    openMenu();
+
+    expect(await screen.findByText('Alacritty')).toBeInTheDocument();
+    expect(screen.getByText('Ghostty')).toBeInTheDocument();
+    expect(screen.getByText('Custom…')).toBeInTheDocument();
+  });
+
+  it('saves the terminal selected by the user', async () => {
+    const { setPreference } = renderSelector();
+
+    openMenu();
+    fireEvent.click(await screen.findByText('Ghostty'));
+
+    await waitFor(() => expect(setPreference).toHaveBeenCalledWith('ghostty'));
+  });
+
+  it('saves the automatic detection when it is selected again', async () => {
+    const { setPreference } = renderSelector({ preference: 'ghostty' });
+
+    openMenu();
+    fireEvent.click(await screen.findByText('Automatic'));
+
+    await waitFor(() => expect(setPreference).toHaveBeenCalledWith(''));
+  });
+
+  it('shows the custom command when it is selected', () => {
+    renderSelector({ preference: 'my-terminal' });
+
+    expect(screen.getByRole('button')).toHaveTextContent(
+      'Custom (my-terminal)',
+    );
+  });
+
+  it('saves the custom command', async () => {
+    const { setPreference } = renderSelector();
+
+    openMenu();
+    fireEvent.click(await screen.findByText('Custom…'));
+
+    const input = await screen.findByPlaceholderText(
+      'e.g. alacritty or /usr/bin/ghostty',
+    );
+    fireEvent.change(input, { target: { value: 'my-terminal' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() =>
+      expect(setPreference).toHaveBeenCalledWith('my-terminal'),
+    );
+  });
+
+  it('does not save an empty custom command', async () => {
+    const { setPreference } = renderSelector();
+
+    openMenu();
+    fireEvent.click(await screen.findByText('Custom…'));
+
+    const save = await screen.findByRole('button', { name: 'Save' });
+    expect(save).toBeDisabled();
+    expect(setPreference).not.toHaveBeenCalled();
+  });
+});
