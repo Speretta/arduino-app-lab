@@ -60,7 +60,7 @@ func TestListAvailable(t *testing.T) {
 	require.Equal(t, "kitty", catalog.Terminals[0].ID)
 }
 
-func TestInvocationBuild(t *testing.T) {
+func TestExpandInvocation(t *testing.T) {
 	const script = "/tmp/app-lab-terminal-123/run.sh"
 
 	var invocationTests = map[string]struct {
@@ -115,11 +115,11 @@ func TestInvocationBuild(t *testing.T) {
 
 	for name, test := range invocationTests {
 		t.Run(name, func(t *testing.T) {
-			candidate, found := findCandidate(test.candidate)
+			candidate, found := findCandidate(linuxTerminals, test.candidate)
 			require.True(t, found, test.candidate)
 			require.NotEmpty(t, candidate.invocations, test.candidate)
 
-			actual := candidate.invocations[0].build(nil, script)
+			actual := expandInvocation(candidate.invocations[0], launchContext{script: script})
 			require.Equal(t, test.expected, actual, test.candidate)
 		})
 	}
@@ -143,7 +143,7 @@ func TestLaunchPreferredUsesTheSelectedTerminal(t *testing.T) {
 	t.Setenv("STUB_ARGS_FILE", argsFile)
 
 	const script = "/tmp/run.sh"
-	require.NoError(t, launchPreferred("alacritty", script))
+	require.NoError(t, launchPreferred("alacritty", linuxTerminals, launchContext{script: script}))
 
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestLaunchPreferredFallsBackToTheNextInvocation(t *testing.T) {
 	t.Setenv("STUB_FAIL_ON", "-e")
 
 	const script = "/tmp/run.sh"
-	require.NoError(t, launchPreferred("alacritty", script))
+	require.NoError(t, launchPreferred("alacritty", linuxTerminals, launchContext{script: script}))
 
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestLaunchPreferredWithCustomCommand(t *testing.T) {
 	t.Setenv("STUB_ARGS_FILE", argsFile)
 
 	const script = "/tmp/run.sh"
-	require.NoError(t, launchPreferred("myterminal", script))
+	require.NoError(t, launchPreferred("myterminal", linuxTerminals, launchContext{script: script}))
 
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
@@ -183,22 +183,22 @@ func TestLaunchPreferredWithCustomCommand(t *testing.T) {
 func TestLaunchPreferredWithUnknownTerminal(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	require.Error(t, launchPreferred("this-terminal-does-not-exist", "/tmp/run.sh"))
+	require.Error(t, launchPreferred("this-terminal-does-not-exist", linuxTerminals, launchContext{script: "/tmp/run.sh"}))
 }
 
-func TestOpenLinuxTerminalFallsBackToTheAutomaticDetection(t *testing.T) {
+func TestOpenTerminalFallsBackToTheAutomaticDetection(t *testing.T) {
 	dir := makeStubTerminal(t, "alacritty")
 	t.Setenv("PATH", dir)
 	t.Setenv("STUB_FAIL_ON", "-e")
 	t.Setenv("STUB_ARGS_FILE", filepath.Join(t.TempDir(), "args.txt"))
 
-	require.NoError(t, openLinuxTerminal(Options{}, "echo", "hello"))
+	require.NoError(t, openTerminal(Options{}, "echo", "hello"))
 }
 
-func TestOpenLinuxTerminalWithoutTerminals(t *testing.T) {
+func TestOpenTerminalWithoutTerminals(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	err := openLinuxTerminal(Options{}, "echo", "hello")
+	err := openTerminal(Options{}, "echo", "hello")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no terminal emulator found")
 }
@@ -230,12 +230,4 @@ func TestCreateWrapperScriptQuotesTheArguments(t *testing.T) {
 	content, err := os.ReadFile(scriptPath)
 	require.NoError(t, err)
 	require.Contains(t, string(content), "'/opt/my tools/adb' shell")
-}
-
-func TestIsDisplayError(t *testing.T) {
-	require.True(t, isDisplayError("cannot open display: :0"))
-	require.True(t, isDisplayError("Gtk-WARNING: unable to open display"))
-	require.True(t, isDisplayError("Failed to open display"))
-	require.False(t, isDisplayError(""))
-	require.False(t, isDisplayError("all good"))
 }
