@@ -19,7 +19,18 @@ import (
 	"github.com/arduino/go-paths-helper"
 )
 
-func OpenTerminal(ctx context.Context, b *board.Board) error {
+// Options customizes the way the terminal is opened.
+type Options struct {
+	// PreferredTerminal is the terminal emulator selected by the user:
+	//   ""           automatic, the first supported terminal found on the system is used
+	//   "<id>"      the id of a terminal reported by ListAvailable (e.g. "alacritty")
+	//   "<command>" a custom command used to launch the terminal (e.g. "wezterm start --")
+	// An empty value is also used when the selected terminal can not be started,
+	// in that case the automatic detection is used as fallback.
+	PreferredTerminal string
+}
+
+func OpenTerminal(ctx context.Context, b *board.Board, opts Options) error {
 	if b == nil {
 		return fmt.Errorf("no board selected")
 	}
@@ -30,7 +41,7 @@ func OpenTerminal(ctx context.Context, b *board.Board) error {
 		if err != nil {
 			return fmt.Errorf("invalid board serial port: %v", err)
 		}
-		err = openTerminalWithArgs([]string{adb.FindAdbPath(), "-s", validSerial, "shell"}...)
+		err = openTerminalWithArgs(ctx, opts, []string{adb.FindAdbPath(), "-s", validSerial, "shell"}...)
 		if err != nil {
 			return err
 		}
@@ -39,7 +50,7 @@ func OpenTerminal(ctx context.Context, b *board.Board) error {
 		if err != nil {
 			return fmt.Errorf("invalid board address: %v", err)
 		}
-		err = openTerminalWithArgs([]string{"ssh", fmt.Sprintf("arduino@%s", validAddress)}...)
+		err = openTerminalWithArgs(ctx, opts, []string{"ssh", fmt.Sprintf("arduino@%s", validAddress)}...)
 		if err != nil {
 			return err
 		}
@@ -50,7 +61,7 @@ func OpenTerminal(ctx context.Context, b *board.Board) error {
 	return nil
 }
 
-func openTerminalWithArgs(args ...string) error {
+func openTerminalWithArgs(ctx context.Context, opts Options, args ...string) error {
 	runtimeOs := runtime.GOOS
 	switch runtimeOs {
 	case "windows":
@@ -86,61 +97,11 @@ func openTerminalWithArgs(args ...string) error {
 			return errors.New("fail to run terminal")
 		}
 	case "linux":
-		return openLinuxTerminal(args...)
+		return openLinuxTerminal(opts, args...)
 	default:
 		return fmt.Errorf("unsupported OS: %s", runtimeOs)
 	}
 	return nil
-}
-
-// openLinuxTerminal detects and opens the most common Linux terminals with the args
-func openLinuxTerminal(args ...string) error {
-	commandStr := strings.Join(args, " ")
-
-	// Create a temporary wrapper script that keeps the terminal open after command execution
-	tmpScript := filepath.Join(os.TempDir(), "run_in_terminal_sh")
-	scriptContent := fmt.Sprintf("#!/bin/sh\n%s\necho \"Press Enter to close...\"\nread dummy\n", commandStr)
-	err := os.WriteFile(tmpScript, []byte(scriptContent), 0700)
-	if err != nil {
-		slog.Error("failed to write file", "err", err, "path", tmpScript)
-		return errors.New("fail to create temporary script")
-	}
-	defer os.Remove(tmpScript)
-
-	terminals := []struct {
-		cmd []string
-	}{
-		{[]string{"gnome-terminal", "--", "sh", tmpScript}},
-		{[]string{"xfce4-terminal", "-e", tmpScript}},
-		{[]string{"konsole", "-e", tmpScript}},
-		// mate-terminal with --disable-factory to avoid GTK widget management issues:
-		// error: "terminal_window_remove_screen: assertion 'gtk_widget_get_toplevel (GTK_WIDGET (screen)) == GTK_WIDGET (window)' failed\n"
-		{[]string{"mate-terminal", "--disable-factory", "-e", tmpScript}},
-		// x-terminal-emulator is a link to another terminal. It could fail if the underline terminal does not accept the '-e' argument.
-		{[]string{"x-terminal-emulator", "-e", tmpScript}},
-	}
-
-	for _, terminal := range terminals {
-		cmd, err := paths.NewProcess(nil, terminal.cmd...)
-		if err != nil {
-			return err
-		}
-		slog.Info("Trying opening terminal", "command", terminal.cmd)
-		stdout, err := cmd.RunAndCaptureCombinedOutput(context.Background())
-		if err == nil {
-			return nil
-		} else {
-			slog.Warn("[skip] start terminal", "command", terminal.cmd, "error", string(stdout))
-		}
-	}
-
-	terminalNames := make([]string, 0, len(terminals))
-	for _, t := range terminals {
-		if len(t.cmd) > 0 {
-			terminalNames = append(terminalNames, t.cmd[0])
-		}
-	}
-	return fmt.Errorf("not supported terminal found: %s", strings.Join(terminalNames, ","))
 }
 
 func SanitizeIPAddress(address string) (string, error) {
