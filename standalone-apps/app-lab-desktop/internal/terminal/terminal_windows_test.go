@@ -7,6 +7,7 @@ package terminal
 // go test -v ./internal/terminal
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -75,9 +76,24 @@ func TestExpandInvocationWithTheRawCommand(t *testing.T) {
 	require.Equal(t, []string{"--", "sh", "-c", "adb -s 1234 shell"}, actual)
 }
 
+func TestConsoleTerminals(t *testing.T) {
+	// The console applications need a console window of their own, the
+	// graphical ones open their own window.
+	for _, id := range []string{"cmd.exe", "powershell.exe", "pwsh.exe", "wsl.exe"} {
+		candidate, found := findCandidate(windowsTerminals, id)
+		require.True(t, found, id)
+		require.True(t, candidate.console, id)
+	}
+	for _, id := range []string{"wt.exe", "ConEmu64.exe", "tabby.exe", "alacritty.exe"} {
+		candidate, found := findCandidate(windowsTerminals, id)
+		require.True(t, found, id)
+		require.False(t, candidate.console, id)
+	}
+}
+
 func TestRemoteCommand(t *testing.T) {
 	require.Equal(t,
-		[]string{"adb", "-s", "1234", "shell"},
+		[]string{"/mnt/c/Program Files/adb/adb.exe", "-s", "1234", "shell"},
 		remoteCommand([]string{`C:\Program Files\adb\adb.exe`, "-s", "1234", "shell"}))
 	require.Equal(t,
 		[]string{"ssh", "arduino@192.168.1.2"},
@@ -85,16 +101,121 @@ func TestRemoteCommand(t *testing.T) {
 	require.Empty(t, remoteCommand(nil))
 }
 
+func TestWslPath(t *testing.T) {
+	var wslPathTests = map[string]struct {
+		path       string
+		expected   string
+		translated bool
+	}{
+		"Windows path": {
+			path:       `C:\Program Files\adb\adb.exe`,
+			expected:   "/mnt/c/Program Files/adb/adb.exe",
+			translated: true,
+		},
+		"Upper case drive": {
+			path:       `D:\adb.exe`,
+			expected:   "/mnt/d/adb.exe",
+			translated: true,
+		},
+		"Executable name": {
+			path:       "adb.exe",
+			expected:   "",
+			translated: false,
+		},
+		"Relative path": {
+			path:       `adb\adb.exe`,
+			expected:   "",
+			translated: false,
+		},
+	}
+
+	for name, test := range wslPathTests {
+		t.Run(name, func(t *testing.T) {
+			actual, translated := wslPath(test.path)
+			require.Equal(t, test.translated, translated)
+			require.Equal(t, test.expected, actual)
+		})
+	}
+}
+
 func TestScriptContent(t *testing.T) {
-	content := scriptContent([]string{`C:\Program Files\adb\adb.exe`, "-s", "1234", "shell"})
+	content, err := scriptContent([]string{`C:\Program Files\adb\adb.exe`, "-s", "1234", "shell"})
+	require.NoError(t, err)
 
 	require.Contains(t, content, "@echo off")
-	require.Contains(t, content, `"C:\Program Files\adb\adb.exe" -s 1234 shell`)
+	require.Contains(t, content, `"C:\Program Files\adb\adb.exe" "-s" "1234" "shell"`)
 	require.Contains(t, content, "pause >nul")
+	// The deletion of the script is the last statement of the file: cmd.exe
+	// reads the file one line at a time and it would not read the statements
+	// after the deletion of the file.
+	lines := strings.Split(strings.TrimRight(content, "\r\n"), "\r\n")
+	require.Equal(t, `del "%~f0" 2>nul`, lines[len(lines)-1])
 }
 
 func TestQuoteWindowsArg(t *testing.T) {
-	require.Equal(t, "adb", quoteWindowsArg("adb"))
-	require.Equal(t, `"C:\Program Files\adb.exe"`, quoteWindowsArg(`C:\Program Files\adb.exe`))
-	require.Equal(t, `""`, quoteWindowsArg(""))
+	var quoteTests = map[string]struct {
+		arg      string
+		expected string
+	}{
+		"Simple word": {
+			arg:      "adb",
+			expected: `"adb"`,
+		},
+		"Path with spaces": {
+			arg:      `C:\Program Files\adb.exe`,
+			expected: `"C:\Program Files\adb.exe"`,
+		},
+		"Empty string": {
+			arg:      "",
+			expected: `""`,
+		},
+		// The percent expansion is the first phase of the batch line parser, it
+		// happens even inside a quoted string: the percent has to be doubled.
+		"Percent sign": {
+			arg:      "50%",
+			expected: `"50%%"`,
+		},
+		"Environment variable": {
+			arg:      "%PATH%",
+			expected: `"%%PATH%%"`,
+		},
+		// A quote can not be escaped, it has to be doubled.
+		"Double quote": {
+			arg:      `say "hi"`,
+			expected: `"say ""hi"""`,
+		},
+		// Inside a quoted string the command characters are not special.
+		"Command characters": {
+			arg:      "a&b|c<d>e^f",
+			expected: `"a&b|c<d>e^f"`,
+		},
+	}
+
+	for name, test := range quoteTests {
+		t.Run(name, func(t *testing.T) {
+			actual, err := quoteWindowsArg(test.arg)
+			require.NoError(t, err)
+			require.Equal(t, test.expected, actual)
+		})
+	}
+}
+
+func TestQuoteWindowsArgRejectsALineBreak(t *testing.T) {
+	_, err := quoteWindowsArg("adb\nshell")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "line break")
+
+	_, err = quoteWindowsArg("adb\rshell")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "line break")
+}
+
+func TestValidateCustomCommand(t *testing.T) {
+	// The console terminals are started through cmd.exe, the characters that
+	// separate the commands would split the command line.
+	for _, command := range []string{"cmd.exe & calc", "cmd.exe | more", "cmd.exe > out.txt", "cmd.exe ^ x", "cmd.exe %PATH%"} {
+		require.Error(t, validateCustomCommand(command), command)
+	}
+	require.NoError(t, validateCustomCommand("wezterm start --"))
+	require.NoError(t, validateCustomCommand(`alacritty --title "My Terminal"`))
 }

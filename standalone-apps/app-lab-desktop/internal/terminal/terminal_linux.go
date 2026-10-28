@@ -3,12 +3,8 @@
 package terminal
 
 import (
-	"fmt"
 	"log/slog"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 )
 
 // terminalSelectionSupported tells if the user can pick the terminal emulator.
@@ -99,17 +95,6 @@ var linuxTerminals = []terminalCandidate{
 	}},
 }
 
-// genericInvocations are used for the terminal emulators that are not known to
-// the application, they cover the most common ways to run a command.
-func genericInvocations() []invocation {
-	return []invocation{
-		{args: []string{"-e", "{cmd}"}, singleArg: true},
-		{args: []string{"-e", "sh", "{cmd}"}},
-		{args: []string{"--", "sh", "{cmd}"}},
-		{args: []string{"sh", "{cmd}"}},
-	}
-}
-
 // detectTerminals returns the terminal emulators installed on the system, in the
 // order they are tried.
 func detectTerminals() []TerminalInfo {
@@ -138,54 +123,16 @@ func lookupTerminal(candidate terminalCandidate) (string, error) {
 }
 
 // launchCandidate starts the given terminal with the invocations it supports.
-func launchCandidate(candidate terminalCandidate, path string, ctx launchContext) error {
-	for _, inv := range candidate.invocations {
-		args := expandInvocation(inv, ctx.withExtraArgs(mergeExtraArgs(inv, ctx.extraArgs)))
-		slog.Info("Trying opening terminal", "terminal", candidate.ID, "args", args)
-		if err := runTerminal(path, args); err == nil {
-			return nil
-		} else {
-			slog.Warn("[skip] start terminal", "terminal", candidate.ID, "args", args, "err", err)
-		}
+func launchCandidate(candidate terminalCandidate, path string, ctx *launchContext, extraArgs []string) error {
+	launchCtx, err := prepareLaunch(candidate, ctx)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("failed to start the terminal: %s", candidate.ID)
-}
-
-// expandInvocation replaces the placeholder of the invocation with the command
-// to run.
-func expandInvocation(inv invocation, ctx launchContext) []string {
-	args := make([]string, 0, len(ctx.extraArgs)+len(inv.args)+2)
-	args = append(args, ctx.extraArgs...)
-	for _, arg := range inv.args {
-		if !strings.Contains(arg, "{cmd}") {
-			args = append(args, arg)
-			continue
-		}
-		if inv.singleArg {
-			args = append(args, strings.ReplaceAll(arg, "{cmd}", "sh "+shellQuote(ctx.script)))
-			continue
-		}
-		if arg == "{cmd}" {
-			args = append(args, ctx.script)
-			continue
-		}
-		args = append(args, strings.ReplaceAll(arg, "{cmd}", "sh "+shellQuote(ctx.script)))
-	}
-	return args
+	launchCtx.extraArgs = extraArgs
+	return launchInvocations(candidate, path, launchCtx)
 }
 
 // openTerminal opens the given command in a terminal emulator.
 func openTerminal(opts Options, args ...string) error {
-	scriptPath, err := createWrapperScript(args)
-	if err != nil {
-		return err
-	}
-
-	ctx := launchContext{command: args, script: scriptPath}
-	if err := launchTerminals(linuxTerminals, opts, ctx); err != nil {
-		// The terminal was not started, the wrapper script will never run.
-		os.RemoveAll(filepath.Dir(scriptPath))
-		return err
-	}
-	return nil
+	return openTerminalIn(linuxTerminals, opts, args...)
 }

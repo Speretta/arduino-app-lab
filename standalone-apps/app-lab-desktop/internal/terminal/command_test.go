@@ -5,10 +5,19 @@ package terminal
 // go test -v ./internal/terminal
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+// existingTerminal is an executable that is available on every platform.
+func existingTerminal() string {
+	if runtime.GOOS == "windows" {
+		return "cmd"
+	}
+	return "sh"
+}
 
 func TestSplitCommand(t *testing.T) {
 	var splitCommandTests = map[string]struct {
@@ -124,11 +133,23 @@ func TestValidateCommand(t *testing.T) {
 	})
 
 	t.Run("Existing Terminal", func(t *testing.T) {
-		// "sh" is available on every unix system.
-		require.NoError(t, ValidateCommand("sh"))
+		require.NoError(t, ValidateCommand(existingTerminal()))
+	})
+
+	t.Run("Existing Terminal With Arguments", func(t *testing.T) {
+		// The command is a command line, the arguments of the terminal are
+		// part of it.
+		require.NoError(t, ValidateCommand(existingTerminal()+" --title foo"))
+		require.NoError(t, ValidateCommand(existingTerminal()+` --title "My Terminal"`))
 	})
 
 	t.Run("Unterminated Quote", func(t *testing.T) {
 		require.Error(t, ValidateCommand(`sh "unterminated`))
+	})
+
+	t.Run("Line Break", func(t *testing.T) {
+		// A line break would split the command in two.
+		require.Error(t, ValidateCommand(existingTerminal()+"\n--title foo"))
+		require.Error(t, ValidateCommand(existingTerminal()+"\r--title foo"))
 	})
 }

@@ -358,7 +358,7 @@ func (a *App) OpenBoardTerminal() error {
 // ListTerminals returns the terminal emulators available on the system, in the
 // order they are tried when no terminal has been selected.
 func (a *App) ListTerminals() terminal.TerminalCatalog {
-	return listTerminals()
+	return terminal.ListAvailable()
 }
 
 // GetTerminalPreference returns the terminal selected by the user, an empty

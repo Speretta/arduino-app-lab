@@ -48,17 +48,6 @@ var darwinTerminals = []terminalCandidate{
 	}},
 }
 
-// genericInvocations are used for the terminal emulators that are not known to
-// the application, they cover the most common ways to run a command.
-func genericInvocations() []invocation {
-	return []invocation{
-		{args: []string{"-e", "{cmd}"}, singleArg: true},
-		{args: []string{"-e", "sh", "{cmd}"}},
-		{args: []string{"--", "sh", "{cmd}"}},
-		{args: []string{"sh", "{cmd}"}},
-	}
-}
-
 // darwinSearchPaths are the directories where the terminal emulators are
 // installed when they are not in the PATH, the applications installed with
 // homebrew are not in the PATH of the applications launched from the desktop.
@@ -92,10 +81,11 @@ func detectTerminals() []TerminalInfo {
 func lookupTerminal(candidate terminalCandidate) (string, error) {
 	if candidate.app != nil {
 		// The application is opened with another command, it only has to exist.
-		if bundlePath(candidate.bundle) == "" {
+		path := bundlePath(candidate.bundle)
+		if path == "" {
 			return "", fmt.Errorf("application not found: %s", candidate.bundle)
 		}
-		return "", nil
+		return path, nil
 	}
 
 	if path, err := exec.LookPath(candidate.ID); err == nil {
@@ -148,30 +138,27 @@ func isExecutable(path string) bool {
 }
 
 // launchCandidate starts the given terminal with the invocations it supports.
-func launchCandidate(candidate terminalCandidate, path string, ctx launchContext) error {
+func launchCandidate(candidate terminalCandidate, path string, ctx *launchContext, extraArgs []string) error {
+	launchCtx, err := prepareLaunch(candidate, ctx)
+	if err != nil {
+		return err
+	}
+	launchCtx.extraArgs = extraArgs
+
 	if candidate.app != nil {
 		args := make([]string, 0, len(candidate.app.args))
 		for _, arg := range candidate.app.args {
-			args = append(args, strings.ReplaceAll(arg, "{script}", escapeAppleScript(ctx.script)))
+			args = append(args, strings.ReplaceAll(arg, "{script}", escapeAppleScript(launchCtx.script)))
 		}
 		slog.Info("Trying opening terminal", "terminal", candidate.ID, "args", args)
-		if err := runTerminal(candidate.app.command, args); err != nil {
+		if err := runTerminal(candidate.console, candidate.app.command, args); err != nil {
 			slog.Warn("[skip] start terminal", "terminal", candidate.ID, "args", args, "err", err)
 			return fmt.Errorf("failed to start the terminal: %s", candidate.ID)
 		}
 		return nil
 	}
 
-	for _, inv := range candidate.invocations {
-		args := expandInvocation(inv, ctx.withExtraArgs(mergeExtraArgs(inv, ctx.extraArgs)))
-		slog.Info("Trying opening terminal", "terminal", candidate.ID, "args", args)
-		if err := runTerminal(path, args); err == nil {
-			return nil
-		} else {
-			slog.Warn("[skip] start terminal", "terminal", candidate.ID, "args", args, "err", err)
-		}
-	}
-	return fmt.Errorf("failed to start the terminal: %s", candidate.ID)
+	return launchInvocations(candidate, path, launchCtx)
 }
 
 // escapeAppleScript escapes a string so it can be used inside an AppleScript
@@ -181,41 +168,7 @@ func escapeAppleScript(value string) string {
 	return replacer.Replace(value)
 }
 
-// expandInvocation replaces the placeholder of the invocation with the command
-// to run.
-func expandInvocation(inv invocation, ctx launchContext) []string {
-	args := make([]string, 0, len(ctx.extraArgs)+len(inv.args)+2)
-	args = append(args, ctx.extraArgs...)
-	for _, arg := range inv.args {
-		if !strings.Contains(arg, "{cmd}") {
-			args = append(args, arg)
-			continue
-		}
-		if inv.singleArg {
-			args = append(args, strings.ReplaceAll(arg, "{cmd}", "sh "+shellQuote(ctx.script)))
-			continue
-		}
-		if arg == "{cmd}" {
-			args = append(args, ctx.script)
-			continue
-		}
-		args = append(args, strings.ReplaceAll(arg, "{cmd}", "sh "+shellQuote(ctx.script)))
-	}
-	return args
-}
-
 // openTerminal opens the given command in a terminal emulator.
 func openTerminal(opts Options, args ...string) error {
-	scriptPath, err := createWrapperScript(args)
-	if err != nil {
-		return err
-	}
-
-	ctx := launchContext{command: args, script: scriptPath}
-	if err := launchTerminals(darwinTerminals, opts, ctx); err != nil {
-		// The terminal was not started, the wrapper script will never run.
-		os.RemoveAll(filepath.Dir(scriptPath))
-		return err
-	}
-	return nil
+	return openTerminalIn(darwinTerminals, opts, args...)
 }

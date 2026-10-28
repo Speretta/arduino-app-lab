@@ -3,9 +3,7 @@
 package terminal
 
 import (
-	"fmt"
 	"log/slog"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -18,17 +16,20 @@ const terminalSelectionSupported = true
 
 // windowsTerminals are the terminal emulators known to the application, in the
 // order they are tried when the user has not selected one.
+//
+// The console applications need a console window of their own, the graphical
+// ones open their own window.
 var windowsTerminals = []terminalCandidate{
 	{ID: "wt.exe", Label: "Windows Terminal", invocations: []invocation{
 		{args: []string{"-w", "new", "cmd.exe", "/C", "{cmd}"}},
 	}},
-	{ID: "cmd.exe", Label: "Command Prompt", invocations: []invocation{
+	{ID: "cmd.exe", Label: "Command Prompt", console: true, invocations: []invocation{
 		{args: []string{"/C", "{cmd}"}},
 	}},
-	{ID: "powershell.exe", Label: "Windows PowerShell", invocations: []invocation{
+	{ID: "powershell.exe", Label: "Windows PowerShell", console: true, invocations: []invocation{
 		{args: []string{"-Command", "& '{cmd}'"}},
 	}},
-	{ID: "pwsh.exe", Label: "PowerShell", invocations: []invocation{
+	{ID: "pwsh.exe", Label: "PowerShell", console: true, invocations: []invocation{
 		{args: []string{"-Command", "& '{cmd}'"}},
 	}},
 	{ID: "ConEmu64.exe", Label: "ConEmu", invocations: []invocation{
@@ -42,20 +43,10 @@ var windowsTerminals = []terminalCandidate{
 	}},
 	// The Windows Subsystem for Linux runs the command with a linux shell, the
 	// command is resolved inside the distribution instead of on windows.
-	{ID: "wsl.exe", Label: "WSL", rawCommand: true, invocations: []invocation{
+	{ID: "wsl.exe", Label: "WSL", console: true, rawCommand: true, invocations: []invocation{
 		{args: []string{"--", "sh", "-c", "{cmd}"}},
 		{args: []string{"-e", "sh", "-c", "{cmd}"}},
 	}},
-}
-
-// genericInvocations are used for the terminal emulators that are not known to
-// the application, they cover the most common ways to run a command.
-func genericInvocations() []invocation {
-	return []invocation{
-		{args: []string{"/C", "{cmd}"}},
-		{args: []string{"/K", "{cmd}"}},
-		{args: []string{"-e", "{cmd}"}},
-	}
 }
 
 // detectTerminals returns the terminal emulators installed on the system, in the
@@ -86,71 +77,64 @@ func lookupTerminal(candidate terminalCandidate) (string, error) {
 }
 
 // launchCandidate starts the given terminal with the invocations it supports.
-func launchCandidate(candidate terminalCandidate, path string, ctx launchContext) error {
+func launchCandidate(candidate terminalCandidate, path string, ctx *launchContext, extraArgs []string) error {
+	launchCtx, err := prepareLaunch(candidate, ctx)
+	if err != nil {
+		return err
+	}
+	launchCtx.extraArgs = extraArgs
 	if candidate.rawCommand {
 		// The command is run by a shell of the terminal, it is resolved there
 		// and not on the host.
-		ctx.command = remoteCommand(ctx.command)
-		ctx.raw = true
+		launchCtx.command = remoteCommand(launchCtx.command)
+		launchCtx.raw = true
 	}
-
-	for _, inv := range candidate.invocations {
-		args := expandInvocation(inv, ctx.withExtraArgs(mergeExtraArgs(inv, ctx.extraArgs)))
-		slog.Info("Trying opening terminal", "terminal", candidate.ID, "args", args)
-		if err := runTerminal(path, args); err == nil {
-			return nil
-		} else {
-			slog.Warn("[skip] start terminal", "terminal", candidate.ID, "args", args, "err", err)
-		}
-	}
-	return fmt.Errorf("failed to start the terminal: %s", candidate.ID)
+	return launchInvocations(candidate, path, launchCtx)
 }
 
-// remoteCommand returns the command to run inside a remote environment (wsl),
-// the executable is resolved by its name there.
+// remoteCommand returns the command to run inside a remote environment (wsl).
+//
+// The command is resolved inside the distribution: a windows path is
+// translated into the path of the same file in the distribution (the drives
+// are mounted under /mnt), so that the windows adb can be used from wsl too. A
+// command that is not a path is resolved by its name, as the distribution does
+// not have the windows PATH.
 func remoteCommand(command []string) []string {
 	if len(command) == 0 {
 		return command
 	}
 	remote := make([]string, len(command))
 	copy(remote, command)
-	name := filepath.Base(command[0])
-	remote[0] = strings.TrimSuffix(name, ".exe")
+	executable, translated := remoteExecutable(command[0])
+	remote[0] = executable
+	if !translated {
+		slog.Warn("the command is resolved by name inside the distribution, it must be installed in it", "command", command[0])
+	}
 	return remote
 }
 
-// expandInvocation replaces the placeholder of the invocation with the command
-// to run.
-func expandInvocation(inv invocation, ctx launchContext) []string {
-	value := ctx.script
-	if ctx.raw {
-		value = shellQuoteAll(ctx.command)
+// remoteExecutable returns the executable as it is resolved inside a wsl
+// distribution and tells whether it could be translated.
+func remoteExecutable(path string) (string, bool) {
+	if translated, ok := wslPath(path); ok {
+		return translated, true
 	}
+	name := filepath.Base(path)
+	return strings.TrimSuffix(name, ".exe"), false
+}
 
-	args := make([]string, 0, len(ctx.extraArgs)+len(inv.args)+2)
-	args = append(args, ctx.extraArgs...)
-	for _, arg := range inv.args {
-		if !strings.Contains(arg, "{cmd}") {
-			args = append(args, arg)
-			continue
-		}
-		args = append(args, strings.ReplaceAll(arg, "{cmd}", value))
+// wslPath translates a windows path into the path of the same file inside a
+// wsl distribution, where the drives are mounted under /mnt.
+func wslPath(path string) (string, bool) {
+	volume := filepath.VolumeName(path)
+	if volume == "" {
+		return "", false
 	}
-	return args
+	rest := strings.ReplaceAll(strings.TrimPrefix(path, volume), `\`, "/")
+	return "/mnt/" + strings.ToLower(volume[:1]) + rest, true
 }
 
 // openTerminal opens the given command in a terminal emulator.
 func openTerminal(opts Options, args ...string) error {
-	scriptPath, err := createWrapperScript(args)
-	if err != nil {
-		return err
-	}
-
-	ctx := launchContext{command: args, script: scriptPath}
-	if err := launchTerminals(windowsTerminals, opts, ctx); err != nil {
-		// The terminal was not started, the wrapper script will never run.
-		os.RemoveAll(filepath.Dir(scriptPath))
-		return err
-	}
-	return nil
+	return openTerminalIn(windowsTerminals, opts, args...)
 }

@@ -67,11 +67,6 @@ func writeTerminalPreference(value string) error {
 	return os.Rename(tmp, path)
 }
 
-// listTerminals returns the terminal emulators available on the system.
-func listTerminals() terminal.TerminalCatalog {
-	return terminal.ListAvailable()
-}
-
 // setTerminalPreference validates and persists the terminal selected by the user.
 func setTerminalPreference(value string) error {
 	value = strings.TrimSpace(value)

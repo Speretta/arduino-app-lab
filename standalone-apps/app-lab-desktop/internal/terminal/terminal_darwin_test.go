@@ -73,7 +73,8 @@ func TestEscapeAppleScript(t *testing.T) {
 }
 
 func TestScriptContent(t *testing.T) {
-	content := scriptContent([]string{"adb", "-s", "1234", "shell"})
+	content, err := scriptContent([]string{"adb", "-s", "1234", "shell"})
+	require.NoError(t, err)
 
 	require.Contains(t, content, "#!/bin/sh")
 	require.Contains(t, content, "adb -s 1234 shell")

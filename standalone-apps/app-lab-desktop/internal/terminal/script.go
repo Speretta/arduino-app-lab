@@ -1,7 +1,7 @@
 package terminal
 
 import (
-	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,15 +15,22 @@ func createWrapperScript(command []string) (string, error) {
 	dir, err := os.MkdirTemp("", "app-lab-terminal-")
 	if err != nil {
 		slog.Error("failed to create temporary directory", "err", err)
-		return "", errors.New("fail to create temporary script")
+		return "", fmt.Errorf("could not create the temporary directory: %w", err)
 	}
 	cleanupStaleScripts(dir)
 
+	content, err := scriptContent(command)
+	if err != nil {
+		slog.Error("failed to create the wrapper script", "err", err)
+		os.RemoveAll(dir)
+		return "", err
+	}
+
 	scriptPath := filepath.Join(dir, scriptName)
-	if err := os.WriteFile(scriptPath, []byte(scriptContent(command)), 0700); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(content), 0700); err != nil {
 		slog.Error("failed to write file", "err", err, "path", scriptPath)
 		os.RemoveAll(dir)
-		return "", errors.New("fail to create temporary script")
+		return "", fmt.Errorf("could not create the wrapper script: %w", err)
 	}
 	return scriptPath, nil
 }

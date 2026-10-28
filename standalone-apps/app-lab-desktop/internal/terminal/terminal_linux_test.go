@@ -143,7 +143,7 @@ func TestLaunchPreferredUsesTheSelectedTerminal(t *testing.T) {
 	t.Setenv("STUB_ARGS_FILE", argsFile)
 
 	const script = "/tmp/run.sh"
-	require.NoError(t, launchPreferred("alacritty", linuxTerminals, launchContext{script: script}))
+	require.NoError(t, launchPreferred("alacritty", linuxTerminals, &launchContext{script: script}))
 
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestLaunchPreferredFallsBackToTheNextInvocation(t *testing.T) {
 	t.Setenv("STUB_FAIL_ON", "-e")
 
 	const script = "/tmp/run.sh"
-	require.NoError(t, launchPreferred("alacritty", linuxTerminals, launchContext{script: script}))
+	require.NoError(t, launchPreferred("alacritty", linuxTerminals, &launchContext{script: script}))
 
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestLaunchPreferredWithCustomCommand(t *testing.T) {
 	t.Setenv("STUB_ARGS_FILE", argsFile)
 
 	const script = "/tmp/run.sh"
-	require.NoError(t, launchPreferred("myterminal", linuxTerminals, launchContext{script: script}))
+	require.NoError(t, launchPreferred("myterminal", linuxTerminals, &launchContext{script: script}))
 
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
@@ -183,7 +183,46 @@ func TestLaunchPreferredWithCustomCommand(t *testing.T) {
 func TestLaunchPreferredWithUnknownTerminal(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	require.Error(t, launchPreferred("this-terminal-does-not-exist", linuxTerminals, launchContext{script: "/tmp/run.sh"}))
+	require.Error(t, launchPreferred("this-terminal-does-not-exist", linuxTerminals, &launchContext{script: "/tmp/run.sh"}))
+}
+
+func TestLaunchPreferredWithCustomCommandWithArguments(t *testing.T) {
+	dir := makeStubTerminal(t, "wezterm")
+	t.Setenv("PATH", dir)
+	argsFile := filepath.Join(t.TempDir(), "args.txt")
+	t.Setenv("STUB_ARGS_FILE", argsFile)
+
+	const script = "/tmp/run.sh"
+	// The arguments of the terminal are not repeated: wezterm already runs
+	// "start --".
+	require.NoError(t, launchPreferred("wezterm start --", linuxTerminals, &launchContext{script: script}))
+
+	recorded, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	require.Equal(t, "start -- sh "+script, strings.TrimSpace(string(recorded)))
+}
+
+func TestLaunchPreferredWithCustomCommandWithExtraArguments(t *testing.T) {
+	dir := makeStubTerminal(t, "wezterm")
+	t.Setenv("PATH", dir)
+	argsFile := filepath.Join(t.TempDir(), "args.txt")
+	t.Setenv("STUB_ARGS_FILE", argsFile)
+
+	const script = "/tmp/run.sh"
+	// The arguments of the user are added in front of the ones of the
+	// terminal.
+	require.NoError(t, launchPreferred("wezterm --title foo", linuxTerminals, &launchContext{script: script}))
+
+	recorded, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	require.Equal(t, "--title foo start -- sh "+script, strings.TrimSpace(string(recorded)))
+}
+
+func TestLaunchPreferredWithInvalidCustomCommand(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	// A line break would split the command in two.
+	require.Error(t, launchPreferred("sh\n--title foo", linuxTerminals, &launchContext{script: "/tmp/run.sh"}))
 }
 
 func TestOpenTerminalFallsBackToTheAutomaticDetection(t *testing.T) {

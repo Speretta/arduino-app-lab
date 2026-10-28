@@ -15,14 +15,21 @@ import (
 // Options customizes the way the terminal is opened.
 type Options struct {
 	// PreferredTerminal is the terminal emulator selected by the user:
-	//   ""           automatic, the first supported terminal found on the system is used
+	//   ""           the terminal is detected automatically, the first supported
+	//                terminal found on the system is used
 	//   "<id>"      the id of a terminal reported by ListAvailable (e.g. "alacritty")
-	//   "<command>" a custom command used to launch the terminal (e.g. "wezterm start --")
+	//   "<command>" a command line that launches a terminal (e.g. "wezterm start --"),
+	//                the first field is the terminal and the other fields are its
+	//                arguments
 	// An empty value is also used when the selected terminal can not be started,
 	// in that case the automatic detection is used as fallback.
 	PreferredTerminal string
 }
 
+// OpenTerminal opens the shell of the given board in a terminal emulator.
+//
+// The context is not used: the terminal is started detached, so the call
+// returns as soon as the terminal is running.
 func OpenTerminal(ctx context.Context, b *board.Board, opts Options) error {
 	if b == nil {
 		return fmt.Errorf("no board selected")
@@ -34,7 +41,7 @@ func OpenTerminal(ctx context.Context, b *board.Board, opts Options) error {
 		if err != nil {
 			return fmt.Errorf("invalid board serial port: %v", err)
 		}
-		err = openTerminalWithArgs(ctx, opts, []string{adb.FindAdbPath(), "-s", validSerial, "shell"}...)
+		err = openTerminalWithArgs(opts, []string{adb.FindAdbPath(), "-s", validSerial, "shell"}...)
 		if err != nil {
 			return err
 		}
@@ -43,7 +50,7 @@ func OpenTerminal(ctx context.Context, b *board.Board, opts Options) error {
 		if err != nil {
 			return fmt.Errorf("invalid board address: %v", err)
 		}
-		err = openTerminalWithArgs(ctx, opts, []string{"ssh", fmt.Sprintf("arduino@%s", validAddress)}...)
+		err = openTerminalWithArgs(opts, []string{"ssh", fmt.Sprintf("arduino@%s", validAddress)}...)
 		if err != nil {
 			return err
 		}
@@ -54,7 +61,7 @@ func OpenTerminal(ctx context.Context, b *board.Board, opts Options) error {
 	return nil
 }
 
-func openTerminalWithArgs(ctx context.Context, opts Options, args ...string) error {
+func openTerminalWithArgs(opts Options, args ...string) error {
 	return openTerminal(opts, args...)
 }
 

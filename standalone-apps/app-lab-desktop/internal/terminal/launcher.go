@@ -7,19 +7,32 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
-
-	"github.com/arduino/go-paths-helper"
 )
 
-// startupTimeout is the time given to a terminal to report a failure. The
-// terminals that do not support the arguments they received exit immediately
-// with an error, the terminals that are working keep running or exit
-// successfully right away.
-const startupTimeout = 500 * time.Millisecond
+const (
+	// startupTimeout is the time given to a terminal to report a failure. The
+	// terminals that do not support the arguments they received exit
+	// immediately with an error, the terminals that are working keep running
+	// or exit successfully right away.
+	startupTimeout = time.Second
+
+	// startupPollInterval is how often the output of the terminal is checked
+	// while it starts: a terminal that fails late still prints the reason of
+	// the failure on its standard error.
+	startupPollInterval = 50 * time.Millisecond
+
+	// maxOutputSize is the maximum amount of output collected from a
+	// terminal, the output is only used to report a failure.
+	maxOutputSize = 64 * 1024
+)
 
 // invocation is a way to run a command inside a terminal emulator.
 type invocation struct {
@@ -51,6 +64,11 @@ type terminalCandidate struct {
 	// the wrapper script, it is used by the terminals that run the command
 	// with a shell of their own (wsl).
 	rawCommand bool
+	// console marks the terminals that are console applications: they need a
+	// console window of their own, a graphical application has none. On
+	// windows they are started through "cmd.exe /C start", see
+	// launcher_windows.go.
+	console bool
 }
 
 // appLaunch describes how an application is opened with the wrapper script.
@@ -66,7 +84,8 @@ type appLaunch struct {
 type launchContext struct {
 	// command are the arguments of the command to run.
 	command []string
-	// script is the path of the wrapper script.
+	// script is the path of the wrapper script, it is created the first time
+	// a terminal that runs it is started.
 	script string
 	// extraArgs are the arguments added in front of the ones of the terminal.
 	extraArgs []string
@@ -81,9 +100,37 @@ func (c launchContext) withExtraArgs(extraArgs []string) launchContext {
 	return c
 }
 
+// ensureScript creates the wrapper script the first time it is needed and
+// returns its path.
+//
+// The terminals that run the command with a shell of their own (wsl) do not
+// need the script: creating it for them would leave a temporary directory
+// behind on every launch.
+func (c *launchContext) ensureScript() (string, error) {
+	if c.script != "" {
+		return c.script, nil
+	}
+	script, err := createWrapperScript(c.command)
+	if err != nil {
+		return "", err
+	}
+	c.script = script
+	return script, nil
+}
+
+// terminalProcess is the process that runs a terminal emulator. It is
+// implemented by *paths.Process and by *exec.Cmd, the two ways a process can
+// be started on the supported platforms.
+type terminalProcess interface {
+	// Start starts the process.
+	Start() error
+	// Wait waits for the process to terminate and returns its error.
+	Wait() error
+}
+
 // launchTerminals starts the terminal selected by the user, when none is
 // selected the first terminal that can be started is used.
-func launchTerminals(candidates []terminalCandidate, opts Options, ctx launchContext) error {
+func launchTerminals(candidates []terminalCandidate, opts Options, ctx *launchContext) error {
 	if preferred := strings.TrimSpace(opts.PreferredTerminal); preferred != "" {
 		if err := launchPreferred(preferred, candidates, ctx); err == nil {
 			return nil
@@ -99,7 +146,7 @@ func launchTerminals(candidates []terminalCandidate, opts Options, ctx launchCon
 			continue
 		}
 		tried = append(tried, candidate.ID)
-		if err := launchCandidate(candidate, path, ctx); err == nil {
+		if err := launchCandidate(candidate, path, ctx, nil); err == nil {
 			return nil
 		} else {
 			slog.Warn("[skip] start terminal", "terminal", candidate.ID, "err", err)
@@ -114,13 +161,13 @@ func launchTerminals(candidates []terminalCandidate, opts Options, ctx launchCon
 
 // launchPreferred launches the terminal selected by the user. The selection is
 // either the id of a known terminal or a custom command.
-func launchPreferred(preferred string, candidates []terminalCandidate, ctx launchContext) error {
+func launchPreferred(preferred string, candidates []terminalCandidate, ctx *launchContext) error {
 	if candidate, found := findCandidate(candidates, preferred); found {
 		path, err := lookupTerminal(candidate)
 		if err != nil {
 			return fmt.Errorf("terminal not found: %s", candidate.ID)
 		}
-		return launchCandidate(candidate, path, ctx)
+		return launchCandidate(candidate, path, ctx, nil)
 	}
 
 	fields, err := splitCommand(preferred)
@@ -130,28 +177,82 @@ func launchPreferred(preferred string, candidates []terminalCandidate, ctx launc
 	if len(fields) == 0 {
 		return errors.New("empty terminal command")
 	}
+	// The preference is stored in a file, it may have been edited after it
+	// was validated.
+	if err := validateCommandLine(preferred); err != nil {
+		return err
+	}
 	binary, extraArgs := fields[0], fields[1:]
-	path, err := lookupExecutable(binary)
+	path, err := exec.LookPath(binary)
 	if err != nil {
 		return fmt.Errorf("terminal not found: %s", binary)
 	}
+	slog.Info("Using the custom terminal command", "terminal", binary, "args", extraArgs)
 
 	// A known terminal is launched with the arguments it expects, the extra
 	// arguments given by the user are added in front of them.
 	if candidate, found := findCandidate(candidates, binary); found {
-		return launchCandidate(candidate, path, ctx.withExtraArgs(extraArgs))
+		return launchCandidate(candidate, path, ctx, extraArgs)
 	}
 
 	for _, inv := range genericInvocations() {
 		args := expandInvocation(inv, ctx.withExtraArgs(extraArgs))
 		slog.Info("Trying opening terminal", "terminal", binary, "args", args)
-		if err := runTerminal(path, args); err == nil {
+		if err := runTerminal(genericTerminalIsConsole, path, args); err == nil {
 			return nil
 		} else {
 			slog.Warn("[skip] start terminal", "terminal", binary, "args", args, "err", err)
 		}
 	}
 	return fmt.Errorf("failed to start the terminal: %s", binary)
+}
+
+// prepareLaunch returns the context to launch the given candidate with.
+//
+// The terminals that run the wrapper script need it: it is created the first
+// time one of them is started. The terminals that run the command with a shell
+// of their own (wsl) do not need it, creating it for them would leave a
+// temporary directory behind on every launch.
+func prepareLaunch(candidate terminalCandidate, ctx *launchContext) (launchContext, error) {
+	launchCtx := *ctx
+	if candidate.rawCommand {
+		return launchCtx, nil
+	}
+	script, err := ctx.ensureScript()
+	if err != nil {
+		return launchCtx, err
+	}
+	launchCtx.script = script
+	return launchCtx, nil
+}
+
+// launchInvocations starts the terminal with the invocations it supports, in
+// order, until one of them works.
+func launchInvocations(candidate terminalCandidate, path string, ctx launchContext) error {
+	for _, inv := range candidate.invocations {
+		args := expandInvocation(inv, ctx.withExtraArgs(mergeExtraArgs(inv, ctx.extraArgs)))
+		slog.Info("Trying opening terminal", "terminal", candidate.ID, "args", args)
+		if err := runTerminal(candidate.console, path, args); err == nil {
+			return nil
+		} else {
+			slog.Warn("[skip] start terminal", "terminal", candidate.ID, "args", args, "err", err)
+		}
+	}
+	return fmt.Errorf("failed to start the terminal: %s", candidate.ID)
+}
+
+// openTerminalIn opens the given command in one of the given terminal
+// emulators.
+func openTerminalIn(candidates []terminalCandidate, opts Options, args ...string) error {
+	ctx := &launchContext{command: args}
+	if err := launchTerminals(candidates, opts, ctx); err != nil {
+		// The terminal was not started, the wrapper script will never run.
+		if ctx.script != "" {
+			os.RemoveAll(filepath.Dir(ctx.script))
+		}
+		return err
+	}
+	return nil
 }
 
 // findCandidate returns the terminal with the given id.
@@ -186,43 +287,103 @@ func mergeExtraArgs(inv invocation, extraArgs []string) []string {
 	return extraArgs
 }
 
+// expandInvocation replaces the placeholder of the invocation with the command
+// to run.
+func expandInvocation(inv invocation, ctx launchContext) []string {
+	args := make([]string, 0, len(ctx.extraArgs)+len(inv.args)+2)
+	args = append(args, ctx.extraArgs...)
+	for _, arg := range inv.args {
+		if !strings.Contains(arg, "{cmd}") {
+			args = append(args, arg)
+			continue
+		}
+		args = append(args, strings.ReplaceAll(arg, "{cmd}", ctx.commandText(inv)))
+	}
+	return args
+}
+
+// commandText returns the text that replaces the "{cmd}" placeholder of an
+// invocation.
+//
+// A terminal that runs the command with a shell of its own (wsl) gets the
+// command itself, quoted for that shell. The other terminals run the wrapper
+// script: they get its path, or a single command string when they accept only
+// one string after the option used to run a command.
+func (c launchContext) commandText(inv invocation) string {
+	if c.raw {
+		return shellQuoteAll(c.command)
+	}
+	if inv.singleArg {
+		return c.scriptCommand()
+	}
+	return c.script
+}
+
+// scriptCommand returns the command that runs the wrapper script, for the
+// terminals that accept the command as a single string.
+//
+// The wrapper script is a unix shell script, it is run by "sh". The windows
+// terminals run the batch file directly and never use this form.
+func (c launchContext) scriptCommand() string {
+	return "sh " + shellQuote(c.script)
+}
+
 // runTerminal starts the terminal and waits for it to report a failure. The
 // terminal is started detached, so the application is not blocked until the
 // terminal window is closed.
-func runTerminal(path string, args []string) error {
-	cmd, err := paths.NewProcess(nil, append([]string{path}, args...)...)
+//
+// console tells whether the terminal is a console application that needs a
+// console window of its own, it only matters on windows.
+func runTerminal(console bool, path string, args []string) error {
+	output := &outputBuffer{limit: maxOutputSize}
+	proc, err := newTerminalProcess(console, path, args, io.Discard, output)
 	if err != nil {
 		return err
 	}
 
-	var stdout, stderr bytes.Buffer
-	cmd.RedirectStdoutTo(&stdout)
-	cmd.RedirectStderrTo(&stderr)
-
-	if err := cmd.Start(); err != nil {
+	if err := proc.Start(); err != nil {
 		return err
 	}
 
 	exited := make(chan error, 1)
 	go func() {
-		exited <- cmd.Wait()
+		exited <- proc.Wait()
 	}()
 
-	select {
-	case err := <-exited:
-		if err == nil {
-			// Some terminals exit successfully even when they failed to open
-			// the window, in that case the error is reported on the stderr.
-			if message := strings.TrimSpace(stderr.String()); isDisplayError(message) {
+	deadline := time.NewTimer(startupTimeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(startupPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case err := <-exited:
+			if err == nil {
+				// Some terminals exit successfully even when they failed to open
+				// the window, in that case the error is reported on the stderr.
+				if message := strings.TrimSpace(output.String()); isDisplayError(message) {
+					return fmt.Errorf("failed to open the terminal window: %s", message)
+				}
+				// The terminal detached itself and the window is open.
+				return nil
+			}
+			if message := strings.TrimSpace(output.String()); message != "" {
+				return fmt.Errorf("%w: %s", err, message)
+			}
+			return err
+		case <-ticker.C:
+			// The terminal is still running, it may print the reason of the
+			// failure a bit later.
+			if message := strings.TrimSpace(output.String()); isDisplayError(message) {
 				return fmt.Errorf("failed to open the terminal window: %s", message)
 			}
-			// The terminal detached itself and the window is open.
+		case <-deadline.C:
+			// The terminal is running.
+			if message := strings.TrimSpace(output.String()); isDisplayError(message) {
+				return fmt.Errorf("failed to open the terminal window: %s", message)
+			}
 			return nil
 		}
-		return fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
-	case <-time.After(startupTimeout):
-		// The terminal is running.
-		return nil
 	}
 }
 
@@ -242,7 +403,35 @@ func isDisplayError(output string) bool {
 	return false
 }
 
-// lookupExecutable returns the path of the given executable.
-func lookupExecutable(name string) (string, error) {
-	return exec.LookPath(name)
+// outputBuffer collects the output of a terminal. The terminal is polled
+// while it starts, so the output is read while the process is still writing
+// it.
+type outputBuffer struct {
+	mu    sync.Mutex
+	buf   bytes.Buffer
+	limit int
+}
+
+// Write collects the output, up to the limit of the buffer. The output beyond
+// the limit is discarded, but it is always consumed: the terminal would block
+// if nobody read its output.
+func (b *outputBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.limit > 0 && b.buf.Len() < b.limit {
+		remaining := b.limit - b.buf.Len()
+		if len(p) > remaining {
+			b.buf.Write(p[:remaining])
+		} else {
+			b.buf.Write(p)
+		}
+	}
+	return len(p), nil
+}
+
+// String returns the output collected so far.
+func (b *outputBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

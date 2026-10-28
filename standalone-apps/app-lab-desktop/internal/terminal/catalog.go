@@ -12,8 +12,8 @@ type TerminalInfo struct {
 
 // TerminalCatalog is the list of the terminal emulators available on the system.
 type TerminalCatalog struct {
-	// Supported is false on the platforms where the terminal emulator is fixed
-	// (Windows and macOS), in that case the user cannot pick one.
+	// Supported is false on the platforms where the terminal emulators are not
+	// detected from the system, in that case the user cannot pick one.
 	Supported bool `json:"supported"`
 	// Terminals are the detected terminal emulators, in the order they are tried.
 	Terminals []TerminalInfo `json:"terminals"`
