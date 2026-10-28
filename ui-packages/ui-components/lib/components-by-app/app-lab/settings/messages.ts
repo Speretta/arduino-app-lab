@@ -275,6 +275,12 @@ export const systemMessages = defineMessages({
     defaultMessage: 'e.g. alacritty',
     description: 'Placeholder of the custom terminal command input',
   },
+  terminalCustomInfo: {
+    id: 'appLabSettings.system.terminalCustomInfo',
+    defaultMessage:
+      'The command is executed with the permissions of the user running App Lab.',
+    description: 'Warning shown under the custom terminal command field',
+  },
   terminalCustomSave: {
     id: 'appLabSettings.system.terminalCustomSave',
     defaultMessage: 'Save',

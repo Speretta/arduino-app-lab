@@ -369,6 +369,11 @@
     padding: 0 !important;
     align-items: center !important;
   }
+
+  &-info {
+    width: 100%;
+    color: var(--text-subtle, #c9d2d2);
+  }
 }
 
 .terminal-error {

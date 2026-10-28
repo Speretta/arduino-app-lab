@@ -17,8 +17,8 @@ import styles from '../settings.module.scss';
 import { UseTerminalSettingsLogic } from '../settings.type';
 
 // Ids used by the dropdown menu, they are not terminal names.
-export const AUTOMATIC_TERMINAL_ID = 'automatic';
-export const CUSTOM_TERMINAL_ID = 'custom';
+const AUTOMATIC_TERMINAL_ID = 'automatic';
+const CUSTOM_TERMINAL_ID = 'custom';
 
 export interface TerminalSelectorProps {
   logic: UseTerminalSettingsLogic;
@@ -80,6 +80,7 @@ export const TerminalSelector = ({
     if (key === CUSTOM_TERMINAL_ID) {
       // The custom command is not applied until it is confirmed.
       setCustomValue(isDetected ? '' : preference);
+      setError(null);
       setIsCustomOpen(true);
       return;
     }
@@ -136,7 +137,11 @@ export const TerminalSelector = ({
             )}
             monospace
             small
-            onChange={setCustomValue}
+            onChange={(value): void => {
+              setCustomValue(value);
+              // The error belongs to the value that was rejected.
+              setError(null);
+            }}
             onEnter={(): void => {
               void saveCustom();
             }}
@@ -163,6 +168,9 @@ export const TerminalSelector = ({
           >
             {formatMessage(systemMessages.terminalCustomCancel)}
           </Button>
+          <XXSmall className={styles['terminal-custom-info']}>
+            {formatMessage(systemMessages.terminalCustomInfo)}
+          </XXSmall>
           {error && (
             <XXSmall className={styles['terminal-error']}>{error}</XXSmall>
           )}

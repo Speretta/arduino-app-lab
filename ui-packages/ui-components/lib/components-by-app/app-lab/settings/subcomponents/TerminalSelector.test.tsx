@@ -122,4 +122,50 @@ describe('TerminalSelector', () => {
     expect(save).toBeDisabled();
     expect(setPreference).not.toHaveBeenCalled();
   });
+
+  it('warns that the custom command is executed', async () => {
+    renderSelector();
+
+    openMenu();
+    fireEvent.click(await screen.findByText('Custom…'));
+
+    expect(
+      await screen.findByText(
+        'The command is executed with the permissions of the user running App Lab.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('clears the error when the command is edited', async () => {
+    const setPreference = vi.fn().mockRejectedValue(new Error('not found'));
+    const logic: UseTerminalSettingsLogic = () => ({
+      supported: true,
+      terminals: [],
+      preference: '',
+      setPreference,
+    });
+
+    render(
+      <IntlProvider locale="en">
+        <TerminalSelector logic={logic} />
+      </IntlProvider>,
+    );
+
+    openMenu();
+    fireEvent.click(await screen.findByText('Custom…'));
+
+    const input = await screen.findByPlaceholderText('e.g. alacritty');
+    fireEvent.change(input, { target: { value: 'my-terminal' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    expect(await screen.findByText('not found')).toBeInTheDocument();
+
+    // The error belongs to the value that was rejected, editing the value
+    // clears it.
+    fireEvent.change(input, { target: { value: 'my-other-terminal' } });
+
+    await waitFor(() =>
+      expect(screen.queryByText('not found')).not.toBeInTheDocument(),
+    );
+  });
 });
