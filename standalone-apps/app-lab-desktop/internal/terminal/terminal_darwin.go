@@ -56,20 +56,26 @@ var darwinSearchPaths = []string{
 	"/usr/local/bin",
 }
 
-// detectTerminals returns the terminal emulators installed on the system, in the
-// order they are tried.
+// detectTerminals returns the terminal emulators known to the application, in
+// the order they are tried. The terminals that are not installed are reported
+// too, so the user can tell that the terminal they selected is gone.
 func detectTerminals() []TerminalInfo {
 	detected := []TerminalInfo{}
 	for _, candidate := range darwinTerminals {
 		path, err := lookupTerminal(candidate)
 		if err != nil {
 			slog.Debug("terminal not installed", "terminal", candidate.ID)
+			detected = append(detected, TerminalInfo{
+				ID:    candidate.ID,
+				Label: candidate.Label,
+			})
 			continue
 		}
 		detected = append(detected, TerminalInfo{
-			ID:    candidate.ID,
-			Label: candidate.Label,
-			Path:  path,
+			ID:        candidate.ID,
+			Label:     candidate.Label,
+			Path:      path,
+			Available: true,
 		})
 	}
 	return detected

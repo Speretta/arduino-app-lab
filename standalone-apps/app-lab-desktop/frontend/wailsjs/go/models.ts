@@ -1107,6 +1107,7 @@ export namespace terminal {
 	    id: string;
 	    label: string;
 	    path: string;
+	    available: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new TerminalInfo(source);
@@ -1117,6 +1118,7 @@ export namespace terminal {
 	        this.id = source["id"];
 	        this.label = source["label"];
 	        this.path = source["path"];
+	        this.available = source["available"];
 	    }
 	}
 	export class TerminalCatalog {

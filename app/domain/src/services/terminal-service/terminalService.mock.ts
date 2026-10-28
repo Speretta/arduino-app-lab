@@ -3,8 +3,18 @@ import type { TerminalCatalog, TerminalService } from './terminal-service.type';
 const mockTerminals: TerminalCatalog = {
   supported: true,
   terminals: [
-    { id: 'alacritty', label: 'Alacritty', path: '/usr/bin/alacritty' },
-    { id: 'ghostty', label: 'Ghostty', path: '/usr/bin/ghostty' },
+    {
+      id: 'alacritty',
+      label: 'Alacritty',
+      path: '/usr/bin/alacritty',
+      available: true,
+    },
+    {
+      id: 'ghostty',
+      label: 'Ghostty',
+      path: '/usr/bin/ghostty',
+      available: true,
+    },
   ],
 };
 

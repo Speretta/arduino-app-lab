@@ -3,10 +3,11 @@ import { TerminalInfo } from '@cloud-editor-mono/ui-components/lib/components-by
 export type { TerminalInfo };
 
 export type TerminalCatalog = {
-  // supported is false on the platforms where the terminal emulator is fixed
-  // (Windows and macOS), in that case the user cannot pick one.
+  // supported is false on the platforms where the terminal emulators are not
+  // detected from the system, in that case the user cannot pick one.
   supported: boolean;
-  // terminals are the detected terminal emulators, in the order they are tried.
+  // terminals are the known terminal emulators, in the order they are tried.
+  // The ones that are not installed are reported with available set to false.
   terminals: TerminalInfo[];
 };
 

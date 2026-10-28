@@ -26,17 +26,24 @@ export interface TerminalSelectorProps {
 
 export const TerminalSelector = ({
   logic,
-}: TerminalSelectorProps): JSX.Element => {
+}: TerminalSelectorProps): JSX.Element | null => {
   const { formatMessage } = useI18n();
-  const { terminals, preference, setPreference } = logic();
+  const { supported, terminals, preference, setPreference } = logic();
 
   const [isCustomOpen, setIsCustomOpen] = useState(false);
   const [customValue, setCustomValue] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const isDetected = useMemo(
-    () => terminals.some((terminal) => terminal.id === preference),
-    [terminals, preference],
+  // The dropdown only offers the terminals that are installed, the others are
+  // reported so that the user can see that the terminal they selected is gone.
+  const installed = useMemo(
+    () => terminals.filter((terminal) => terminal.available),
+    [terminals],
+  );
+
+  const selected = useMemo(
+    () => terminals.find((terminal) => terminal.id === preference),
+    [preference, terminals],
   );
 
   const sections = useMemo(
@@ -48,7 +55,7 @@ export const TerminalSelector = ({
             id: AUTOMATIC_TERMINAL_ID,
             label: formatMessage(systemMessages.terminalAutomatic),
           },
-          ...terminals.map((terminal) => ({
+          ...installed.map((terminal) => ({
             id: terminal.id,
             label: terminal.label,
           })),
@@ -59,27 +66,30 @@ export const TerminalSelector = ({
         ],
       },
     ],
-    [formatMessage, terminals],
+    [formatMessage, installed],
   );
 
   const selectedLabel = useMemo(() => {
     if (!preference) {
       return formatMessage(systemMessages.terminalAutomatic);
     }
-    if (isDetected) {
-      return (
-        terminals.find((terminal) => terminal.id === preference)?.label ?? ''
-      );
+    if (selected) {
+      // The terminal is known but it is not installed any more.
+      return selected.available
+        ? selected.label
+        : formatMessage(systemMessages.terminalNotInstalled, {
+            terminal: selected.label,
+          });
     }
     return formatMessage(systemMessages.terminalCustomLabel, {
       command: preference,
     });
-  }, [formatMessage, isDetected, preference, terminals]);
+  }, [formatMessage, preference, selected]);
 
   const onAction = (key: string): void => {
     if (key === CUSTOM_TERMINAL_ID) {
       // The custom command is not applied until it is confirmed.
-      setCustomValue(isDetected ? '' : preference);
+      setCustomValue(selected ? '' : preference);
       setError(null);
       setIsCustomOpen(true);
       return;
@@ -98,6 +108,10 @@ export const TerminalSelector = ({
       setError((e as Error).message);
     }
   };
+
+  if (!supported) {
+    return null;
+  }
 
   return (
     <>

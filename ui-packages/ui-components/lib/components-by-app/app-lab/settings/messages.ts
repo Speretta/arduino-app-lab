@@ -270,6 +270,11 @@ export const systemMessages = defineMessages({
     defaultMessage: 'Custom ({command})',
     description: 'Label of the selected custom terminal command',
   },
+  terminalNotInstalled: {
+    id: 'appLabSettings.system.terminalNotInstalled',
+    defaultMessage: '{terminal} (not installed)',
+    description: 'Label of a terminal that is selected but not installed',
+  },
   terminalCustomPlaceholder: {
     id: 'appLabSettings.system.terminalCustomPlaceholder',
     defaultMessage: 'e.g. alacritty',

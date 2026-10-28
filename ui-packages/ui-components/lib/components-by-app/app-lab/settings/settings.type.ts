@@ -144,8 +144,11 @@ export type TerminalInfo = {
   id: string;
   // label is the human readable name of the terminal.
   label: string;
-  // path is the absolute path of the executable or of the application bundle.
+  // path is the absolute path of the executable or of the application bundle,
+  // it is empty when the terminal is not installed.
   path: string;
+  // available tells whether the terminal is installed on the system.
+  available: boolean;
 };
 
 export type TerminalLaunchResult = {

@@ -1,13 +1,16 @@
 package terminal
 
-// TerminalInfo describes a terminal emulator found on the system.
+// TerminalInfo describes a terminal emulator known to the application.
 type TerminalInfo struct {
 	// ID is the name of the executable, it is the stable identifier of the terminal.
 	ID string `json:"id"`
 	// Label is the human readable name of the terminal, shown in the UI.
 	Label string `json:"label"`
-	// Path is the absolute path of the executable.
+	// Path is the absolute path of the executable, it is empty when the
+	// terminal is not installed.
 	Path string `json:"path"`
+	// Available tells whether the terminal is installed on the system.
+	Available bool `json:"available"`
 }
 
 // TerminalCatalog is the list of the terminal emulators available on the system.
@@ -19,8 +22,10 @@ type TerminalCatalog struct {
 	Terminals []TerminalInfo `json:"terminals"`
 }
 
-// ListAvailable returns the terminal emulators detected on the system, in the
-// order they are tried when no terminal has been explicitly selected.
+// ListAvailable returns the terminal emulators known to the application, in the
+// order they are tried when no terminal has been explicitly selected. The
+// terminals that are not installed are reported with Available set to false, so
+// the user can tell that the terminal they selected is gone.
 func ListAvailable() TerminalCatalog {
 	return TerminalCatalog{
 		Supported: terminalSelectionSupported,

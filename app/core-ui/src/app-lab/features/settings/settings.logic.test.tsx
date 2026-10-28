@@ -150,7 +150,12 @@ beforeEach(() => {
   domainServices.listTerminals.mockResolvedValue({
     supported: true,
     terminals: [
-      { id: 'alacritty', label: 'Alacritty', path: '/usr/bin/alacritty' },
+      {
+        id: 'alacritty',
+        label: 'Alacritty',
+        path: '/usr/bin/alacritty',
+        available: true,
+      },
     ],
   });
   domainServices.getTerminalPreference.mockResolvedValue('');

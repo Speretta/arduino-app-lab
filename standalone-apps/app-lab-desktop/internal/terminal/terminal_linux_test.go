@@ -33,22 +33,48 @@ func makeStubTerminal(t *testing.T, names ...string) string {
 	return dir
 }
 
+// availableTerminals returns the terminals that are installed on the system.
+func availableTerminals(terminals []TerminalInfo) []TerminalInfo {
+	available := []TerminalInfo{}
+	for _, terminal := range terminals {
+		if terminal.Available {
+			available = append(available, terminal)
+		}
+	}
+	return available
+}
+
 func TestDetectTerminals(t *testing.T) {
 	dir := makeStubTerminal(t, "alacritty", "ghostty")
 	t.Setenv("PATH", dir)
 
 	detected := detectTerminals()
-	require.Len(t, detected, 2)
-	require.Equal(t, "alacritty", detected[0].ID)
-	require.Equal(t, "Alacritty", detected[0].Label)
-	require.Equal(t, filepath.Join(dir, "alacritty"), detected[0].Path)
-	require.Equal(t, "ghostty", detected[1].ID)
+	// Every known terminal is reported, the ones that are not installed are
+	// reported as not available.
+	require.Len(t, detected, len(linuxTerminals))
+
+	available := availableTerminals(detected)
+	require.Len(t, available, 2)
+	require.Equal(t, "alacritty", available[0].ID)
+	require.Equal(t, "Alacritty", available[0].Label)
+	require.Equal(t, filepath.Join(dir, "alacritty"), available[0].Path)
+	require.Equal(t, "ghostty", available[1].ID)
+
+	for _, terminal := range detected {
+		if terminal.ID == "alacritty" || terminal.ID == "ghostty" {
+			continue
+		}
+		require.False(t, terminal.Available, terminal.ID)
+		require.Empty(t, terminal.Path, terminal.ID)
+	}
 }
 
 func TestDetectTerminalsWithoutTerminals(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	require.Empty(t, detectTerminals())
+	detected := detectTerminals()
+	require.Len(t, detected, len(linuxTerminals))
+	require.Empty(t, availableTerminals(detected))
 }
 
 func TestListAvailable(t *testing.T) {
@@ -57,8 +83,10 @@ func TestListAvailable(t *testing.T) {
 
 	catalog := ListAvailable()
 	require.True(t, catalog.Supported)
-	require.Len(t, catalog.Terminals, 1)
-	require.Equal(t, "kitty", catalog.Terminals[0].ID)
+
+	available := availableTerminals(catalog.Terminals)
+	require.Len(t, available, 1)
+	require.Equal(t, "kitty", available[0].ID)
 }
 
 func TestExpandInvocation(t *testing.T) {

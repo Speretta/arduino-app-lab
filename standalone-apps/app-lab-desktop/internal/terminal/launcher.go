@@ -158,6 +158,11 @@ func launchTerminals(candidates []terminalCandidate, opts Options, ctx *launchCo
 		tried = append(tried, candidate.ID)
 		if err := launchCandidate(candidate, path, ctx, nil); err == nil {
 			outcome.terminal = candidate.ID
+			if outcome.warning != "" {
+				// The user has to know which terminal was used instead of the
+				// one they selected.
+				outcome.warning = fmt.Sprintf("%s; %s was used instead", outcome.warning, candidate.Label)
+			}
 			return outcome, nil
 		} else {
 			slog.Warn("[skip] start terminal", "terminal", candidate.ID, "err", err)

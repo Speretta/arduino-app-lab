@@ -24,8 +24,18 @@ import { UseTerminalSettingsLogic } from '../settings.type';
 import { TerminalSelector } from './TerminalSelector';
 
 const terminals = [
-  { id: 'alacritty', label: 'Alacritty', path: '/usr/bin/alacritty' },
-  { id: 'ghostty', label: 'Ghostty', path: '/usr/bin/ghostty' },
+  {
+    id: 'alacritty',
+    label: 'Alacritty',
+    path: '/usr/bin/alacritty',
+    available: true,
+  },
+  {
+    id: 'ghostty',
+    label: 'Ghostty',
+    path: '/usr/bin/ghostty',
+    available: true,
+  },
 ];
 
 const renderSelector = (
@@ -55,6 +65,34 @@ const openMenu = (): void => {
 };
 
 describe('TerminalSelector', () => {
+  it('does not offer the terminals that are not installed', () => {
+    renderSelector({
+      terminals: [
+        ...terminals,
+        { id: 'kitty', label: 'Kitty', path: '', available: false },
+      ],
+    });
+
+    openMenu();
+
+    expect(screen.getByText('Alacritty')).toBeInTheDocument();
+    expect(screen.queryByText('Kitty')).not.toBeInTheDocument();
+  });
+
+  it('tells that the selected terminal is not installed', () => {
+    renderSelector({
+      terminals: [
+        ...terminals,
+        { id: 'kitty', label: 'Kitty', path: '', available: false },
+      ],
+      preference: 'kitty',
+    });
+
+    expect(screen.getByRole('button')).toHaveTextContent(
+      'Kitty (not installed)',
+    );
+  });
+
   it('shows the automatic detection when no terminal is selected', () => {
     renderSelector();
 
