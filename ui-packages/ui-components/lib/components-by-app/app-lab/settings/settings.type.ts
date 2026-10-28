@@ -148,6 +148,14 @@ export type TerminalInfo = {
   path: string;
 };
 
+export type TerminalLaunchResult = {
+  // terminal is the id of the terminal that was used.
+  terminal: string;
+  // warning tells why the terminal selected by the user was not used, it is
+  // empty when the selected terminal was used.
+  warning?: string;
+};
+
 export type UsePasswordSettingsLogic = () => {
   changePasswordLogic: ChangePasswordDialogLogic;
   openChangePasswordDialog: () => void;

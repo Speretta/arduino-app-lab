@@ -135,6 +135,6 @@ func wslPath(path string) (string, bool) {
 }
 
 // openTerminal opens the given command in a terminal emulator.
-func openTerminal(opts Options, args ...string) error {
+func openTerminal(opts Options, args ...string) (LaunchResult, error) {
 	return openTerminalIn(windowsTerminals, opts, args...)
 }

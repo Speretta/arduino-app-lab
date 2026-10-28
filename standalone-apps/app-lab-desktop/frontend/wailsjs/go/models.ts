@@ -1089,6 +1089,20 @@ export namespace options {
 
 export namespace terminal {
 	
+	export class LaunchResult {
+	    terminal: string;
+	    warning?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LaunchResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.terminal = source["terminal"];
+	        this.warning = source["warning"];
+	    }
+	}
 	export class TerminalInfo {
 	    id: string;
 	    label: string;

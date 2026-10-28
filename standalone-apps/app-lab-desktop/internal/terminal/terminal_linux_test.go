@@ -25,6 +25,7 @@ func makeStubTerminal(t *testing.T, names ...string) string {
 	for _, name := range names {
 		script := "#!/bin/sh\n" +
 			"if [ -n \"$STUB_ARGS_FILE\" ]; then printf '%s\\n' \"$*\" > \"$STUB_ARGS_FILE\"; fi\n" +
+			"if [ \"$STUB_FAIL_ALWAYS\" = \"${0##*/}\" ]; then echo \"unsupported option\" >&2; exit 1; fi\n" +
 			"if [ \"$1\" = \"$STUB_FAIL_ON\" ]; then echo \"unsupported option\" >&2; exit 1; fi\n" +
 			"exit 0\n"
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(script), 0755))
@@ -125,6 +126,13 @@ func TestExpandInvocation(t *testing.T) {
 	}
 }
 
+// launchPreferredError launches the selected terminal and discards the outcome,
+// it keeps the tests of the launch itself short.
+func launchPreferredError(preferred string, candidates []terminalCandidate, ctx *launchContext) error {
+	_, err := launchPreferred(preferred, candidates, ctx)
+	return err
+}
+
 func TestMergeExtraArgs(t *testing.T) {
 	inv := invocation{args: []string{"start", "--", "sh", "{cmd}"}}
 
@@ -143,7 +151,7 @@ func TestLaunchPreferredUsesTheSelectedTerminal(t *testing.T) {
 	t.Setenv("STUB_ARGS_FILE", argsFile)
 
 	const script = "/tmp/run.sh"
-	require.NoError(t, launchPreferred("alacritty", linuxTerminals, &launchContext{script: script}))
+	require.NoError(t, launchPreferredError("alacritty", linuxTerminals, &launchContext{script: script}))
 
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
@@ -159,7 +167,7 @@ func TestLaunchPreferredFallsBackToTheNextInvocation(t *testing.T) {
 	t.Setenv("STUB_FAIL_ON", "-e")
 
 	const script = "/tmp/run.sh"
-	require.NoError(t, launchPreferred("alacritty", linuxTerminals, &launchContext{script: script}))
+	require.NoError(t, launchPreferredError("alacritty", linuxTerminals, &launchContext{script: script}))
 
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
@@ -173,7 +181,7 @@ func TestLaunchPreferredWithCustomCommand(t *testing.T) {
 	t.Setenv("STUB_ARGS_FILE", argsFile)
 
 	const script = "/tmp/run.sh"
-	require.NoError(t, launchPreferred("myterminal", linuxTerminals, &launchContext{script: script}))
+	require.NoError(t, launchPreferredError("myterminal", linuxTerminals, &launchContext{script: script}))
 
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
@@ -183,7 +191,7 @@ func TestLaunchPreferredWithCustomCommand(t *testing.T) {
 func TestLaunchPreferredWithUnknownTerminal(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	require.Error(t, launchPreferred("this-terminal-does-not-exist", linuxTerminals, &launchContext{script: "/tmp/run.sh"}))
+	require.Error(t, launchPreferredError("this-terminal-does-not-exist", linuxTerminals, &launchContext{script: "/tmp/run.sh"}))
 }
 
 func TestLaunchPreferredWithCustomCommandWithArguments(t *testing.T) {
@@ -195,7 +203,7 @@ func TestLaunchPreferredWithCustomCommandWithArguments(t *testing.T) {
 	const script = "/tmp/run.sh"
 	// The arguments of the terminal are not repeated: wezterm already runs
 	// "start --".
-	require.NoError(t, launchPreferred("wezterm start --", linuxTerminals, &launchContext{script: script}))
+	require.NoError(t, launchPreferredError("wezterm start --", linuxTerminals, &launchContext{script: script}))
 
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
@@ -211,7 +219,7 @@ func TestLaunchPreferredWithCustomCommandWithExtraArguments(t *testing.T) {
 	const script = "/tmp/run.sh"
 	// The arguments of the user are added in front of the ones of the
 	// terminal.
-	require.NoError(t, launchPreferred("wezterm --title foo", linuxTerminals, &launchContext{script: script}))
+	require.NoError(t, launchPreferredError("wezterm --title foo", linuxTerminals, &launchContext{script: script}))
 
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
@@ -222,7 +230,7 @@ func TestLaunchPreferredWithInvalidCustomCommand(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
 	// A line break would split the command in two.
-	require.Error(t, launchPreferred("sh\n--title foo", linuxTerminals, &launchContext{script: "/tmp/run.sh"}))
+	require.Error(t, launchPreferredError("sh\n--title foo", linuxTerminals, &launchContext{script: "/tmp/run.sh"}))
 }
 
 func TestOpenTerminalFallsBackToTheAutomaticDetection(t *testing.T) {
@@ -231,15 +239,54 @@ func TestOpenTerminalFallsBackToTheAutomaticDetection(t *testing.T) {
 	t.Setenv("STUB_FAIL_ON", "-e")
 	t.Setenv("STUB_ARGS_FILE", filepath.Join(t.TempDir(), "args.txt"))
 
-	require.NoError(t, openTerminal(Options{}, "echo", "hello"))
+	result, err := openTerminal(Options{}, "echo", "hello")
+	require.NoError(t, err)
+	require.Equal(t, "alacritty", result.Terminal)
 }
 
 func TestOpenTerminalWithoutTerminals(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	err := openTerminal(Options{}, "echo", "hello")
+	_, err := openTerminal(Options{}, "echo", "hello")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "no terminal emulator found")
+	require.Contains(t, err.Error(), "no terminal emulator was found on this system")
+}
+
+func TestOpenTerminalWarnsWhenTheSelectedTerminalFails(t *testing.T) {
+	dir := makeStubTerminal(t, "alacritty", "ghostty")
+	t.Setenv("PATH", dir)
+	t.Setenv("STUB_ARGS_FILE", filepath.Join(t.TempDir(), "args.txt"))
+
+	// The selected terminal can not be started at all.
+	t.Setenv("STUB_FAIL_ALWAYS", "alacritty")
+
+	// Another terminal is used, and the user is told why the selected one was
+	// not used.
+	result, err := openTerminal(Options{PreferredTerminal: "alacritty"}, "echo", "hello")
+	require.NoError(t, err)
+	require.Equal(t, "ghostty", result.Terminal)
+	require.Contains(t, result.Warning, "the terminal selected in the settings could not be started")
+}
+
+func TestOpenTerminalWithoutAnyWorkingTerminal(t *testing.T) {
+	dir := makeStubTerminal(t, "alacritty")
+	t.Setenv("PATH", dir)
+	t.Setenv("STUB_ARGS_FILE", filepath.Join(t.TempDir(), "args.txt"))
+	t.Setenv("STUB_FAIL_ALWAYS", "alacritty")
+
+	_, err := openTerminal(Options{PreferredTerminal: "alacritty"}, "echo", "hello")
+	require.Error(t, err, "no terminal can be started when they all fail")
+}
+
+func TestOpenTerminalWithoutWarning(t *testing.T) {
+	dir := makeStubTerminal(t, "alacritty")
+	t.Setenv("PATH", dir)
+	t.Setenv("STUB_ARGS_FILE", filepath.Join(t.TempDir(), "args.txt"))
+
+	result, err := openTerminal(Options{PreferredTerminal: "alacritty"}, "echo", "hello")
+	require.NoError(t, err)
+	require.Equal(t, "alacritty", result.Terminal)
+	require.Empty(t, result.Warning)
 }
 
 func TestCreateWrapperScript(t *testing.T) {

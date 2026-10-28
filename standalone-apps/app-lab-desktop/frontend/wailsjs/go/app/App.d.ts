@@ -223,7 +223,7 @@ export function NewVersion():Promise<string>;
 
 export function OnUrlOpen(arg1:string):Promise<void>;
 
-export function OpenBoardTerminal():Promise<void>;
+export function OpenBoardTerminal():Promise<terminal.LaunchResult>;
 
 export function OpenFile(arg1:string):Promise<void>;
 

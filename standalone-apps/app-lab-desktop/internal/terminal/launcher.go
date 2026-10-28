@@ -128,15 +128,25 @@ type terminalProcess interface {
 	Wait() error
 }
 
+// launchOutcome tells how the terminal was opened.
+type launchOutcome struct {
+	// terminal is the id of the terminal that was used.
+	terminal string
+	// warning tells why the terminal selected by the user was not used.
+	warning string
+}
+
 // launchTerminals starts the terminal selected by the user, when none is
 // selected the first terminal that can be started is used.
-func launchTerminals(candidates []terminalCandidate, opts Options, ctx *launchContext) error {
+func launchTerminals(candidates []terminalCandidate, opts Options, ctx *launchContext) (launchOutcome, error) {
+	outcome := launchOutcome{}
 	if preferred := strings.TrimSpace(opts.PreferredTerminal); preferred != "" {
-		if err := launchPreferred(preferred, candidates, ctx); err == nil {
-			return nil
-		} else {
-			slog.Warn("failed to start the selected terminal, falling back to the automatic detection", "terminal", preferred, "err", err)
+		result, err := launchPreferred(preferred, candidates, ctx)
+		if err == nil {
+			return result, nil
 		}
+		outcome.warning = fmt.Sprintf("the terminal selected in the settings could not be started: %s", shortError(err))
+		slog.Warn("failed to start the selected terminal, falling back to the automatic detection", "terminal", preferred, "err", err)
 	}
 
 	tried := []string{}
@@ -147,64 +157,81 @@ func launchTerminals(candidates []terminalCandidate, opts Options, ctx *launchCo
 		}
 		tried = append(tried, candidate.ID)
 		if err := launchCandidate(candidate, path, ctx, nil); err == nil {
-			return nil
+			outcome.terminal = candidate.ID
+			return outcome, nil
 		} else {
 			slog.Warn("[skip] start terminal", "terminal", candidate.ID, "err", err)
 		}
 	}
 
 	if len(tried) == 0 {
-		return errors.New("no terminal emulator found on this system")
+		return outcome, errors.New("no terminal emulator was found on this system: install one, or set a custom command in the settings")
 	}
-	return fmt.Errorf("no supported terminal found, tried: %s", strings.Join(tried, ", "))
+	return outcome, fmt.Errorf("no supported terminal found, tried: %s", strings.Join(tried, ", "))
 }
 
 // launchPreferred launches the terminal selected by the user. The selection is
 // either the id of a known terminal or a custom command.
-func launchPreferred(preferred string, candidates []terminalCandidate, ctx *launchContext) error {
+func launchPreferred(preferred string, candidates []terminalCandidate, ctx *launchContext) (launchOutcome, error) {
 	if candidate, found := findCandidate(candidates, preferred); found {
 		path, err := lookupTerminal(candidate)
 		if err != nil {
-			return fmt.Errorf("terminal not found: %s", candidate.ID)
+			return launchOutcome{}, fmt.Errorf("terminal not found: %s", candidate.ID)
 		}
-		return launchCandidate(candidate, path, ctx, nil)
+		if err := launchCandidate(candidate, path, ctx, nil); err != nil {
+			return launchOutcome{}, err
+		}
+		return launchOutcome{terminal: candidate.ID}, nil
 	}
 
 	fields, err := splitCommand(preferred)
 	if err != nil {
-		return err
+		return launchOutcome{}, err
 	}
 	if len(fields) == 0 {
-		return errors.New("empty terminal command")
+		return launchOutcome{}, errors.New("empty terminal command")
 	}
 	// The preference is stored in a file, it may have been edited after it
 	// was validated.
 	if err := validateCommandLine(preferred); err != nil {
-		return err
+		return launchOutcome{}, err
 	}
 	binary, extraArgs := fields[0], fields[1:]
 	path, err := exec.LookPath(binary)
 	if err != nil {
-		return fmt.Errorf("terminal not found: %s", binary)
+		return launchOutcome{}, fmt.Errorf("terminal not found: %s", binary)
 	}
 	slog.Info("Using the custom terminal command", "terminal", binary, "args", extraArgs)
 
 	// A known terminal is launched with the arguments it expects, the extra
 	// arguments given by the user are added in front of them.
 	if candidate, found := findCandidate(candidates, binary); found {
-		return launchCandidate(candidate, path, ctx, extraArgs)
+		if err := launchCandidate(candidate, path, ctx, extraArgs); err != nil {
+			return launchOutcome{}, err
+		}
+		return launchOutcome{terminal: candidate.ID}, nil
 	}
 
 	for _, inv := range genericInvocations() {
 		args := expandInvocation(inv, ctx.withExtraArgs(extraArgs))
 		slog.Info("Trying opening terminal", "terminal", binary, "args", args)
 		if err := runTerminal(genericTerminalIsConsole, path, args); err == nil {
-			return nil
+			return launchOutcome{terminal: binary}, nil
 		} else {
 			slog.Warn("[skip] start terminal", "terminal", binary, "args", args, "err", err)
 		}
 	}
-	return fmt.Errorf("failed to start the terminal: %s", binary)
+	return launchOutcome{}, fmt.Errorf("failed to start the terminal: %s", binary)
+}
+
+// shortError returns the first line of an error message. The rest is the
+// output of the terminal, which is too long for a notification.
+func shortError(err error) string {
+	message := strings.TrimSpace(err.Error())
+	if index := strings.IndexAny(message, "\r\n"); index >= 0 {
+		message = message[:index]
+	}
+	return message
 }
 
 // prepareLaunch returns the context to launch the given candidate with.
@@ -229,30 +256,39 @@ func prepareLaunch(candidate terminalCandidate, ctx *launchContext) (launchConte
 // launchInvocations starts the terminal with the invocations it supports, in
 // order, until one of them works.
 func launchInvocations(candidate terminalCandidate, path string, ctx launchContext) error {
+	var lastErr error
 	for _, inv := range candidate.invocations {
 		args := expandInvocation(inv, ctx.withExtraArgs(mergeExtraArgs(inv, ctx.extraArgs)))
 		slog.Info("Trying opening terminal", "terminal", candidate.ID, "args", args)
 		if err := runTerminal(candidate.console, path, args); err == nil {
 			return nil
 		} else {
+			lastErr = err
 			slog.Warn("[skip] start terminal", "terminal", candidate.ID, "args", args, "err", err)
 		}
 	}
-	return fmt.Errorf("failed to start the terminal: %s", candidate.ID)
+	if lastErr == nil {
+		return fmt.Errorf("failed to start the terminal: %s", candidate.ID)
+	}
+	return lastErr
 }
 
 // openTerminalIn opens the given command in one of the given terminal
 // emulators.
-func openTerminalIn(candidates []terminalCandidate, opts Options, args ...string) error {
+func openTerminalIn(candidates []terminalCandidate, opts Options, args ...string) (LaunchResult, error) {
 	ctx := &launchContext{command: args}
-	if err := launchTerminals(candidates, opts, ctx); err != nil {
+	outcome, err := launchTerminals(candidates, opts, ctx)
+	if err != nil {
 		// The terminal was not started, the wrapper script will never run.
 		if ctx.script != "" {
 			os.RemoveAll(filepath.Dir(ctx.script))
 		}
-		return err
+		return LaunchResult{}, err
 	}
-	return nil
+	return LaunchResult{
+		Terminal: outcome.terminal,
+		Warning:  outcome.warning,
+	}, nil
 }
 
 // findCandidate returns the terminal with the given id.

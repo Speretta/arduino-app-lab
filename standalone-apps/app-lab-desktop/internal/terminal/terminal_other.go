@@ -31,6 +31,6 @@ func launchCandidate(candidate terminalCandidate, path string, ctx *launchContex
 
 // openTerminal is not available on this platform, the terminal emulator is not
 // known.
-func openTerminal(opts Options, args ...string) error {
-	return errors.New("open terminal is not supported on this platform")
+func openTerminal(opts Options, args ...string) (LaunchResult, error) {
+	return LaunchResult{}, errors.New("open terminal is not supported on this platform")
 }

@@ -169,6 +169,6 @@ func escapeAppleScript(value string) string {
 }
 
 // openTerminal opens the given command in a terminal emulator.
-func openTerminal(opts Options, args ...string) error {
+func openTerminal(opts Options, args ...string) (LaunchResult, error) {
 	return openTerminalIn(darwinTerminals, opts, args...)
 }

@@ -349,7 +349,7 @@ func (a *App) GetTags() ([]learn.Tag, error) {
 }
 
 // Open Terminal
-func (a *App) OpenBoardTerminal() error {
+func (a *App) OpenBoardTerminal() (terminal.LaunchResult, error) {
 	return terminal.OpenTerminal(a.ctx(), a.selectedBoard, terminal.Options{
 		PreferredTerminal: readTerminalPreference(),
 	})

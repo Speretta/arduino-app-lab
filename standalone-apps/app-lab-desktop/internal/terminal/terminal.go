@@ -26,42 +26,52 @@ type Options struct {
 	PreferredTerminal string
 }
 
+// LaunchResult tells how the terminal was opened.
+type LaunchResult struct {
+	// Terminal is the id of the terminal that was used, it is empty when no
+	// terminal could be started.
+	Terminal string `json:"terminal"`
+	// Warning tells why the terminal selected by the user was not used, it is
+	// empty when the selected terminal was used.
+	Warning string `json:"warning,omitempty"`
+}
+
 // OpenTerminal opens the shell of the given board in a terminal emulator.
 //
 // The context is not used: the terminal is started detached, so the call
 // returns as soon as the terminal is running.
-func OpenTerminal(ctx context.Context, b *board.Board, opts Options) error {
+func OpenTerminal(ctx context.Context, b *board.Board, opts Options) (LaunchResult, error) {
 	if b == nil {
-		return fmt.Errorf("no board selected")
+		return LaunchResult{}, fmt.Errorf("no board selected")
 	}
 
 	switch b.Info.Protocol {
 	case oBoard.SerialProtocol:
 		validSerial, err := SanitizeSerialNumber(b.Info.Serial)
 		if err != nil {
-			return fmt.Errorf("invalid board serial port: %v", err)
+			return LaunchResult{}, fmt.Errorf("invalid board serial port: %v", err)
 		}
-		err = openTerminalWithArgs(opts, []string{adb.FindAdbPath(), "-s", validSerial, "shell"}...)
+		result, err := openTerminalWithArgs(opts, []string{adb.FindAdbPath(), "-s", validSerial, "shell"}...)
 		if err != nil {
-			return err
+			return LaunchResult{}, err
 		}
+		return result, nil
 	case oBoard.NetworkProtocol:
 		validAddress, err := SanitizeIPAddress(b.Info.Address)
 		if err != nil {
-			return fmt.Errorf("invalid board address: %v", err)
+			return LaunchResult{}, fmt.Errorf("invalid board address: %v", err)
 		}
-		err = openTerminalWithArgs(opts, []string{"ssh", fmt.Sprintf("arduino@%s", validAddress)}...)
+		result, err := openTerminalWithArgs(opts, []string{"ssh", fmt.Sprintf("arduino@%s", validAddress)}...)
 		if err != nil {
-			return err
+			return LaunchResult{}, err
 		}
+		return result, nil
 	default:
-		return fmt.Errorf("open terminal not supported for protocol %s", b.Info.Protocol)
+		return LaunchResult{}, fmt.Errorf("open terminal not supported for protocol %s", b.Info.Protocol)
 	}
-
-	return nil
 }
 
-func openTerminalWithArgs(opts Options, args ...string) error {
+func openTerminalWithArgs(opts Options, args ...string) (LaunchResult, error) {
 	return openTerminal(opts, args...)
 }
 
