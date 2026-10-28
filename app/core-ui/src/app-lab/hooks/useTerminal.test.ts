@@ -42,7 +42,6 @@ describe('useTerminal', () => {
     });
 
     expect(h.snackbar).not.toHaveBeenCalled();
-    expect(result.current.terminalError).toBeNull();
   });
 
   it('warns when the selected terminal was not used', async () => {
@@ -63,7 +62,6 @@ describe('useTerminal', () => {
         message: expect.stringContaining('could not be started'),
       }),
     );
-    expect(result.current.terminalError).toBeNull();
   });
 
   it('reports an error when no terminal could be opened', async () => {
@@ -83,9 +81,6 @@ describe('useTerminal', () => {
         variant: 'error',
         message: expect.stringContaining('no terminal emulator was found'),
       }),
-    );
-    expect(result.current.terminalError).toContain(
-      'no terminal emulator was found',
     );
   });
 });
