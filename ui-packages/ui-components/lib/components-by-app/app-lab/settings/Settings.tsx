@@ -145,8 +145,6 @@ export const Settings: React.FC<SettingsProps> = ({
     startUpdate,
   } = systemSettingsLogic();
 
-  const { supported: isTerminalSelectionSupported } = terminalSettingsLogic();
-
   const {
     props: tooltipPropsAppUpdate,
     renderTooltip: renderTooltipAppUpdate,
@@ -743,18 +741,16 @@ export const Settings: React.FC<SettingsProps> = ({
               classes={dropdownClasses}
             />
           </SettingsSection.Row>
-          {isTerminalSelectionSupported && (
-            <SettingsSection.Row
-              label={formatMessage(systemMessages.terminal)}
-              info={formatMessage(systemMessages.terminalInfo)}
-              classes={{
-                wrapper: styles['terminal-row'],
-                value: styles['terminal-row-value'],
-              }}
-            >
-              <TerminalSelector logic={terminalSettingsLogic} />
-            </SettingsSection.Row>
-          )}
+          <SettingsSection.Row
+            label={formatMessage(systemMessages.terminal)}
+            info={formatMessage(systemMessages.terminalInfo)}
+            classes={{
+              wrapper: styles['terminal-row'],
+              value: styles['terminal-row-value'],
+            }}
+          >
+            <TerminalSelector logic={terminalSettingsLogic} />
+          </SettingsSection.Row>
           <SettingsSection.Row label={formatMessage(systemMessages.osPassword)}>
             <div
               {...tooltipPropsPassword}
