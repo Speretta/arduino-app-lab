@@ -343,12 +343,31 @@
     flex: 1;
     min-width: 0;
 
-    // The app-lab input style does not fill the available width.
+    // The app-lab input style does not fill the available width and it is
+    // taller than the buttons next to it, the sizes of the small button are
+    // used to keep the row aligned.
+    box-sizing: border-box !important;
     width: 100% !important;
+    height: 28px !important;
+    padding: 0 12px !important;
+    border-radius: 8px !important;
+    align-items: center !important;
+    font-size: 12px !important;
+
+    [class*="input-content"] {
+      line-height: normal !important;
+    }
   }
 
   &-input-container {
     width: 100% !important;
+    height: 100% !important;
+
+    // The small input style puts the text at the bottom of the field and it
+    // adds its own horizontal padding, the field is as tall as the buttons
+    // next to it and the text is centered in it.
+    padding: 0 !important;
+    align-items: center !important;
   }
 }
 
